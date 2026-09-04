@@ -262,5 +262,5 @@ def test_health_endpoint_is_public_and_reports_protocol():
             r = await c.get("/healthz")
             assert r.status_code == 200
             assert r.json()["protocol"] == "2025-11-25"
-            assert r.json()["version"] == "1.4.0"
+            assert r.json()["version"] == "1.5.0"
     run(case())
