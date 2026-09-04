@@ -1,0 +1,7 @@
+[
+  {"ParameterKey": "EnvironmentName", "ParameterValue": "demo"},
+  {"ParameterKey": "BudgetEmail", "ParameterValue": "REPLACE_AT_DEPLOY_TIME"},
+  {"ParameterKey": "MonthlyBudgetUSD", "ParameterValue": "10"},
+  {"ParameterKey": "BedrockGeoProfileId", "ParameterValue": "eu.amazon.nova-2-lite-v1:0"},
+  {"ParameterKey": "ProjectTagValue", "ParameterValue": "Ripple"}
+]
