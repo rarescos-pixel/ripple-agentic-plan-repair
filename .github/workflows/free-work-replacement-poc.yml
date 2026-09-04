@@ -35,12 +35,21 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Install Playwright
+      - name: Detect browser provider
+        id: provider
         run: |
-          npm install --no-save --no-package-lock playwright@1.55.0
-          npx playwright install --with-deps chromium
+          PROVIDER="$(node -e "const r=require('./automation/browser-request.json'); process.stdout.write(String(r.provider||'local'))")"
+          echo "provider=$PROVIDER" >> "$GITHUB_OUTPUT"
+
+      - name: Install Playwright library
+        run: npm install --no-save --no-package-lock playwright@1.55.0
+
+      - name: Install local Chromium
+        if: steps.provider.outputs.provider != 'browserbase-bridge'
+        run: npx playwright install --with-deps chromium
 
       - name: Start local browser fixture server
+        if: steps.provider.outputs.provider != 'browserbase-bridge'
         run: |
           python3 -m http.server 8765 --bind 127.0.0.1 > /tmp/browser-fixture.log 2>&1 &
           echo $! > /tmp/browser-fixture.pid
@@ -55,8 +64,7 @@ jobs:
 
       - name: Run browser request
         run: |
-          PROVIDER="$(node -e "const r=require('./automation/browser-request.json'); process.stdout.write(String(r.provider||'local'))")"
-          if [ "$PROVIDER" = "browserbase-bridge" ]; then
+          if [ "${{ steps.provider.outputs.provider }}" = "browserbase-bridge" ]; then
             node scripts/browser_bridge_runner.mjs
           else
             node scripts/browser_runner.mjs
