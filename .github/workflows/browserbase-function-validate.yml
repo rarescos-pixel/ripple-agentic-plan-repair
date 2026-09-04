@@ -18,6 +18,7 @@ jobs:
     timeout-minutes: 5
     env:
       BROWSERBASE_API_KEY: bb_validation_only_not_a_real_key
+      BROWSERBASE_PROJECT_ID: 0a530d78-8ac4-40b6-bae1-7968f25a0073
     steps:
       - name: Checkout
         uses: actions/checkout@v4
