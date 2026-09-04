@@ -2,7 +2,7 @@
   "version": 1,
   "provider": "local",
   "url": "https://hook.eu1.make.com/slzqmwp6l6tsrpako9bob2vqkjv2056o",
-  "timeoutMs": 30000,
+  "timeoutMs": 31000,
   "sensitive": true,
   "allowArtifacts": false,
   "steps": []
