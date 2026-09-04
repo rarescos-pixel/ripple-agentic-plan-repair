@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 from ripple.evaluation.matrix import run_matrix
+from ripple.presentation import build_repair_card
 from ripple.webapp import DemoController
 
 
@@ -12,6 +13,7 @@ def collect_release_evidence() -> Dict[str, Any]:
     matrix = run_matrix()
     controller = DemoController()
     proposal = controller.propose("Our flight home was cancelled. We'll land tomorrow at 18:00.")
+    card = build_repair_card(controller.proposal.plan)
     executed = controller.approve(proposal["approval_disclosure"])
     replay = controller.replay()
 
@@ -23,6 +25,11 @@ def collect_release_evidence() -> Dict[str, Any]:
             proposal["plan"]["total_added_cost"] == 42
             and proposal["plan"]["total_avoidable_loss"] == 116
             and proposal["plan"]["net_direct_cash_preserved"] == 74
+        ),
+        "repair_card_money_first": (
+            card["display_hint"] == "inline"
+            and [m["value"] for m in card["metrics"]] == ["$116", "$42", "$74"]
+            and card["decision"]["label"] == "Approve $42 repair"
         ),
         "exact_approval_disclosure": (
             proposal["approval_disclosure"]["snapshot_hash"] == proposal["plan"]["snapshot_hash"]
@@ -53,7 +60,7 @@ def render_markdown(evidence: Dict[str, Any]) -> str:
     checks = evidence["checks"]
     golden = evidence["golden"]
     lines = [
-        "# Ripple — Release Gate v1.3",
+        "# Ripple — Release Gate v1.4",
         "",
         f"**Overall: {'PASS' if evidence['passed'] else 'FAIL'}**",
         "",
@@ -84,7 +91,7 @@ def render_markdown(evidence: Dict[str, Any]) -> str:
         lines.append(f"- **{'PASS' if row['passed'] else 'FAIL'}** `{row['scenario']}` — {row['invariant']}")
     lines += [
         "",
-        "This deterministic gate does not claim a live Alexa+ client, AWS runtime, or real external-service integrations. Ripple v1.3 keeps the publicly verified MCP Streamable HTTP transport separate from the deterministic repair engine; live AWS/provider integrations are not claimed by this gate.",
+        "This deterministic gate does not claim a live Alexa+ client, live AWS runtime, or real external-service integrations. Ripple v1.4 adds a structured money-first Repair Card and executable restart-durability contract while keeping the publicly verified MCP Streamable HTTP transport separate from the deterministic repair engine. The DynamoDB adapter exists, but live AWS persistence is not claimed until provisioned and exercised.",
         "",
     ]
     return "\n".join(lines)
