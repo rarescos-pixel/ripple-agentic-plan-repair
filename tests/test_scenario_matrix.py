@@ -89,9 +89,16 @@ def test_interrupted_execution_recovers_without_duplicate_writes():
     assert plan.status == "executed"
 
 
-def test_event_operations_fixture_preserves_serious_money_with_generic_engine():
+def test_event_operations_fixture_preserves_serious_money_with_generic_engine_and_card():
     from ripple.evaluation.matrix import event_operations_evidence
     evidence = event_operations_evidence()
     assert evidence.passed
     assert evidence.observed["net_preserved"] == 5180
     assert evidence.observed["av_choice"] == "move_av_delivery"
+    assert evidence.observed["repair_card"] == "$5,800 at risk → $620 repair → $5,180 net preserved"
+    assert evidence.observed["approval_cta"] == "Approve $620 repair"
+    assert evidence.observed["top_impacts"] == [
+        "Catering service window",
+        "AV equipment delivery",
+        "Security staffing coverage",
+    ]
