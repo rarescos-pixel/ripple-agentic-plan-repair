@@ -5,17 +5,24 @@ import struct
 from pathlib import Path
 from urllib.parse import urlparse
 
+from ripple.presentation.alexa_assets import load_carousel_png
+
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "addon-package" / "addon.json"
 REQUIRED_ICON_SIZES = {(64, 64), (72, 72), (88, 88), (126, 126), (180, 180), (241, 241)}
 PROD_MCP = "https://ripple-v12-production.up.railway.app/mcp"
+PROD_CAROUSEL = "https://ripple-v12-production.up.railway.app/assets/alexa/ripple-carousel-600x900.png"
+
+
+def png_size_bytes(data: bytes) -> tuple[int, int]:
+    head = data[:24]
+    if len(head) != 24 or head[:8] != b"\x89PNG\r\n\x1a\n" or head[12:16] != b"IHDR":
+        raise AssertionError("Not a valid PNG header")
+    return struct.unpack(">II", head[16:24])
 
 
 def png_size(path: Path) -> tuple[int, int]:
-    data = path.read_bytes()[:24]
-    if len(data) != 24 or data[:8] != b"\x89PNG\r\n\x1a\n" or data[12:16] != b"IHDR":
-        raise AssertionError(f"Not a valid PNG header: {path}")
-    return struct.unpack(">II", data[16:24])
+    return png_size_bytes(path.read_bytes())
 
 
 def assert_https(value: str) -> None:
@@ -23,7 +30,7 @@ def assert_https(value: str) -> None:
     assert parsed.scheme == "https" and parsed.netloc, value
 
 
-def local_asset_from_uri(uri: str) -> Path:
+def local_icon_from_uri(uri: str) -> Path:
     prefix = "https://raw.githubusercontent.com/rarescos-pixel/ripple-agentic-plan-repair/main/"
     assert uri.startswith(prefix), uri
     return ROOT / uri.removeprefix(prefix)
@@ -60,21 +67,20 @@ def main() -> None:
         assert_https(icon["uri"])
         size = tuple(map(int, icon["size"].split("x")))
         declared.add(size)
-        path = local_asset_from_uri(icon["uri"])
+        path = local_icon_from_uri(icon["uri"])
         assert path.exists(), path
         assert png_size(path) == size, (path, png_size(path), size)
     assert declared == REQUIRED_ICON_SIZES
 
     carousel = media["carouselImages"]
-    assert carousel
+    assert len(carousel) >= 1
     for image in carousel:
         assert_https(image["uri"])
+        assert image["uri"] == PROD_CAROUSEL
         assert 1 <= len(image["altText"]) <= 250
         size = tuple(map(int, image["size"].split("x")))
         assert size == (600, 900)
-        path = local_asset_from_uri(image["uri"])
-        assert path.exists(), path
-        assert png_size(path) == size
+        assert png_size_bytes(load_carousel_png()) == size
 
     integrations = manifest["integrations"]
     assert len(integrations) == 1 and integrations[0]["type"] == "MCP"
