@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Browser Automation Fixture</title>
+</head>
+<body>
+  <main>
+    <h1>Browser Automation Fixture</h1>
+    <label>Name <input id="name" type="text" /></label>
+    <label>Upload <input id="file" type="file" /></label>
+    <button id="submit" type="button">Submit</button>
+    <p id="result" aria-live="polite"></p>
+  </main>
+  <script>
+    document.getElementById('submit').addEventListener('click', () => {
+      const name = document.getElementById('name').value;
+      const file = document.getElementById('file').files[0];
+      document.getElementById('result').textContent = `Hello ${name}; file=${file ? file.name : 'none'}`;
+    });
+  </script>
+</body>
+</html>
