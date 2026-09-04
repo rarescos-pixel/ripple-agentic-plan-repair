@@ -1,54 +1,57 @@
 from __future__ import annotations
 
+import asyncio
+import hmac
+import ipaddress
 import json
 import os
+import socket
 from typing import Any
 from urllib.parse import urlparse
 
-import httpx
-from playwright.async_api import async_playwright
+from playwright.async_api import BrowserContext, Page, Playwright, async_playwright
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import HTMLResponse, JSONResponse, Response
 from starlette.routing import Route
 
-UPSTREAM_BROKER_URL = os.getenv("BROWSERBASE_BROKER_URL", "").strip()
 BROKER_TOKEN = os.getenv("BROKER_TOKEN", "").strip()
-SELF_TEST_ENABLED = os.getenv("SELF_TEST_ENABLED", "").strip() == "1"
-ALLOWED_HOST_SUFFIXES = tuple(
-    x.strip().lower()
-    for x in os.getenv(
-        "ALLOWED_HOST_SUFFIXES",
-        "example.com,amazon.com,aws.amazon.com",
-    ).split(",")
-    if x.strip()
-)
+LIVE_TOKEN = os.getenv("LIVE_TOKEN", "").strip()
+PROFILE_DIR = os.getenv("BROWSER_PROFILE_DIR", "/data/chromium-profile").strip() or "/data/chromium-profile"
+VIEWPORT_WIDTH = 1440
+VIEWPORT_HEIGHT = 900
+
+PLAYWRIGHT: Playwright | None = None
+CONTEXT: BrowserContext | None = None
+PAGE: Page | None = None
+BROWSER_ERROR: str | None = None
+BROWSER_LOCK = asyncio.Lock()
 
 
-def _no_store(payload: object, status_code: int = 200) -> JSONResponse:
+def _no_store_json(payload: object, status_code: int = 200) -> JSONResponse:
     response = JSONResponse(payload, status_code=status_code)
     response.headers["Cache-Control"] = "no-store"
     response.headers["Pragma"] = "no-cache"
     return response
 
 
-def _authorized(request: Request) -> bool:
+def _no_store_response(content: bytes, media_type: str) -> Response:
+    response = Response(content, media_type=media_type)
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    return response
+
+
+def _bearer_authorized(request: Request) -> bool:
     auth = request.headers.get("authorization", "")
     if not auth.startswith("Bearer "):
         return False
     token = auth[7:].strip()
-    return bool(BROKER_TOKEN) and token == BROKER_TOKEN
+    return bool(BROKER_TOKEN) and hmac.compare_digest(token, BROKER_TOKEN)
 
 
-def _host_allowed(url: str) -> bool:
-    try:
-        parsed = urlparse(url)
-    except ValueError:
-        return False
-    if parsed.scheme not in {"http", "https"}:
-        return False
-    host = (parsed.hostname or "").lower()
-    return bool(host) and any(host == suffix or host.endswith("." + suffix) for suffix in ALLOWED_HOST_SUFFIXES)
+def _live_authorized(token: str) -> bool:
+    return bool(LIVE_TOKEN) and hmac.compare_digest(token, LIVE_TOKEN)
 
 
 def _timeout_ms(value: Any, default: int = 30000) -> int:
@@ -59,64 +62,134 @@ def _timeout_ms(value: Any, default: int = 30000) -> int:
     return max(1, min(raw, 120000))
 
 
-async def _mint_session() -> str:
-    if not UPSTREAM_BROKER_URL:
-        raise RuntimeError("BROWSERBASE_BROKER_URL is not configured")
-    async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
-        response = await client.get(UPSTREAM_BROKER_URL)
-    if response.status_code >= 400:
-        raise RuntimeError(f"upstream broker returned HTTP {response.status_code}")
+def _ip_is_public(value: str) -> bool:
     try:
-        body = response.json()
+        ip = ipaddress.ip_address(value)
+    except ValueError:
+        return True
+    return not (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_multicast
+        or ip.is_reserved
+        or ip.is_unspecified
+    )
+
+
+def _resolve_host(host: str) -> list[str]:
+    infos = socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
+    return sorted({str(info[4][0]) for info in infos})
+
+
+async def _url_allowed(url: str) -> bool:
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return False
+    if parsed.scheme not in {"http", "https"}:
+        return False
+    host = (parsed.hostname or "").lower().rstrip(".")
+    if not host or host in {"localhost", "localhost.localdomain"} or host.endswith(".local"):
+        return False
+    if not _ip_is_public(host):
+        return False
+    try:
+        addresses = await asyncio.wait_for(asyncio.to_thread(_resolve_host, host), timeout=5)
+    except Exception:
+        return False
+    return bool(addresses) and all(_ip_is_public(address) for address in addresses)
+
+
+async def _ensure_page() -> Page:
+    global PAGE
+    if CONTEXT is None:
+        raise RuntimeError(BROWSER_ERROR or "browser context is not ready")
+    if PAGE is None or PAGE.is_closed():
+        pages = CONTEXT.pages
+        PAGE = pages[0] if pages else await CONTEXT.new_page()
+    return PAGE
+
+
+async def browser_startup() -> None:
+    global PLAYWRIGHT, CONTEXT, PAGE, BROWSER_ERROR
+    try:
+        os.makedirs(PROFILE_DIR, exist_ok=True)
+        PLAYWRIGHT = await async_playwright().start()
+        CONTEXT = await PLAYWRIGHT.chromium.launch_persistent_context(
+            PROFILE_DIR,
+            headless=True,
+            viewport={"width": VIEWPORT_WIDTH, "height": VIEWPORT_HEIGHT},
+            args=[
+                "--disable-dev-shm-usage",
+                "--no-sandbox",
+                "--disable-background-networking",
+            ],
+        )
+        pages = CONTEXT.pages
+        PAGE = pages[0] if pages else await CONTEXT.new_page()
+        BROWSER_ERROR = None
+        print("LOCAL_BROWSER_READY", flush=True)
     except Exception as exc:
-        raise RuntimeError("upstream broker returned non-JSON") from exc
-    connect_url = body.get("connectUrl") if isinstance(body, dict) else None
-    if not isinstance(connect_url, str) or not connect_url:
-        raise RuntimeError("upstream broker response is missing connectUrl")
-    return connect_url
+        BROWSER_ERROR = str(exc)[:1000]
+        print("LOCAL_BROWSER_ERROR " + json.dumps({"error": BROWSER_ERROR}), flush=True)
+
+
+async def browser_shutdown() -> None:
+    global PLAYWRIGHT, CONTEXT, PAGE
+    try:
+        if CONTEXT is not None:
+            await CONTEXT.close()
+    finally:
+        CONTEXT = None
+        PAGE = None
+        if PLAYWRIGHT is not None:
+            await PLAYWRIGHT.stop()
+        PLAYWRIGHT = None
 
 
 async def health(_: Request) -> JSONResponse:
-    return _no_store(
+    ready = CONTEXT is not None and BROWSER_ERROR is None
+    return _no_store_json(
         {
             "ok": True,
-            "upstreamConfigured": bool(UPSTREAM_BROKER_URL),
+            "browserReady": ready,
+            "profilePersistenceConfigured": PROFILE_DIR.startswith("/data/"),
             "brokerTokenConfigured": bool(BROKER_TOKEN),
-            "allowedHostCount": len(ALLOWED_HOST_SUFFIXES),
-            "selfTestEnabled": SELF_TEST_ENABLED,
+            "liveHandoffConfigured": bool(LIVE_TOKEN),
+            "viewport": [VIEWPORT_WIDTH, VIEWPORT_HEIGHT],
+            "browserError": None if ready else BROWSER_ERROR,
         }
     )
 
 
-async def upstream_test(request: Request) -> JSONResponse:
-    if not _authorized(request):
-        return _no_store({"error": "unauthorized"}, 401)
+async def browser_meta(request: Request) -> JSONResponse:
+    if not _bearer_authorized(request):
+        return _no_store_json({"error": "unauthorized"}, 401)
     try:
-        connect_url = await _mint_session()
-        return _no_store({"ok": True, "connectUrlPresent": bool(connect_url)})
+        async with BROWSER_LOCK:
+            page = await _ensure_page()
+            return _no_store_json({"ok": True, "url": page.url, "title": await page.title()})
     except Exception as exc:
-        return _no_store({"ok": False, "error": str(exc)[:500]}, 502)
+        return _no_store_json({"ok": False, "error": str(exc)[:500]}, 503)
 
 
 async def run_browser(request: Request) -> JSONResponse:
-    if not _authorized(request):
-        return _no_store({"error": "unauthorized"}, 401)
-
+    if not _bearer_authorized(request):
+        return _no_store_json({"error": "unauthorized"}, 401)
     try:
         payload = await request.json()
     except Exception:
-        return _no_store({"error": "invalid_json"}, 400)
-
+        return _no_store_json({"error": "invalid_json"}, 400)
     if not isinstance(payload, dict):
-        return _no_store({"error": "body_must_be_object"}, 400)
+        return _no_store_json({"error": "body_must_be_object"}, 400)
 
     target = str(payload.get("url") or "").strip()
-    if not target or not _host_allowed(target):
-        return _no_store({"error": "target_not_allowed"}, 403)
-
+    if not target or not await _url_allowed(target):
+        return _no_store_json({"error": "target_not_allowed"}, 403)
     steps = payload.get("steps") or []
     if not isinstance(steps, list) or len(steps) > 40:
-        return _no_store({"error": "invalid_steps"}, 400)
+        return _no_store_json({"error": "invalid_steps"}, 400)
 
     sensitive = payload.get("sensitive", True) is not False
     allow_sensitive_output = payload.get("allowSensitiveOutput", False) is True
@@ -125,26 +198,11 @@ async def run_browser(request: Request) -> JSONResponse:
     if wait_until not in {"load", "domcontentloaded", "networkidle", "commit"}:
         wait_until = "domcontentloaded"
     request_timeout = _timeout_ms(payload.get("timeoutMs"), 30000)
+    result: dict[str, Any] = {"ok": False, "sensitive": sensitive, "stepCount": len(steps), "steps": []}
 
-    result: dict[str, Any] = {
-        "ok": False,
-        "sensitive": sensitive,
-        "stepCount": len(steps),
-        "steps": [],
-    }
-
-    browser = None
     try:
-        connect_url = await _mint_session()
-        async with async_playwright() as playwright:
-            browser = await playwright.chromium.connect_over_cdp(connect_url, timeout=request_timeout)
-            contexts = browser.contexts
-            if not contexts:
-                raise RuntimeError("remote browser has no context")
-            context = contexts[0]
-            pages = context.pages
-            page = pages[0] if pages else await context.new_page()
-
+        async with BROWSER_LOCK:
+            page = await _ensure_page()
             navigation = await page.goto(target, wait_until=wait_until, timeout=request_timeout)
             result["initialHttpStatus"] = navigation.status if navigation else None
 
@@ -159,7 +217,7 @@ async def run_browser(request: Request) -> JSONResponse:
 
                 if action == "goto":
                     step_url = str(step.get("url") or "").strip()
-                    if not step_url or not _host_allowed(step_url):
+                    if not step_url or not await _url_allowed(step_url):
                         raise RuntimeError(f"step {index}: target not allowed")
                     await page.goto(step_url, wait_until="domcontentloaded", timeout=timeout)
                 elif action == "waitForSelector":
@@ -171,8 +229,7 @@ async def run_browser(request: Request) -> JSONResponse:
                         state = "visible"
                     await page.locator(selector).wait_for(state=state, timeout=timeout)
                 elif action == "waitForTimeout":
-                    ms = max(0, min(int(step.get("ms") or 0), 10000))
-                    await page.wait_for_timeout(ms)
+                    await page.wait_for_timeout(max(0, min(int(step.get("ms") or 0), 10000)))
                 elif action == "assertText":
                     selector = str(step.get("selector") or "")
                     if not selector:
@@ -223,60 +280,121 @@ async def run_browser(request: Request) -> JSONResponse:
             if can_return_observed:
                 result["finalUrl"] = page.url
                 result["title"] = await page.title()
-            await browser.close()
-            browser = None
-            return _no_store(result)
+            return _no_store_json(result)
     except Exception as exc:
         result["error"] = str(exc)[:1000]
-        return _no_store(result, 502)
-    finally:
-        if browser is not None:
-            try:
-                await browser.close()
-            except Exception:
-                pass
+        return _no_store_json(result, 502)
 
 
-async def startup_selftest() -> None:
-    if not SELF_TEST_ENABLED:
-        return
-    outcome: dict[str, Any] = {"ok": False, "stage": "start"}
-    browser = None
+LIVE_HTML = """<!doctype html>
+<html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
+<title>Private Browser Login</title>
+<style>
+body{font-family:system-ui,sans-serif;margin:0;background:#111;color:#eee}#bar{position:sticky;top:0;z-index:2;background:#1c1c1c;padding:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}input,button{font-size:16px;padding:9px;border-radius:8px;border:1px solid #555;background:#222;color:#fff}#url{min-width:280px;flex:1}#typebox{min-width:220px}.muted{font-size:12px;color:#aaa}#frame{display:block;width:100%;height:auto;cursor:crosshair;background:#fff}#status{font-size:12px;min-width:120px}</style>
+</head><body><div id='bar'>
+<input id='url' placeholder='https://...'><button onclick='nav()'>Go</button><button onclick="act({action:'reload'})">Reload</button>
+<input id='typebox' type='password' autocomplete='off' placeholder='Type into focused field'><button onclick='typeText()'>Type</button>
+<button onclick="key('Tab')">Tab</button><button onclick="key('Enter')">Enter</button><button onclick="key('Backspace')">Backspace</button>
+<span id='status'>connecting…</span><span class='muted'>Click the page, then use Type. Password text goes directly to this browser service, not through ChatGPT.</span>
+</div><img id='frame' alt='browser view'>
+<script>
+const token=location.pathname.split('/')[2]; const base='/live/'+token; const img=document.getElementById('frame'); const status=document.getElementById('status');
+async function act(body){status.textContent='working…';try{let r=await fetch(base+'/action',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});let j=await r.json();status.textContent=j.ok?'ok':(j.error||'error');if(j.url)document.getElementById('url').value=j.url;}catch(e){status.textContent='network error';}refresh();}
+function nav(){let u=document.getElementById('url').value.trim();if(u)act({action:'navigate',url:u});}
+function typeText(){let el=document.getElementById('typebox');let text=el.value;el.value='';if(text)act({action:'type',text});}
+function key(k){act({action:'press',key:k});}
+img.addEventListener('click',e=>{let r=img.getBoundingClientRect();let x=(e.clientX-r.left)*(img.naturalWidth/r.width);let y=(e.clientY-r.top)*(img.naturalHeight/r.height);act({action:'click',x,y});});
+function refresh(){img.src=base+'/screenshot?t='+Date.now();fetch(base+'/meta').then(r=>r.json()).then(j=>{if(j.url)document.getElementById('url').value=j.url;}).catch(()=>{});}
+img.onload=()=>{if(status.textContent==='connecting…')status.textContent='ready';};setInterval(refresh,1200);refresh();
+</script></body></html>"""
+
+
+async def live_page(request: Request) -> Response:
+    if not _live_authorized(request.path_params["token"]):
+        return Response("Not found", status_code=404)
+    response = HTMLResponse(LIVE_HTML)
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["X-Frame-Options"] = "DENY"
+    return response
+
+
+async def live_screenshot(request: Request) -> Response:
+    if not _live_authorized(request.path_params["token"]):
+        return Response("Not found", status_code=404)
     try:
-        connect_url = await _mint_session()
-        outcome["stage"] = "session"
-        async with async_playwright() as playwright:
-            browser = await playwright.chromium.connect_over_cdp(connect_url, timeout=30000)
-            contexts = browser.contexts
-            if not contexts:
-                raise RuntimeError("remote browser has no context")
-            page = contexts[0].pages[0] if contexts[0].pages else await contexts[0].new_page()
-            response = await page.goto("https://example.com", wait_until="domcontentloaded", timeout=30000)
-            title = await page.title()
-            outcome = {
-                "ok": response is not None and response.status == 200 and title == "Example Domain",
-                "stage": "browser",
-                "httpStatus": response.status if response else None,
-                "titleMatched": title == "Example Domain",
-            }
-            await browser.close()
-            browser = None
+        async with BROWSER_LOCK:
+            page = await _ensure_page()
+            data = await page.screenshot(type="png", full_page=False)
+        return _no_store_response(data, "image/png")
     except Exception as exc:
-        outcome["error"] = str(exc)[:500]
-    finally:
-        if browser is not None:
-            try:
-                await browser.close()
-            except Exception:
-                pass
-    print("BROWSER_SELF_TEST " + json.dumps(outcome, sort_keys=True), flush=True)
+        return _no_store_json({"ok": False, "error": str(exc)[:300]}, 503)
+
+
+async def live_meta(request: Request) -> JSONResponse:
+    if not _live_authorized(request.path_params["token"]):
+        return _no_store_json({"error": "not_found"}, 404)
+    try:
+        async with BROWSER_LOCK:
+            page = await _ensure_page()
+            return _no_store_json({"ok": True, "url": page.url, "title": await page.title()})
+    except Exception as exc:
+        return _no_store_json({"ok": False, "error": str(exc)[:300]}, 503)
+
+
+async def live_action(request: Request) -> JSONResponse:
+    if not _live_authorized(request.path_params["token"]):
+        return _no_store_json({"error": "not_found"}, 404)
+    try:
+        body = await request.json()
+    except Exception:
+        return _no_store_json({"error": "invalid_json"}, 400)
+    if not isinstance(body, dict):
+        return _no_store_json({"error": "invalid_body"}, 400)
+    action = str(body.get("action") or "")
+    try:
+        async with BROWSER_LOCK:
+            page = await _ensure_page()
+            if action == "click":
+                x = max(0.0, min(float(body.get("x", 0)), VIEWPORT_WIDTH))
+                y = max(0.0, min(float(body.get("y", 0)), VIEWPORT_HEIGHT))
+                await page.mouse.click(x, y)
+            elif action == "type":
+                text = str(body.get("text") or "")[:4096]
+                await page.keyboard.insert_text(text)
+            elif action == "press":
+                key = str(body.get("key") or "")
+                allowed = {"Enter", "Tab", "Escape", "Backspace", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "PageUp", "PageDown"}
+                if key not in allowed:
+                    return _no_store_json({"error": "key_not_allowed"}, 403)
+                await page.keyboard.press(key)
+            elif action == "navigate":
+                target = str(body.get("url") or "").strip()
+                if not target or not await _url_allowed(target):
+                    return _no_store_json({"error": "target_not_allowed"}, 403)
+                await page.goto(target, wait_until="domcontentloaded", timeout=60000)
+            elif action == "reload":
+                await page.reload(wait_until="domcontentloaded", timeout=60000)
+            elif action == "scroll":
+                dy = max(-5000, min(int(body.get("dy") or 0), 5000))
+                await page.mouse.wheel(0, dy)
+            else:
+                return _no_store_json({"error": "action_not_allowed"}, 403)
+            return _no_store_json({"ok": True, "url": page.url})
+    except Exception as exc:
+        return _no_store_json({"ok": False, "error": str(exc)[:500]}, 502)
 
 
 app = Starlette(
     routes=[
         Route("/healthz", health, methods=["GET"]),
-        Route("/upstream-test", upstream_test, methods=["GET"]),
+        Route("/meta", browser_meta, methods=["GET"]),
         Route("/run", run_browser, methods=["POST"]),
+        Route("/live/{token}", live_page, methods=["GET"]),
+        Route("/live/{token}/screenshot", live_screenshot, methods=["GET"]),
+        Route("/live/{token}/meta", live_meta, methods=["GET"]),
+        Route("/live/{token}/action", live_action, methods=["POST"]),
     ],
-    on_startup=[startup_selftest],
+    on_startup=[browser_startup],
+    on_shutdown=[browser_shutdown],
 )
