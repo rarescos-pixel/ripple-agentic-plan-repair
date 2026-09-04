@@ -1,20 +1,12 @@
 {
   "version": 1,
-  "provider": "local",
+  "provider": "browserbase-bridge",
+  "bridgeUrl": "https://hook.eu1.make.com/3skbft8lf1g8lcvsf5hu8rk33a2wjm13",
   "url": "https://example.com",
-  "timeoutMs": 30000,
-  "sensitive": false,
-  "allowArtifacts": true,
-  "steps": [
-    {
-      "action": "assertTitle",
-      "contains": "Example Domain"
-    },
-    {
-      "action": "assertText",
-      "selector": "h1",
-      "contains": "Example Domain"
-    }
-  ],
-  "finalScreenshot": "final.png"
+  "authenticatedUrlContains": "example.com",
+  "timeoutMs": 60000,
+  "holdMs": 0,
+  "sensitive": true,
+  "allowArtifacts": false,
+  "runTag": "broker-active-retry-20260904"
 }
