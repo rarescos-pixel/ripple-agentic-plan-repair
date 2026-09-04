@@ -5,8 +5,8 @@
   "url": "https://console.aws.amazon.com/cloudshell/home?region=eu-central-1",
   "authenticatedUrlContains": "console.aws.amazon.com/cloudshell",
   "timeoutMs": 120000,
-  "holdMs": 420000,
+  "holdMs": 20000,
   "sensitive": true,
   "allowArtifacts": false,
-  "runTag": "aws-login-human-handoff-20260904"
+  "runTag": "aws-persistence-verification-20260904-2030"
 }
