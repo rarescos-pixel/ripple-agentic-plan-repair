@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import json
 import os
 from typing import Any
@@ -15,6 +14,7 @@ from starlette.routing import Route
 
 UPSTREAM_BROKER_URL = os.getenv("BROWSERBASE_BROKER_URL", "").strip()
 BROKER_TOKEN = os.getenv("BROKER_TOKEN", "").strip()
+SELF_TEST_ENABLED = os.getenv("SELF_TEST_ENABLED", "").strip() == "1"
 ALLOWED_HOST_SUFFIXES = tuple(
     x.strip().lower()
     for x in os.getenv(
@@ -83,6 +83,7 @@ async def health(_: Request) -> JSONResponse:
             "upstreamConfigured": bool(UPSTREAM_BROKER_URL),
             "brokerTokenConfigured": bool(BROKER_TOKEN),
             "allowedHostCount": len(ALLOWED_HOST_SUFFIXES),
+            "selfTestEnabled": SELF_TEST_ENABLED,
         }
     )
 
@@ -236,10 +237,46 @@ async def run_browser(request: Request) -> JSONResponse:
                 pass
 
 
+async def startup_selftest() -> None:
+    if not SELF_TEST_ENABLED:
+        return
+    outcome: dict[str, Any] = {"ok": False, "stage": "start"}
+    browser = None
+    try:
+        connect_url = await _mint_session()
+        outcome["stage"] = "session"
+        async with async_playwright() as playwright:
+            browser = await playwright.chromium.connect_over_cdp(connect_url, timeout=30000)
+            contexts = browser.contexts
+            if not contexts:
+                raise RuntimeError("remote browser has no context")
+            page = contexts[0].pages[0] if contexts[0].pages else await contexts[0].new_page()
+            response = await page.goto("https://example.com", wait_until="domcontentloaded", timeout=30000)
+            title = await page.title()
+            outcome = {
+                "ok": response is not None and response.status == 200 and title == "Example Domain",
+                "stage": "browser",
+                "httpStatus": response.status if response else None,
+                "titleMatched": title == "Example Domain",
+            }
+            await browser.close()
+            browser = None
+    except Exception as exc:
+        outcome["error"] = str(exc)[:500]
+    finally:
+        if browser is not None:
+            try:
+                await browser.close()
+            except Exception:
+                pass
+    print("BROWSER_SELF_TEST " + json.dumps(outcome, sort_keys=True), flush=True)
+
+
 app = Starlette(
     routes=[
         Route("/healthz", health, methods=["GET"]),
         Route("/upstream-test", upstream_test, methods=["GET"]),
         Route("/run", run_browser, methods=["POST"]),
-    ]
+    ],
+    on_startup=[startup_selftest],
 )
