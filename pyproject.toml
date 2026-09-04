@@ -1,0 +1,13 @@
+[project]
+name = "ripple-agentic-plan-repair"
+version = "1.2.0"
+description = "Consequence-aware plan repair agent"
+requires-python = ">=3.11"
+dependencies = ["starlette>=0.45", "uvicorn>=0.30", "httpx>=0.27"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[project.scripts]
+ripple-web = "ripple.webapp:serve"
+ripple-mcp = "ripple.mcp_server:serve"

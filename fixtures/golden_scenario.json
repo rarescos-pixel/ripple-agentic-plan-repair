@@ -1,0 +1,28 @@
+{
+  "scenario_id": "golden-flight-cascade-v1",
+  "utterance": "Our flight home was cancelled. We'll land tomorrow at 18:00.",
+  "change": {
+    "node_id": "flight:return",
+    "field": "arrival_at",
+    "old_value": "2026-09-10T21:00:00",
+    "new_value": "2026-09-11T18:00:00"
+  },
+  "affected_commitments": [
+    "ride:R1",
+    "reservation:D1",
+    "delivery:G1",
+    "care:C1",
+    "calendar:M1"
+  ],
+  "expected": {
+    "impact_count": 5,
+    "action_count": 5,
+    "added_cost": 42,
+    "direct_avoidable_loss": 116,
+    "net_direct_cash_preserved": 74,
+    "external_people_notified": 3,
+    "writes_before_approval": 0,
+    "unique_external_writes_after_execution": 5,
+    "deduplicated_actions_on_replay": 5
+  }
+}
