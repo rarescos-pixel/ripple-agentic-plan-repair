@@ -2,6 +2,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import hashlib
 import json
+import secrets
 from typing import Any, Dict, Protocol
 
 from ripple.domain.models import ChangeEvent
@@ -59,6 +60,18 @@ def _canonical_change_id(*, node_id: str, field: str, old_value: Any, new_value:
     return f"change:bedrock:{digest}"
 
 
+def _runtime_correlation_id(context: Dict[str, Any]) -> str:
+    """Return a per-invocation trace identity without affecting idempotency.
+
+    A caller-supplied correlation id remains authoritative. When none is
+    supplied, generate a short opaque id so concurrent Bedrock calls and their
+    CloudWatch traces can be distinguished. This identity is intentionally
+    independent from the stable semantic change id used for replay safety.
+    """
+    supplied = str(context.get("correlation_id", "")).strip()
+    return (supplied or f"bedrock:{secrets.token_urlsafe(12)}")[:256]
+
+
 @dataclass
 class BedrockChangeInterpreter:
     client: BedrockConverseClient
@@ -70,7 +83,7 @@ class BedrockChangeInterpreter:
         allowed_fields = context.get("allowed_fields", {"flight:return": ["arrival_at"]})
         canonical = json.dumps({"allowed_nodes": allowed_nodes, "allowed_fields": allowed_fields}, sort_keys=True, default=str)
         self.budget.validate_input(utterance, canonical)
-        correlation_id = str(context.get("correlation_id", "bedrock"))[:256]
+        correlation_id = _runtime_correlation_id(context)
 
         response = self.client.converse(
             modelId=self.model_id,
