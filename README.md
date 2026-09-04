@@ -114,10 +114,10 @@ The embedded OAuth server is a hackathon/demo implementation, not a production i
 - `docs/REMOTE_SMOKE_REPORT.md` — independent public HTTPS MCP/OAuth evidence
 - `scripts/mcp_smoke.py` — reproducible authenticated remote smoke test
 - `src/ripple/mcp_server.py` — MCP Streamable HTTP + OAuth server
-- `src/ripple/engine.py` — dependency analysis
-- `src/ripple/executor.py` — bounded/idempotent execution
-- `src/ripple/policy.py` — deterministic approval boundary
-- `src/ripple/tools.py` — simulated service adapters
+- `src/ripple/engine/dependency.py` — dependency analysis
+- `src/ripple/orchestration/executor.py` — bounded/idempotent execution
+- `src/ripple/policy/approval.py` — deterministic approval boundary
+- `src/ripple/tools/simulated.py` — simulated service adapters
 
 ## AWS status
 
@@ -125,4 +125,4 @@ AWS integration remains a later milestone. A constrained Bedrock boundary was de
 
 ## License
 
-This project is intended to be submitted as an open-source hackathon project. The repository license and complete judge packet are finalized as part of the submission-readiness pass.
+Released under the **MIT License**. See `LICENSE`.
