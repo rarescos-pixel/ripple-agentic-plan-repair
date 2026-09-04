@@ -10,10 +10,11 @@ on:
       - scripts/browser_bridge_runner.mjs
       - automation/browser-request.json
       - fixtures/browser-automation/**
+      - browserbase_function/package.json
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   browser-runner:
@@ -29,6 +30,22 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: poc/free-work-replacement
+
+      - name: Generate Browserbase Function lockfile
+        run: |
+          corepack enable
+          cd browserbase_function
+          pnpm install --lockfile-only
+          cd ..
+          if ! git diff --quiet -- browserbase_function/pnpm-lock.yaml || ! git ls-files --error-unmatch browserbase_function/pnpm-lock.yaml >/dev/null 2>&1; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add browserbase_function/pnpm-lock.yaml
+            git commit -m "Generate Browserbase Function lockfile"
+            git push origin HEAD:poc/free-work-replacement
+          fi
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
