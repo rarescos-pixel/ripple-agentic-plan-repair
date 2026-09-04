@@ -1,36 +1,20 @@
 {
   "version": 1,
-  "url": "http://127.0.0.1:8765/fixtures/browser-automation/form.html",
+  "url": "https://example.com",
   "timeoutMs": 30000,
   "steps": [
     {
       "action": "assertTitle",
-      "contains": "Browser Automation Fixture"
-    },
-    {
-      "action": "fill",
-      "selector": "#name",
-      "value": "Rares"
-    },
-    {
-      "action": "setInputFiles",
-      "selector": "#file",
-      "files": [
-        "fixtures/browser-automation/upload.txt"
-      ]
-    },
-    {
-      "action": "click",
-      "selector": "#submit"
+      "contains": "Example Domain"
     },
     {
       "action": "assertText",
-      "selector": "#result",
-      "contains": "Hello Rares; file=upload.txt"
+      "selector": "h1",
+      "contains": "Example Domain"
     },
     {
       "action": "screenshot",
-      "name": "form-completed.png"
+      "name": "example-domain.png"
     }
   ],
   "finalScreenshot": "final.png"
