@@ -4,7 +4,7 @@
   "type": "module",
   "packageManager": "pnpm@10.12.1",
   "dependencies": {
-    "@browserbasehq/sdk-functions": "1.0.2",
+    "@browserbasehq/sdk-functions": "1.0.1",
     "playwright-core": "1.55.0"
   }
 }
