@@ -129,7 +129,7 @@ Separate managed Browserbase sessions using the same persistent Context both rea
 
 Browser automation work remains on `poc/free-work-replacement`. The Browserbase example request file is present on the POC branch and was explicitly checked as absent from `main`.
 
-Current POC head at this milestone: `ce556d067fafc0f8858269231be75ad001745bf9` (`Restrict persistent Browserbase runner to read-only actions`).
+Functional browser-code milestone: `ce556d067fafc0f8858269231be75ad001745bf9` (`Restrict persistent Browserbase runner to read-only actions`). Later documentation-only commits may advance the branch head beyond this SHA.
 
 Do not merge this branch wholesale into `main`; it has diverged from production and must be retargeted/audited before any selective production change.
 
