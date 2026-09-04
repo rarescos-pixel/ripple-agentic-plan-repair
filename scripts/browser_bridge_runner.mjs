@@ -17,6 +17,7 @@ function nonEmpty(value) {
 }
 
 let browser;
+let keepSessionOpen = false;
 let result = {
   ok: false,
   provider: 'browserbase-bridge',
@@ -26,6 +27,7 @@ let result = {
 
 try {
   const request = JSON.parse(await fs.readFile(requestPath, 'utf8'));
+  keepSessionOpen = request.keepSessionOpen === true;
   assert(request.provider === 'browserbase-bridge', 'Request provider must be browserbase-bridge');
   assert(nonEmpty(request.bridgeUrl), 'bridgeUrl is required');
   assert(nonEmpty(request.url), 'url is required');
@@ -81,6 +83,7 @@ try {
     initialHttpStatus: response?.status() ?? null,
     authenticated,
     matchedUrlFragment: expected || null,
+    keepSessionOpen,
     finishedAt: new Date().toISOString(),
   };
 } catch (error) {
@@ -88,14 +91,21 @@ try {
     ...result,
     ok: false,
     error: error instanceof Error ? error.message : String(error),
+    keepSessionOpen,
     finishedAt: new Date().toISOString(),
   };
   process.exitCode = 1;
 } finally {
   try {
-    await browser?.close();
+    if (!keepSessionOpen) {
+      await browser?.close();
+    }
   } finally {
     await fs.writeFile(resultPath, JSON.stringify(result, null, 2) + '\n', 'utf8');
     console.log(JSON.stringify(result));
   }
+}
+
+if (keepSessionOpen) {
+  process.exit(process.exitCode || 0);
 }
