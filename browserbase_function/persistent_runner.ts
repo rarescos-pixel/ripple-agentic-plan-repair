@@ -4,8 +4,6 @@ import { chromium } from "playwright-core";
 type Step = {
   action: string;
   selector?: string;
-  value?: string | string[];
-  key?: string;
   url?: string;
   ms?: number;
   state?: "attached" | "detached" | "visible" | "hidden";
@@ -34,7 +32,7 @@ function timeoutFor(step: Step = { action: "" }, request: Request): number {
 }
 
 defineFn(
-  "free-work-persistent-runner",
+  "free-work-persistent-readonly",
   async (context, rawParams) => {
     const request = rawParams as Request;
     assert(request && typeof request === "object", "params must be an object");
@@ -83,26 +81,6 @@ defineFn(
             await page.goto(step.url, { waitUntil: "domcontentloaded", timeout: timeoutFor(step, request) });
             break;
           }
-          case "click":
-            assert(step.selector, `step ${index + 1}: selector is required`);
-            await page.locator(step.selector).click({ timeout: timeoutFor(step, request) });
-            break;
-          case "fill":
-            assert(step.selector, `step ${index + 1}: selector is required`);
-            await page.locator(step.selector).fill(String(step.value ?? ""), { timeout: timeoutFor(step, request) });
-            break;
-          case "press":
-            assert(step.selector && step.key, `step ${index + 1}: selector and key are required`);
-            await page.locator(step.selector).press(step.key, { timeout: timeoutFor(step, request) });
-            break;
-          case "check":
-            assert(step.selector, `step ${index + 1}: selector is required`);
-            await page.locator(step.selector).check({ timeout: timeoutFor(step, request) });
-            break;
-          case "selectOption":
-            assert(step.selector, `step ${index + 1}: selector is required`);
-            await page.locator(step.selector).selectOption(step.value ?? "", { timeout: timeoutFor(step, request) });
-            break;
           case "waitForSelector":
             assert(step.selector, `step ${index + 1}: selector is required`);
             await page.locator(step.selector).waitFor({ state: step.state ?? "visible", timeout: timeoutFor(step, request) });
@@ -145,7 +123,7 @@ defineFn(
             break;
           }
           default:
-            throw new Error(`step ${index + 1}: unsupported action ${action}`);
+            throw new Error(`step ${index + 1}: unsupported read-only action ${action}`);
         }
 
         item.ok = true;
