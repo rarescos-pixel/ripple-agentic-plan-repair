@@ -1,6 +1,7 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import List
+
 from ripple.domain.models import Approval, ExecutionReceipt
 from ripple.orchestration.agent import RippleAgent, AgentResponse
 from ripple.orchestration.executor import Executor
@@ -21,12 +22,15 @@ class RippleSession:
     def propose(self, utterance, context) -> AgentResponse:
         return self.agent.propose(utterance, context)
 
+    def record_approval(self, proposal: AgentResponse, approval: Approval) -> Approval:
+        """Validate and persist the exact client-visible approval snapshot."""
+        return self.executor.record_approval(proposal.plan, approval)
+
     def execute_with_approval(self, proposal: AgentResponse, approval: Approval) -> SessionResult:
         """Execute only the approval object supplied by the client/UI.
 
-        Crucially, this method never reconstructs approval from the current plan.
-        The executor's ApprovalPolicy therefore compares the client-visible snapshot
-        hash/version/cost/scope against the current authoritative plan.
+        The executor re-validates and idempotently persists the approval before
+        any write, then consults durable receipts before each provider call.
         """
         receipts = self.executor.execute(proposal.plan, approval)
         return SessionResult(proposal, receipts)
