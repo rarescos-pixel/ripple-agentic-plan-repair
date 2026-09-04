@@ -1,5 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass
+import hashlib
 import json
 from typing import Any, Dict, Protocol
 
@@ -32,6 +33,30 @@ RECORD_CHANGE_TOOL = {
     }],
     "toolChoice": {"tool": {"name": "record_change"}},
 }
+
+
+def _canonical_change_id(*, node_id: str, field: str, old_value: Any, new_value: str) -> str:
+    """Stable semantic identity used by downstream idempotency keys.
+
+    Bedrock may normalize the same utterance more than once, or a user may
+    report a later, genuinely different change to the same fact. Identity must
+    therefore be stable for the same canonical transition and different when
+    the transition changes. It must never depend on model wording, confidence,
+    request timing, or an ephemeral MCP session id.
+    """
+    material = json.dumps(
+        {
+            "node_id": node_id,
+            "field": field,
+            "old_value": old_value,
+            "new_value": new_value,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    )
+    digest = hashlib.sha256(material.encode()).hexdigest()[:20]
+    return f"change:bedrock:{digest}"
 
 
 @dataclass
@@ -82,8 +107,14 @@ class BedrockChangeInterpreter:
         old_value = allowed_nodes[node_id].get(field)
         if old_value is None:
             raise ValueError("Canonical old value is missing")
+        change_id = context.get("change_id") or _canonical_change_id(
+            node_id=node_id,
+            field=field,
+            old_value=old_value,
+            new_value=new_value,
+        )
         return ChangeEvent(
-            id=context.get("change_id", "change:bedrock-v1"),
+            id=change_id,
             node_id=node_id,
             field=field,
             old_value=old_value,

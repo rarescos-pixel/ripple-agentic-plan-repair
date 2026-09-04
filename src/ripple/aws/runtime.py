@@ -4,6 +4,7 @@ import os
 from typing import Any, Protocol
 
 from ripple.aws.bedrock import TrackedBedrockConverseClient
+from ripple.aws.profile import validate_runtime_profile
 from ripple.observability.cloudwatch import CloudWatchTraceSink
 from ripple.orchestration.agent import GoldenChangeInterpreter
 from ripple.orchestration.bedrock_interpreter import BedrockChangeInterpreter
@@ -24,24 +25,25 @@ class NoopTraceSink:
 
 
 def build_change_interpreter():
-    mode = os.getenv("RIPPLE_CHANGE_INTERPRETER", "golden").strip().lower()
+    profile = validate_runtime_profile()
+    mode = profile.change_interpreter
     if mode == "golden":
         return GoldenChangeInterpreter()
-    if mode != "bedrock":
+    if mode != "bedrock":  # defensive; profile validation owns the contract
         raise RuntimeError(f"Unsupported RIPPLE_CHANGE_INTERPRETER: {mode}")
     model_id = os.getenv("RIPPLE_BEDROCK_MODEL_ID", "").strip()
     if not model_id:
         raise RuntimeError("RIPPLE_BEDROCK_MODEL_ID is required in Bedrock mode")
-    region = os.getenv("AWS_REGION", "eu-central-1")
-    client = TrackedBedrockConverseClient(region_name=region)
+    client = TrackedBedrockConverseClient(region_name=profile.aws_region)
     return BedrockChangeInterpreter(client=client, model_id=model_id)
 
 
 def build_trace_sink() -> TraceSink:
-    backend = os.getenv("RIPPLE_TRACE_BACKEND", "none").strip().lower()
+    profile = validate_runtime_profile()
+    backend = profile.trace_backend
     if backend in {"", "none", "noop"}:
         return NoopTraceSink()
-    if backend != "cloudwatch":
+    if backend != "cloudwatch":  # defensive; profile validation owns the contract
         raise RuntimeError(f"Unsupported RIPPLE_TRACE_BACKEND: {backend}")
     group = os.getenv("RIPPLE_CLOUDWATCH_LOG_GROUP", "").strip()
     stream = os.getenv("RIPPLE_CLOUDWATCH_LOG_STREAM", "runtime").strip()
@@ -51,5 +53,5 @@ def build_trace_sink() -> TraceSink:
         import boto3  # type: ignore
     except ImportError as exc:  # pragma: no cover - live AWS only
         raise RuntimeError("Install the aws optional dependencies to use CloudWatch") from exc
-    client: Any = boto3.client("logs", region_name=os.getenv("AWS_REGION", "eu-central-1"))
+    client: Any = boto3.client("logs", region_name=profile.aws_region)
     return CloudWatchTraceSink(client=client, log_group=group, log_stream=stream)

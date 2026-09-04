@@ -1,5 +1,15 @@
 # Ripple Changelog
 
+## v1.5 — AWS runtime cutover hardening
+
+- added a fail-closed structural AWS runtime profile for the Railway → AWS cutover;
+- production rejects partial DynamoDB / Bedrock / CloudWatch activation;
+- `RIPPLE_REQUIRE_AWS_RUNTIME=true` locks the canonical deployment to the complete structural AWS profile after live provisioning;
+- canonical runtime validation now occurs before state-backend construction;
+- fixed Bedrock change identity: the same canonical transition is replay-stable, while genuinely different normalized changes receive different downstream idempotency identities;
+- deployment map documents the controlled cutover contract;
+- validation baseline after the hardening: 76/76 tests, 12/12 MCP protocol tests, 7/7 adversarial evidence scenarios, `cfn-lint` PASS, generated-evidence drift 0.
+
 ## v1.3 — pre-AWS win hardening
 
 - planner ranks repairs by maximum net cash preserved (`avoidable_loss - added_cost`), then lower cost, reversibility, deterministic operation name;

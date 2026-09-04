@@ -1,3 +1,4 @@
+from ripple.aws.profile import validate_runtime_profile
 from ripple.domain.models import PlanNode, NodeKind, DependencyEdge, ChangeEvent, Approval
 from ripple.tools.simulated import ToolRegistry
 from ripple.engine.dependency import DependencyEngine
@@ -6,6 +7,10 @@ from ripple.orchestration.executor import Executor
 
 
 def build_golden():
+    # Validate deployment composition before constructing a state backend. In
+    # production this prevents a partially-enabled AWS profile from creating an
+    # executor/client before the runtime can fail closed.
+    validate_runtime_profile()
     nodes = {
         "flight:return": PlanNode("flight:return", NodeKind.FACT, "Return flight"),
         "ride:R1": PlanNode("ride:R1", NodeKind.RIDE, "Airport pickup", start_at="2026-09-10T21:30:00", financial_exposure=38, attributes={"new_start_at":"2026-09-11T18:45:00","added_cost":0,"urgency":80}),
