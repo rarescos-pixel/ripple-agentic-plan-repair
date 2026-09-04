@@ -1,5 +1,14 @@
 # Ripple Changelog
 
+## v1.5 — Alexa-first decision surface hardening
+
+- Repair Card now exposes a compact money summary in the judge-facing order: risk → repair cost → net value preserved;
+- top consequences use human commitment labels instead of internal ids;
+- visual, voice and accessibility surfaces terminate on the same exact economic approval boundary;
+- the web demo now renders the canonical Repair Card and moves actions, idempotency details and snapshot hashes into secondary technical evidence;
+- Event Operations now proves the same Alexa decision surface outside travel: $5,800 at risk → $620 repair → $5,180 net preserved → `Approve $620 repair`;
+- these changes are additive to `ripple.repair-card.v1` and do not alter the deterministic policy, approval snapshot or execution boundary.
+
 ## v1.5 — AWS runtime cutover hardening
 
 - added a fail-closed structural AWS runtime profile for the Railway → AWS cutover;
