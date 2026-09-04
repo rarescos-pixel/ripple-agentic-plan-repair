@@ -63,24 +63,26 @@ export AWS_REGION
 
 bash scripts/aws_deploy.sh
 
-OUTPUTS_JSON="$(aws cloudformation describe-stacks \
+OUTPUTS_FILE="$WORKDIR/stack-outputs.json"
+aws cloudformation describe-stacks \
   --region "$AWS_REGION" \
   --stack-name "$STACK_NAME" \
   --query 'Stacks[0].Outputs' \
-  --output json)"
+  --output json > "$OUTPUTS_FILE"
 
 output_value() {
   local key="$1"
-  python3 - "$key" <<'PY' <<<"$OUTPUTS_JSON"
+  python3 -c '
 import json, sys
-key = sys.argv[1]
-items = json.load(sys.stdin)
+key, path = sys.argv[1], sys.argv[2]
+with open(path, "r", encoding="utf-8") as f:
+    items = json.load(f)
 for item in items:
     if item.get("OutputKey") == key:
         print(item.get("OutputValue", ""))
         raise SystemExit(0)
 raise SystemExit(f"Missing CloudFormation output: {key}")
-PY
+' "$key" "$OUTPUTS_FILE"
 }
 
 TABLE="$(output_value StateTableName)"
