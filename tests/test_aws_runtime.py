@@ -2,6 +2,7 @@ import pytest
 
 from ripple.aws.profile import current_runtime_profile, validate_runtime_profile
 from ripple.aws.runtime import NoopTraceSink, build_change_interpreter, build_trace_sink
+from ripple.golden import build_golden
 from ripple.orchestration.agent import GoldenChangeInterpreter
 
 
@@ -77,6 +78,15 @@ def test_production_forbids_partial_aws_runtime(monkeypatch, name, value):
     monkeypatch.setenv(name, value)
     with pytest.raises(RuntimeError, match="Partial AWS runtime"):
         validate_runtime_profile()
+
+
+def test_canonical_builder_rejects_partial_aws_before_backend_construction(monkeypatch):
+    _clear_aws_runtime(monkeypatch)
+    monkeypatch.setenv("RIPPLE_ENV", "production")
+    monkeypatch.setenv("RIPPLE_STATE_BACKEND", "dynamodb")
+    monkeypatch.setenv("RIPPLE_DYNAMODB_TABLE", "must-not-be-opened")
+    with pytest.raises(RuntimeError, match="Partial AWS runtime"):
+        build_golden()
 
 
 def test_explicit_aws_runtime_lock_requires_all_three_components(monkeypatch):
