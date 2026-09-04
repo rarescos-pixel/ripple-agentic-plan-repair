@@ -31,6 +31,7 @@ def reset():
     os.environ["RIPPLE_USER_CLIENT_ID"] = "user-client"
     os.environ["RIPPLE_USER_REDIRECT_URIS"] = "https://client.example/callback"
     os.environ["RIPPLE_DEMO_USER_PASSWORD"] = "ripple-demo-password-test"
+    os.environ["RIPPLE_STATE_BACKEND"] = "memory"
 
 
 async def client():
@@ -86,8 +87,7 @@ def h(token: str, sid: str) -> dict[str, str]:
 
 
 async def rpc(c: httpx.AsyncClient, headers: dict[str, str], req_id: int, method: str, params=None):
-    r = await c.post("/mcp", headers=headers, json={"jsonrpc": "2.0", "id": req_id, "method": method, "params": params or {}})
-    return r
+    return await c.post("/mcp", headers=headers, json={"jsonrpc": "2.0", "id": req_id, "method": method, "params": params or {}})
 
 
 def test_discovery_documents_match_alexa_oauth_requirements():
@@ -181,9 +181,15 @@ def test_user_token_full_mcp_flow_is_two_phase_and_replay_safe():
             preview = await rpc(c, headers, 4, "tools/call", {"name":"preview_repair_plan","arguments":{}})
             p = preview.json()["result"]["structuredContent"]
             assert p["writes_before_approval"] == 0
+            card = p["repair_card"]
+            assert card["display_hint"] == "inline"
+            assert [m["value"] for m in card["metrics"]] == ["$116", "$42", "$74"]
+            assert card["decision"]["label"] == "Approve $42 repair"
             approval = dict(p["approval_snapshot"], user_confirmed=True)
             approved = await rpc(c, headers, 5, "tools/call", {"name":"approve_repair_plan","arguments":approval})
-            assert approved.json()["result"]["structuredContent"]["writes"] == 0
+            approved_body = approved.json()["result"]["structuredContent"]
+            assert approved_body["writes"] == 0
+            assert approved_body["approval_persisted"] is True
             executed = await rpc(c, headers, 6, "tools/call", {"name":"execute_repair_plan","arguments":{}})
             e = executed.json()["result"]["structuredContent"]
             assert e["receipt_count"] == 5 and e["unique_external_writes"] == 5
@@ -256,4 +262,5 @@ def test_health_endpoint_is_public_and_reports_protocol():
             r = await c.get("/healthz")
             assert r.status_code == 200
             assert r.json()["protocol"] == "2025-11-25"
+            assert r.json()["version"] == "1.4.0"
     run(case())
