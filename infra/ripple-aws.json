@@ -1,0 +1,154 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Ripple v1.5 AWS augmentation: durable state, Bedrock cost attribution, traces, least-privilege runtime policy, and tagged budget alerts.",
+  "Parameters": {
+    "EnvironmentName": {"Type": "String", "Default": "demo", "AllowedPattern": "[a-zA-Z0-9-]+"},
+    "BudgetEmail": {"Type": "String", "Description": "Email address for AWS Budget alerts."},
+    "MonthlyBudgetUSD": {"Type": "Number", "Default": 10, "MinValue": 1},
+    "BedrockGeoProfileId": {"Type": "String", "Default": "eu.amazon.nova-2-lite-v1:0"},
+    "ProjectTagValue": {"Type": "String", "Default": "Ripple"}
+  },
+  "Resources": {
+    "StateTable": {
+      "Type": "AWS::DynamoDB::Table",
+      "Properties": {
+        "TableName": {"Fn::Sub": "ripple-${EnvironmentName}-state"},
+        "BillingMode": "PAY_PER_REQUEST",
+        "AttributeDefinitions": [
+          {"AttributeName": "pk", "AttributeType": "S"},
+          {"AttributeName": "sk", "AttributeType": "S"}
+        ],
+        "KeySchema": [
+          {"AttributeName": "pk", "KeyType": "HASH"},
+          {"AttributeName": "sk", "KeyType": "RANGE"}
+        ],
+        "SSESpecification": {"SSEEnabled": true},
+        "PointInTimeRecoverySpecification": {"PointInTimeRecoveryEnabled": true, "RecoveryPeriodInDays": 7},
+        "Tags": [
+          {"Key": "Project", "Value": {"Ref": "ProjectTagValue"}},
+          {"Key": "Environment", "Value": {"Ref": "EnvironmentName"}}
+        ]
+      }
+    },
+    "TraceLogGroup": {
+      "Type": "AWS::Logs::LogGroup",
+      "Properties": {
+        "LogGroupName": {"Fn::Sub": "/ripple/${EnvironmentName}/runtime"},
+        "RetentionInDays": 14,
+        "Tags": [
+          {"Key": "Project", "Value": {"Ref": "ProjectTagValue"}},
+          {"Key": "Environment", "Value": {"Ref": "EnvironmentName"}}
+        ]
+      }
+    },
+    "TraceLogStream": {
+      "Type": "AWS::Logs::LogStream",
+      "Properties": {
+        "LogGroupName": {"Ref": "TraceLogGroup"},
+        "LogStreamName": "runtime"
+      }
+    },
+    "RippleInferenceProfile": {
+      "Type": "AWS::Bedrock::ApplicationInferenceProfile",
+      "Properties": {
+        "InferenceProfileName": {"Fn::Sub": "ripple-${EnvironmentName}-normalizer"},
+        "Description": "Ripple change-normalization Bedrock profile for cost attribution",
+        "ModelSource": {
+          "CopyFrom": {"Fn::Sub": "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/${BedrockGeoProfileId}"}
+        },
+        "Tags": [
+          {"Key": "Project", "Value": {"Ref": "ProjectTagValue"}},
+          {"Key": "Environment", "Value": {"Ref": "EnvironmentName"}}
+        ]
+      }
+    },
+    "RuntimePolicy": {
+      "Type": "AWS::IAM::ManagedPolicy",
+      "Properties": {
+        "Description": "Least-privilege policy for the externally hosted Ripple MCP runtime.",
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "RippleState",
+              "Effect": "Allow",
+              "Action": ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:DescribeTable"],
+              "Resource": {"Fn::GetAtt": ["StateTable", "Arn"]}
+            },
+            {
+              "Sid": "RippleTrace",
+              "Effect": "Allow",
+              "Action": ["logs:PutLogEvents"],
+              "Resource": {"Fn::Sub": "${TraceLogGroup.Arn}:log-stream:runtime"}
+            },
+            {
+              "Sid": "RippleBedrockApplicationProfile",
+              "Effect": "Allow",
+              "Action": ["bedrock:InvokeModel"],
+              "Resource": {"Fn::GetAtt": ["RippleInferenceProfile", "InferenceProfileArn"]}
+            },
+            {
+              "Sid": "RippleBedrockUnderlyingModels",
+              "Effect": "Allow",
+              "Action": ["bedrock:InvokeModel"],
+              "Resource": {"Fn::Sub": "arn:${AWS::Partition}:bedrock:*::foundation-model/amazon.nova-*"},
+              "Condition": {
+                "StringEquals": {
+                  "bedrock:InferenceProfileArn": {"Fn::GetAtt": ["RippleInferenceProfile", "InferenceProfileArn"]}
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "RippleBudget": {
+      "Type": "AWS::Budgets::Budget",
+      "Properties": {
+        "Budget": {
+          "BudgetName": {"Fn::Sub": "ripple-${EnvironmentName}-monthly"},
+          "BudgetType": "COST",
+          "TimeUnit": "MONTHLY",
+          "BudgetLimit": {"Amount": {"Ref": "MonthlyBudgetUSD"}, "Unit": "USD"},
+          "CostFilters": {
+            "TagKeyValue": [{"Fn::Sub": "user:Project$${ProjectTagValue}"}]
+          },
+          "CostTypes": {
+            "IncludeCredit": true,
+            "IncludeDiscount": true,
+            "IncludeOtherSubscription": true,
+            "IncludeRecurring": true,
+            "IncludeRefund": true,
+            "IncludeSubscription": true,
+            "IncludeSupport": true,
+            "IncludeTax": true,
+            "IncludeUpfront": true,
+            "UseBlended": false
+          }
+        },
+        "NotificationsWithSubscribers": [
+          {
+            "Notification": {"ComparisonOperator": "GREATER_THAN", "NotificationType": "ACTUAL", "Threshold": 50, "ThresholdType": "PERCENTAGE"},
+            "Subscribers": [{"Address": {"Ref": "BudgetEmail"}, "SubscriptionType": "EMAIL"}]
+          },
+          {
+            "Notification": {"ComparisonOperator": "GREATER_THAN", "NotificationType": "ACTUAL", "Threshold": 80, "ThresholdType": "PERCENTAGE"},
+            "Subscribers": [{"Address": {"Ref": "BudgetEmail"}, "SubscriptionType": "EMAIL"}]
+          },
+          {
+            "Notification": {"ComparisonOperator": "GREATER_THAN", "NotificationType": "ACTUAL", "Threshold": 100, "ThresholdType": "PERCENTAGE"},
+            "Subscribers": [{"Address": {"Ref": "BudgetEmail"}, "SubscriptionType": "EMAIL"}]
+          }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "StateTableName": {"Value": {"Ref": "StateTable"}},
+    "TraceLogGroupName": {"Value": {"Ref": "TraceLogGroup"}},
+    "TraceLogStreamName": {"Value": "runtime"},
+    "RuntimePolicyArn": {"Value": {"Ref": "RuntimePolicy"}},
+    "BedrockApplicationInferenceProfileArn": {"Value": {"Fn::GetAtt": ["RippleInferenceProfile", "InferenceProfileArn"]}},
+    "BedrockApplicationInferenceProfileId": {"Value": {"Fn::GetAtt": ["RippleInferenceProfile", "InferenceProfileId"]}}
+  }
+}
