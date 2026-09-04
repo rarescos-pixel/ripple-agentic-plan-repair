@@ -1,0 +1,36 @@
+name: Validate Browserbase Function Package
+
+on:
+  push:
+    branches:
+      - poc/free-work-replacement
+    paths:
+      - browserbase_function/**
+      - .github/workflows/browserbase-function-validate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      BROWSERBASE_API_KEY: bb_validation_only_not_a_real_key
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: poc/free-work-replacement
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Install dependencies from lockfile
+        working-directory: browserbase_function
+        run: pnpm install --frozen-lockfile
+
+      - name: Dry-run persistent read-only package
+        working-directory: browserbase_function
+        run: pnpm bb publish persistent_runner.ts --dry-run
