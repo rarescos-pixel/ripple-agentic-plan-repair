@@ -105,7 +105,7 @@ def main() -> None:
         )
         change = first_change["change"]
         assert change["id"].startswith("change:bedrock:"), change
-        assert change["correlation_id"] == "bedrock", change
+        assert change["correlation_id"].startswith("bedrock:"), change
         assert first_preview["plan"]["impact_count"] == 5
         assert first_replay["deduplicated"] == 5
         close_session(client, service_access, first_sid)
@@ -117,6 +117,8 @@ def main() -> None:
             client, service_access, user_access, 200
         )
         assert second_change["change"]["id"] == change["id"]
+        assert second_change["change"]["correlation_id"].startswith("bedrock:")
+        assert second_change["change"]["correlation_id"] != change["correlation_id"]
         assert second_preview["approval_snapshot"]["snapshot_hash"] == first_preview["approval_snapshot"]["snapshot_hash"]
         assert second_execute["deduplicated"] == 5
         assert second_execute["unique_external_writes"] == 0
@@ -127,6 +129,7 @@ def main() -> None:
         print("fresh-session durable replay: 5/5 deduplicated, 0 provider writes")
         print("base:", BASE_URL)
         print("change id:", change["id"])
+        print("trace correlation:", change["correlation_id"])
         print("net preserved:", first_preview["plan"]["net_direct_cash_preserved"])
         print("first-cycle provider writes:", first_execute["unique_external_writes"])
 
