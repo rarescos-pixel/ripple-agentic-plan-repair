@@ -127,6 +127,12 @@ class DynamoDbStateStore:
     boto3 is imported lazily so local development and CI need no AWS SDK unless
     the DynamoDB backend is explicitly selected. A client can be injected for
     deterministic tests.
+
+    Receipt publication is atomic: once an `executed` receipt wins for an
+    idempotency key, no concurrent or later attempt may overwrite it. Provider
+    calls still carry the same idempotency key; true exactly-once effects also
+    require the provider to honor that key or expose an equivalent transaction
+    primitive.
     """
 
     def __init__(self, table_name: str, *, client: Any = None, region_name: str | None = None) -> None:
@@ -153,6 +159,14 @@ class DynamoDbStateStore:
             "sk": {"S": "RECEIPT"},
         }
 
+    @staticmethod
+    def _is_conditional_failure(exc: Exception) -> bool:
+        response = getattr(exc, "response", None)
+        if not isinstance(response, dict):
+            return False
+        error = response.get("Error") or {}
+        return error.get("Code") == "ConditionalCheckFailedException"
+
     def save_approval(self, plan_id: str, approval: Approval) -> None:
         item = {
             **self._approval_key(plan_id, approval.plan_snapshot_hash),
@@ -173,16 +187,27 @@ class DynamoDbStateStore:
         return _approval_from(json.loads(item["payload"]["S"]))
 
     def save_receipt(self, plan_id: str, receipt: ExecutionReceipt) -> None:
-        current = self.get_receipt(receipt.idempotency_key)
-        if current is not None and current.status == "executed":
-            return
         item = {
             **self._receipt_key(receipt.idempotency_key),
             "entity_type": {"S": "receipt"},
             "plan_id": {"S": plan_id},
+            "receipt_status": {"S": receipt.status},
             "payload": {"S": json.dumps(asdict(receipt), sort_keys=True, separators=(",", ":"), default=str)},
         }
-        self.client.put_item(TableName=self.table_name, Item=item)
+        try:
+            self.client.put_item(
+                TableName=self.table_name,
+                Item=item,
+                ConditionExpression="attribute_not_exists(pk) OR #receipt_status <> :executed",
+                ExpressionAttributeNames={"#receipt_status": "receipt_status"},
+                ExpressionAttributeValues={":executed": {"S": "executed"}},
+            )
+        except Exception as exc:
+            if self._is_conditional_failure(exc):
+                # Another worker (or a prior attempt) already published the
+                # authoritative executed receipt. Preserve it exactly.
+                return
+            raise
 
     def get_receipt(self, idempotency_key: str) -> ExecutionReceipt | None:
         out = self.client.get_item(
