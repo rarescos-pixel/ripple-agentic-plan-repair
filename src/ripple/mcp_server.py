@@ -13,18 +13,19 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
+from ripple.aws.runtime import build_change_interpreter, build_trace_sink
 from ripple.domain.models import Approval
 from ripple.auth import (
     authenticate_request, authorization_server_metadata, authorize,
     protected_resource_metadata, token, load_auth_config,
 )
 from ripple.golden import build_golden
-from ripple.orchestration.agent import GoldenChangeInterpreter, RippleAgent
+from ripple.orchestration.agent import RippleAgent
 from ripple.orchestration.session import RippleSession
 from ripple.presentation import build_repair_card
 
 PROTOCOL_VERSION = "2025-11-25"
-SERVER_INFO = {"name": "ripple-plan-repair", "version": "1.4.0"}
+SERVER_INFO = {"name": "ripple-plan-repair", "version": "1.5.0"}
 DEFAULT_ALLOWED_ORIGINS = {"http://127.0.0.1", "http://localhost", "https://127.0.0.1", "https://localhost"}
 
 
@@ -61,7 +62,8 @@ class McpRippleSession:
         self.user_subject: str | None = None
         _, tools, planner, executor, _ = build_golden()
         self.tools = tools
-        self.agent = RippleAgent(GoldenChangeInterpreter(), planner)
+        self.trace = build_trace_sink()
+        self.agent = RippleAgent(build_change_interpreter(), planner)
         self.session = RippleSession(self.agent, executor)
         self.proposal = None
         self.approval: Approval | None = None
@@ -72,17 +74,33 @@ class McpRippleSession:
     def _context() -> Dict[str, Any]:
         return {"old_arrival_at": "2026-09-10T21:00:00"}
 
+    def _trace(self, event_type: str, payload: Dict[str, Any]) -> None:
+        correlation_id = (
+            self.proposal.change.correlation_id
+            if self.proposal is not None
+            else f"session:{int(self.created_at * 1000)}"
+        )
+        self.trace.emit(event_type, correlation_id=correlation_id, payload=payload)
+
     def record_change(self, utterance: str) -> Dict[str, Any]:
         self.proposal = self.session.propose(utterance, self._context())
         self.approval = None
         self.receipts = []
-        return {"change": asdict(self.proposal.change), "phase": "recorded", "writes": len(self.tools.execution_log)}
+        change = self.proposal.change
+        payload = {"change": asdict(change), "phase": "recorded", "writes": len(self.tools.execution_log)}
+        self._trace("change.recorded", {
+            "node_id": change.node_id,
+            "field": change.field,
+            "confidence": change.confidence,
+            "source": change.source,
+        })
+        return payload
 
     def preview(self) -> Dict[str, Any]:
         if self.proposal is None:
             raise ValueError("record_change must be called first")
         p = self.proposal.plan
-        return {
+        payload = {
             "phase": "proposal",
             "spoken_summary": self.proposal.spoken_summary,
             "repair_card": build_repair_card(p),
@@ -100,6 +118,18 @@ class McpRippleSession:
             },
             "writes_before_approval": len(self.tools.execution_log),
         }
+        self._trace("plan.previewed", {
+            "plan_id": p.id,
+            "plan_version": p.version,
+            "snapshot_hash_prefix": p.snapshot_hash()[:12],
+            "impacts": len(p.impacts),
+            "actions": len(p.actions),
+            "added_cost": p.total_added_cost,
+            "avoidable_loss": p.total_avoidable_loss,
+            "net_preserved": p.net_direct_cash_preserved,
+            "writes": len(self.tools.execution_log),
+        })
+        return payload
 
     def approve(self, a: Dict[str, Any]) -> Dict[str, Any]:
         if self.proposal is None:
@@ -113,6 +143,14 @@ class McpRippleSession:
         )
         self.session.record_approval(self.proposal, approval)
         self.approval = approval
+        self._trace("plan.approved", {
+            "plan_id": approval.plan_id,
+            "plan_version": approval.plan_version,
+            "snapshot_hash_prefix": approval.plan_snapshot_hash[:12],
+            "max_total_cost": approval.max_total_cost,
+            "external_people_notified": approval.external_people_notified,
+            "writes": len(self.tools.execution_log),
+        })
         return {
             "phase": "approved",
             "snapshot_hash": approval.plan_snapshot_hash,
@@ -125,13 +163,23 @@ class McpRippleSession:
             raise ValueError("An exact approved plan is required before execution")
         result = self.session.execute_with_approval(self.proposal, self.approval)
         self.receipts = result.receipts
-        return {
+        payload = {
             "phase": "executed", "plan_status": self.proposal.plan.status,
             "receipt_count": len(self.receipts),
             "deduplicated": sum(1 for r in self.receipts if r.status == "deduplicated"),
             "unique_external_writes": len(self.tools.execution_log),
             "receipts": [asdict(r) for r in self.receipts],
         }
+        self._trace("plan.executed", {
+            "plan_id": self.proposal.plan.id,
+            "plan_status": self.proposal.plan.status,
+            "receipt_count": len(self.receipts),
+            "executed": sum(1 for r in self.receipts if r.status == "executed"),
+            "deduplicated": sum(1 for r in self.receipts if r.status == "deduplicated"),
+            "failed": sum(1 for r in self.receipts if r.status == "failed"),
+            "unique_external_writes": len(self.tools.execution_log),
+        })
+        return payload
 
     def status(self) -> Dict[str, Any]:
         return {
