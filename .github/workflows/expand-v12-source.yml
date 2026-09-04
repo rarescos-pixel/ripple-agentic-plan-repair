@@ -1,0 +1,30 @@
+name: Expand Ripple v1.2 source
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.sync-trigger'
+
+permissions:
+  contents: write
+
+jobs:
+  expand:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify and expand source archive
+        run: |
+          echo '73309d912c3e0a6b68f943f416b4651b99db21460fed22ca4c9d3ef97ebcdbe4  source/ripple-v1.2-source-sync.tgz' | sha256sum -c -
+          tar -xzf source/ripple-v1.2-source-sync.tgz -C .
+      - name: Remove one-shot transport artifacts
+        run: |
+          rm -f source/ripple-v1.2-source-sync.tgz .sync-trigger .github/workflows/expand-v12-source.yml
+      - name: Commit expanded v1.2 source
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Synchronize complete Ripple v1.2 source and judge packet'
+          git push
