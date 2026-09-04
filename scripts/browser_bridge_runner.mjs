@@ -60,7 +60,7 @@ try {
   });
 
   const expected = String(request.authenticatedUrlContains || '').trim();
-  const holdMs = Math.max(0, Math.min(Number(request.holdMs || 0), 20_000));
+  const holdMs = Math.max(0, Math.min(Number(request.holdMs || 0), 240_000));
   const deadline = Date.now() + holdMs;
   let authenticated = expected ? page.url().includes(expected) : true;
 
