@@ -9,6 +9,7 @@ from ripple.presentation.alexa_assets import load_carousel_png
 
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "addon-package" / "addon.json"
+DOCKERFILE = ROOT / "Dockerfile"
 REQUIRED_ICON_SIZES = {(64, 64), (72, 72), (88, 88), (126, 126), (180, 180), (241, 241)}
 PROD_MCP = "https://ripple-v12-production.up.railway.app/mcp"
 PROD_CAROUSEL = "https://ripple-v12-production.up.railway.app/assets/alexa/ripple-carousel-600x900.png"
@@ -40,6 +41,12 @@ def main() -> None:
     manifest = json.loads(MANIFEST.read_text())
     assert manifest["manifestVersion"] == "1.0"
     assert manifest.get("accountLinking", {}).get("enabled") is True
+
+    # The one-shot remote evidence runner is built from the same Dockerfile as
+    # production. Keep the manifest inside the image so package evidence is
+    # self-contained and cannot silently depend on host-side repository files.
+    dockerfile = DOCKERFILE.read_text(encoding="utf-8")
+    assert "COPY addon-package ./addon-package" in dockerfile
 
     listing = manifest["storeListing"]
     assert listing["distributionCountries"] == ["US"]
@@ -93,6 +100,7 @@ def main() -> None:
     print("name:", name)
     print("icons:", len(icons), "required sizes")
     print("carousel:", len(carousel), "600x900")
+    print("runtime image package: included")
     print("account linking: enabled")
     print("mcp:", endpoint["uri"])
 

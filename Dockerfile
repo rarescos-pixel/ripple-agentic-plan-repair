@@ -15,6 +15,7 @@ COPY src ./src
 COPY fixtures ./fixtures
 COPY docs ./docs
 COPY scripts ./scripts
+COPY addon-package ./addon-package
 
 RUN pip install --no-cache-dir -r requirements.txt
 
