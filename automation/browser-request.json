@@ -1,9 +1,17 @@
 {
   "version": 1,
-  "provider": "local",
-  "url": "https://hook.eu1.make.com/slzqmwp6l6tsrpako9bob2vqkjv2056o",
-  "timeoutMs": 32000,
+  "provider": "browserbase",
+  "url": "https://example.com",
+  "timeoutMs": 30000,
   "sensitive": true,
   "allowArtifacts": false,
-  "steps": []
+  "browserbase": {
+    "persist": true
+  },
+  "steps": [
+    {
+      "action": "assertTitle",
+      "contains": "Example Domain"
+    }
+  ]
 }
