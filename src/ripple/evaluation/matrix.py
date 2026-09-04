@@ -9,6 +9,7 @@ from ripple.engine.dependency import DependencyEngine
 from ripple.golden import build_golden
 from ripple.orchestration.executor import Executor, SimulatedInterruption
 from ripple.orchestration.planner import Planner
+from ripple.presentation import build_repair_card
 from ripple.tools.simulated import ToolRegistry
 
 
@@ -90,7 +91,7 @@ def hard_preference_evidence() -> ScenarioEvidence:
 
 
 def event_operations_evidence() -> ScenarioEvidence:
-    """A non-flight, money-heavy fixture proving the engine is not travel-hardcoded."""
+    """A non-flight, money-heavy fixture proving the engine and decision surface are not travel-hardcoded."""
     nodes = {
         "event:start": PlanNode("event:start", NodeKind.FACT, "Conference start time"),
         "delivery:av": PlanNode(
@@ -143,7 +144,9 @@ def event_operations_evidence() -> ScenarioEvidence:
     tools = ToolRegistry()
     change = ChangeEvent("change:event-delay-v1", "event:start", "start_at", "2026-10-10T12:00:00", "2026-10-10T18:00:00")
     plan = Planner(nodes, DependencyEngine(nodes, edges, tools)).build_plan(change)
+    card = build_repair_card(plan)
     selected = {a.target_id: a.operation for a in plan.actions}
+    top_labels = [impact["label"] for impact in card["top_impacts"]]
     passed = (
         len(plan.impacts) == 5 and len(plan.actions) == 5
         and plan.total_added_cost == 620
@@ -151,15 +154,20 @@ def event_operations_evidence() -> ScenarioEvidence:
         and plan.net_direct_cash_preserved == 5180
         and selected["delivery:av"] == "move_av_delivery"
         and plan.external_people_notified == 8
+        and card["money_summary"] == "$5,800 at risk → $620 repair → $5,180 net preserved"
+        and card["decision"]["label"] == "Approve $620 repair"
+        and top_labels == ["Catering service window", "AV equipment delivery", "Security staffing coverage"]
     )
     return ScenarioEvidence(
         "event_operations_cascade", passed,
-        "generic changed-time graph chooses the repair bundle that preserves the most net cash",
+        "generic changed-time graph and Alexa decision surface preserve the most net cash outside travel",
         {
             "impacts": len(plan.impacts), "actions": len(plan.actions),
             "added_cost": plan.total_added_cost, "avoidable_loss": plan.total_avoidable_loss,
             "net_preserved": plan.net_direct_cash_preserved, "external_people": plan.external_people_notified,
             "av_choice": selected.get("delivery:av"),
+            "repair_card": card["money_summary"], "approval_cta": card["decision"]["label"],
+            "top_impacts": top_labels,
         },
     )
 

@@ -34,7 +34,7 @@
 - **PASS** `missed_deadline` — expired repair windows remain visible; no fabricated save
 - **PASS** `ambiguous_provider` — ambiguous provider state blocks the whole plan before writes
 - **PASS** `hard_preference` — explicit hard constraints filter options before cost optimization
-- **PASS** `event_operations_cascade` — generic changed-time graph chooses the repair bundle that preserves the most net cash
+- **PASS** `event_operations_cascade` — generic changed-time graph and Alexa decision surface preserve the most net cash outside travel
 - **PASS** `content_drift` — approval binds to exact content, not only a version integer
 - **PASS** `interruption_recovery` — resume after interruption produces zero duplicate external writes
 
