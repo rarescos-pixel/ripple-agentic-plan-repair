@@ -1,4 +1,4 @@
-# Ripple — Release Gate v1.4
+# Ripple — Release Gate v1.5
 
 **Overall: PASS**
 
@@ -37,4 +37,4 @@
 - **PASS** `content_drift` — approval binds to exact content, not only a version integer
 - **PASS** `interruption_recovery` — resume after interruption produces zero duplicate external writes
 
-This deterministic gate does not claim a live Alexa+ client, live AWS runtime, or real external-service integrations. Ripple v1.4 adds a structured money-first Repair Card and executable restart-durability contract while keeping the publicly verified MCP Streamable HTTP transport separate from the deterministic repair engine. The DynamoDB adapter exists, but live AWS persistence is not claimed until provisioned and exercised.
+This deterministic gate does not claim a live Alexa+ client, live AWS runtime, or real external-service integrations. Ripple v1.5 preserves the v1.4 money-first Repair Card and restart-durability contract while adding opt-in AWS runtime switches. AWS readiness is audited separately in AWS_READY_REPORT.md; live Bedrock, DynamoDB and CloudWatch use is not claimed until provisioned and exercised.
