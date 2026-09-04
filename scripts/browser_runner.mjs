@@ -11,6 +11,9 @@ await fs.mkdir(artifactDir, { recursive: true });
 
 const startedAt = new Date().toISOString();
 let browser;
+let context;
+let page;
+let providerState = { provider: 'local' };
 let result = {
   ok: false,
   requestPath,
@@ -42,6 +45,115 @@ function timeoutFor(step, request) {
   return Number.isFinite(raw) ? Math.max(1, Math.min(raw, 120_000)) : 30_000;
 }
 
+function nonEmpty(value) {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+async function browserbaseRequest(apiKey, pathname, options = {}) {
+  const response = await fetch(`https://api.browserbase.com${pathname}`, {
+    ...options,
+    headers: {
+      'content-type': 'application/json',
+      'x-bb-api-key': apiKey,
+      ...(options.headers || {}),
+    },
+  });
+
+  const text = await response.text();
+  let body = null;
+  if (text) {
+    try {
+      body = JSON.parse(text);
+    } catch {
+      body = { raw: text.slice(0, 500) };
+    }
+  }
+
+  if (!response.ok) {
+    throw new Error(`Browserbase API ${response.status} at ${pathname}`);
+  }
+  return body;
+}
+
+async function openBrowser(request) {
+  const provider = String(request.provider || 'local').toLowerCase();
+
+  if (provider === 'local') {
+    const localBrowser = await chromium.launch({ headless: true });
+    const localContext = await localBrowser.newContext({
+      viewport: { width: 1440, height: 1000 },
+      acceptDownloads: true,
+    });
+    const localPage = await localContext.newPage();
+    return {
+      browser: localBrowser,
+      context: localContext,
+      page: localPage,
+      providerState: { provider: 'local' },
+    };
+  }
+
+  if (provider !== 'browserbase') {
+    throw new Error(`Unsupported browser provider: ${provider}`);
+  }
+
+  const apiKeyEnv = request.browserbase?.apiKeyFromEnv || 'BROWSERBASE_API_KEY';
+  const apiKey = process.env[apiKeyEnv];
+  assert(nonEmpty(apiKey), `Browserbase API key is missing from environment variable ${apiKeyEnv}`);
+
+  let projectId = request.browserbase?.projectId || process.env.BROWSERBASE_PROJECT_ID || '';
+  let contextId = request.browserbase?.contextId || process.env.BROWSERBASE_CONTEXT_ID || '';
+
+  if (!contextId && request.browserbase?.createContext === true) {
+    const body = {};
+    if (projectId) body.projectId = projectId;
+    const createdContext = await browserbaseRequest(apiKey, '/v1/contexts', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+    contextId = createdContext?.id || '';
+    assert(nonEmpty(contextId), 'Browserbase did not return a context id');
+  }
+
+  assert(nonEmpty(contextId), 'Browserbase contextId is required for persistent authenticated mode');
+
+  const sessionBody = {
+    browserSettings: {
+      context: {
+        id: contextId,
+        persist: request.browserbase?.persist !== false,
+      },
+      viewport: { width: 1440, height: 1000 },
+    },
+  };
+  if (projectId) sessionBody.projectId = projectId;
+
+  const session = await browserbaseRequest(apiKey, '/v1/sessions', {
+    method: 'POST',
+    body: JSON.stringify(sessionBody),
+  });
+
+  assert(nonEmpty(session?.connectUrl), 'Browserbase did not return a connectUrl');
+  const remoteBrowser = await chromium.connectOverCDP(session.connectUrl);
+  const contexts = remoteBrowser.contexts();
+  assert(contexts.length > 0, 'Browserbase session has no browser context');
+  const remoteContext = contexts[0];
+  let remotePage = remoteContext.pages()[0];
+  if (!remotePage) remotePage = await remoteContext.newPage();
+
+  return {
+    browser: remoteBrowser,
+    context: remoteContext,
+    page: remotePage,
+    providerState: {
+      provider: 'browserbase',
+      sessionId: session.id || null,
+      contextId,
+      contextPersist: request.browserbase?.persist !== false,
+    },
+  };
+}
+
 try {
   const raw = await fs.readFile(requestPath, 'utf8');
   const request = JSON.parse(raw);
@@ -55,12 +167,10 @@ try {
   const steps = Array.isArray(request.steps) ? request.steps : [];
   assert(steps.length <= maxSteps, `Too many steps: ${steps.length}; maximum is ${maxSteps}`);
 
-  browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({
-    viewport: { width: 1440, height: 1000 },
-    acceptDownloads: true,
-  });
-  const page = await context.newPage();
+  const sensitive = request.sensitive === true;
+  const allowArtifacts = request.allowArtifacts === true && !sensitive;
+
+  ({ browser, context, page, providerState } = await openBrowser(request));
 
   const navigationResponse = await page.goto(request.url, {
     waitUntil: request.waitUntil || 'domcontentloaded',
@@ -69,7 +179,9 @@ try {
 
   result = {
     ...result,
-    targetUrl: request.url,
+    ...providerState,
+    sensitive,
+    artifactsAllowed: allowArtifacts,
     initialHttpStatus: navigationResponse?.status() ?? null,
   };
 
@@ -138,7 +250,7 @@ try {
           const text = (await page.locator(step.selector).textContent({ timeout: timeoutFor(step, request) })) ?? '';
           if (step.equals !== undefined) assert(text.trim() === String(step.equals), `Text assertion failed at ${step.selector}`);
           if (step.contains !== undefined) assert(text.includes(String(step.contains)), `Text assertion failed at ${step.selector}`);
-          stepResult.observedText = text.trim().slice(0, 500);
+          if (!sensitive) stepResult.observedText = text.trim().slice(0, 500);
           break;
         }
 
@@ -146,7 +258,7 @@ try {
           const title = await page.title();
           if (step.equals !== undefined) assert(title === String(step.equals), 'Title assertion failed');
           if (step.contains !== undefined) assert(title.includes(String(step.contains)), 'Title assertion failed');
-          stepResult.observedTitle = title;
+          if (!sensitive) stepResult.observedTitle = title;
           break;
         }
 
@@ -154,11 +266,12 @@ try {
           const currentUrl = page.url();
           if (step.equals !== undefined) assert(currentUrl === String(step.equals), 'URL assertion failed');
           if (step.contains !== undefined) assert(currentUrl.includes(String(step.contains)), 'URL assertion failed');
-          stepResult.observedUrl = currentUrl;
+          if (!sensitive) stepResult.observedUrl = currentUrl;
           break;
         }
 
         case 'screenshot': {
+          assert(allowArtifacts, `Step ${index + 1}: screenshots are disabled unless allowArtifacts=true and sensitive=false`);
           const name = safeArtifactName(step.name, `step-${index + 1}.png`);
           const screenshotPath = path.join(artifactDir, name);
           await page.screenshot({ path: screenshotPath, fullPage: step.fullPage !== false });
@@ -179,15 +292,17 @@ try {
     }
   }
 
-  const finalScreenshot = path.join(artifactDir, safeArtifactName(request.finalScreenshot, 'final.png'));
-  await page.screenshot({ path: finalScreenshot, fullPage: true });
+  let finalScreenshot = null;
+  if (allowArtifacts) {
+    finalScreenshot = path.join(artifactDir, safeArtifactName(request.finalScreenshot, 'final.png'));
+    await page.screenshot({ path: finalScreenshot, fullPage: true });
+  }
 
   result = {
     ...result,
     ok: true,
-    finalUrl: page.url(),
-    title: await page.title(),
-    finalScreenshot,
+    ...(sensitive ? {} : { finalUrl: page.url(), title: await page.title() }),
+    ...(finalScreenshot ? { finalScreenshot } : {}),
     finishedAt: new Date().toISOString(),
   };
 } catch (error) {
@@ -199,7 +314,10 @@ try {
   };
   process.exitCode = 1;
 } finally {
-  await browser?.close();
-  await fs.writeFile(resultPath, JSON.stringify(result, null, 2) + '\n', 'utf8');
-  console.log(JSON.stringify(result));
+  try {
+    await browser?.close();
+  } finally {
+    await fs.writeFile(resultPath, JSON.stringify(result, null, 2) + '\n', 'utf8');
+    console.log(JSON.stringify(result));
+  }
 }
