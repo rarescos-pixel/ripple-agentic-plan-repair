@@ -47,6 +47,8 @@ class DependencyEngine:
                 if not self._condition_met(edge, node, change):
                     continue
                 options = self.tools.repair_options(node)
+                # Facts may be intermediate dependency nodes. Actionable nodes
+                # remain visible as impacts even when no safe repair exists.
                 if options or node.kind != NodeKind.FACT:
                     impacts.append(Impact(
                         affected_node_id=node.id,
