@@ -1,3 +1,4 @@
 browser automation upload fixture
 persistence verification trigger
 post-login persistence verification
+controlled aws login handoff
