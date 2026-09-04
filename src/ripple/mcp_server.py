@@ -21,9 +21,10 @@ from ripple.auth import (
 from ripple.golden import build_golden
 from ripple.orchestration.agent import GoldenChangeInterpreter, RippleAgent
 from ripple.orchestration.session import RippleSession
+from ripple.presentation import build_repair_card
 
 PROTOCOL_VERSION = "2025-11-25"
-SERVER_INFO = {"name": "ripple-plan-repair", "version": "1.2.0"}
+SERVER_INFO = {"name": "ripple-plan-repair", "version": "1.4.0"}
 DEFAULT_ALLOWED_ORIGINS = {"http://127.0.0.1", "http://localhost", "https://127.0.0.1", "https://localhost"}
 
 
@@ -44,11 +45,11 @@ def _tool(name: str, description: str, properties: Dict[str, Any], required: lis
 TOOLS = [
     _tool("record_change", "Record one user-reported flight-arrival change. This tool does not execute repairs.",
           {"utterance": {"type": "string", "description": "Example: Our flight home was cancelled. We'll land tomorrow at 18:00."}}, ["utterance"]),
-    _tool("preview_repair_plan", "Return the downstream repair plan and the exact approval snapshot. No external writes occur.", {}, [], read_only=True),
-    _tool("approve_repair_plan", "Record explicit user approval of the exact snapshot previously shown by the client. The client must only call this after human confirmation.",
+    _tool("preview_repair_plan", "Return the downstream repair plan, money-first Repair Card, and exact approval snapshot. No external writes occur.", {}, [], read_only=True),
+    _tool("approve_repair_plan", "Persist explicit user approval of the exact snapshot previously shown by the client. The client must only call this after human confirmation.",
           {"plan_id": {"type": "string"}, "plan_version": {"type": "integer"}, "snapshot_hash": {"type": "string"}, "max_total_cost": {"type": "number"}, "external_people_notified": {"type": "integer"}, "user_confirmed": {"type": "boolean", "const": True}},
           ["plan_id", "plan_version", "snapshot_hash", "max_total_cost", "external_people_notified", "user_confirmed"]),
-    _tool("execute_repair_plan", "Execute only a previously approved exact plan snapshot. Replay is idempotent.", {}, [], destructive=True),
+    _tool("execute_repair_plan", "Execute only a previously approved exact plan snapshot. Replay is idempotent and consults persisted authoritative receipts when a durable state backend is configured.", {}, [], destructive=True),
     _tool("get_repair_status", "Return current phase, receipts, unique external writes, and unresolved items.", {}, [], read_only=True),
 ]
 
@@ -84,6 +85,7 @@ class McpRippleSession:
         return {
             "phase": "proposal",
             "spoken_summary": self.proposal.spoken_summary,
+            "repair_card": build_repair_card(p),
             "plan": {
                 "id": p.id, "version": p.version, "snapshot_hash": p.snapshot_hash(),
                 "impact_count": len(p.impacts), "action_count": len(p.actions),
@@ -109,10 +111,14 @@ class McpRippleSession:
             max_total_cost=float(a["max_total_cost"]), external_people_notified=int(a["external_people_notified"]),
             plan_snapshot_hash=str(a["snapshot_hash"]), actor="user",
         )
-        from ripple.policy.approval import ApprovalPolicy
-        ApprovalPolicy.validate(self.proposal.plan, approval)
+        self.session.record_approval(self.proposal, approval)
         self.approval = approval
-        return {"phase": "approved", "snapshot_hash": approval.plan_snapshot_hash, "writes": len(self.tools.execution_log)}
+        return {
+            "phase": "approved",
+            "snapshot_hash": approval.plan_snapshot_hash,
+            "approval_persisted": True,
+            "writes": len(self.tools.execution_log),
+        }
 
     def execute(self) -> Dict[str, Any]:
         if self.proposal is None or self.approval is None:
@@ -239,7 +245,7 @@ async def mcp_post(request: Request) -> Response:
             "protocolVersion": negotiated,
             "capabilities": {"tools": {"listChanged": False}},
             "serverInfo": SERVER_INFO,
-            "instructions": "Ripple repairs downstream commitments. Show preview_repair_plan to the user before calling approve_repair_plan; execute only after explicit human confirmation.",
+            "instructions": "Ripple repairs downstream commitments. Show preview_repair_plan and its Repair Card to the user before calling approve_repair_plan; execute only after explicit human confirmation.",
         }
         response = JSONResponse(_rpc_result(req_id, result))
         response.headers["MCP-Session-Id"] = sid
