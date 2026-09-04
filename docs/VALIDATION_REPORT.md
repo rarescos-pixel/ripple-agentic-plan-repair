@@ -11,6 +11,7 @@
 | `zero_writes_before_approval` | PASS |
 | `financial_summary` | PASS |
 | `repair_card_money_first` | PASS |
+| `repair_card_alexa_parity` | PASS |
 | `exact_approval_disclosure` | PASS |
 | `bounded_execution` | PASS |
 | `idempotent_replay` | PASS |
@@ -37,4 +38,4 @@
 - **PASS** `content_drift` — approval binds to exact content, not only a version integer
 - **PASS** `interruption_recovery` — resume after interruption produces zero duplicate external writes
 
-This deterministic gate does not claim a live Alexa+ client, live AWS runtime, or real external-service integrations. Ripple v1.5 preserves the v1.4 money-first Repair Card and restart-durability contract while adding opt-in AWS runtime switches. AWS readiness is audited separately in AWS_READY_REPORT.md; live Bedrock, DynamoDB and CloudWatch use is not claimed until provisioned and exercised.
+This deterministic gate does not claim a live Alexa+ client, live AWS runtime, or real external-service integrations. Ripple v1.5 preserves the money-first Repair Card, exact approval and restart-durability contracts while adding opt-in AWS runtime switches and Alexa-first decision-surface parity. AWS readiness is audited separately in AWS_READY_REPORT.md; live Bedrock, DynamoDB and CloudWatch use is not claimed until provisioned and exercised.
