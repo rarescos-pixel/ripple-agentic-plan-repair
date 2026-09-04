@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "provider": "browserbase",
+  "url": "https://example.com",
+  "timeoutMs": 30000,
+  "sensitive": true,
+  "allowArtifacts": false,
+  "browserbase": {
+    "apiKeyFromEnv": "BROWSERBASE_API_KEY",
+    "contextId": "<set-context-id-or-use-BROWSERBASE_CONTEXT_ID>",
+    "persist": true
+  },
+  "steps": [
+    {
+      "action": "assertTitle",
+      "contains": "Example"
+    }
+  ]
+}
