@@ -38,3 +38,5 @@ jobs:
           git add browserbase_function/pnpm-lock.yaml
           git commit -m "Generate Browserbase Function lockfile"
           git push origin HEAD:poc/free-work-replacement
+
+# Triggered only when package metadata or this generator changes.
