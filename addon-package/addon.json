@@ -1,0 +1,83 @@
+{
+  "manifestVersion": "1.0",
+  "accountLinking": {
+    "enabled": true
+  },
+  "storeListing": {
+    "distributionCountries": [
+      "US"
+    ],
+    "locales": {
+      "en-US": {
+        "default": "DEFAULT",
+        "name": {
+          "value": "Ripple"
+        },
+        "shortDescription": "Tell Alexa one changed plan. Ripple finds what breaks downstream, shows money at risk, and prepares a safe repair.",
+        "fullDescription": "Tell Alexa one thing that changed and Ripple finds what breaks downstream. It traces affected commitments, shows the amount directly at risk, compares bounded repair options by net value preserved, and asks for one exact approval before execution.\n\nTry:\n• “Tell Ripple our flight home was cancelled and we’ll land tomorrow at six.”\n• “Ask Ripple what this flight change will break.”\n• “Ask Ripple how much money is at risk.”\n• “Ask Ripple to show the repair plan before making any changes.”\n\nThe current hackathon development build demonstrates the complete safety flow over a real remote MCP server: change → consequence graph → economic exposure → exact approval → bounded execution → receipts → duplicate-free replay.\n\nThe current provider actions for ride, dining, grocery, pet care, and calendar are simulated. Ripple does not place real bookings or charges in this development build. The public service uses OAuth with PKCE S256 for user authorization and requires explicit approval of the exact plan snapshot before execution.",
+        "examplePhrases": [
+          "Tell Ripple our flight home was cancelled and we'll land tomorrow at six",
+          "Ask Ripple what this flight change will break",
+          "Ask Ripple how much money is at risk",
+          "Ask Ripple to show the repair plan before making any changes"
+        ],
+        "privacyAndCompliance": {
+          "privacyPolicyUrl": "https://github.com/rarescos-pixel/ripple-agentic-plan-repair/blob/main/docs/PRIVACY.md",
+          "termsOfUseUrl": "https://github.com/rarescos-pixel/ripple-agentic-plan-repair/blob/main/docs/TERMS.md"
+        },
+        "mediaAssets": {
+          "icons": {
+            "light": [
+              {
+                "size": "72x72",
+                "uri": "https://raw.githubusercontent.com/rarescos-pixel/ripple-agentic-plan-repair/main/assets/alexa/ripple-icon-72x72.png"
+              },
+              {
+                "size": "64x64",
+                "uri": "https://raw.githubusercontent.com/rarescos-pixel/ripple-agentic-plan-repair/main/assets/alexa/ripple-icon-64x64.png"
+              },
+              {
+                "size": "88x88",
+                "uri": "https://raw.githubusercontent.com/rarescos-pixel/ripple-agentic-plan-repair/main/assets/alexa/ripple-icon-88x88.png"
+              },
+              {
+                "size": "126x126",
+                "uri": "https://raw.githubusercontent.com/rarescos-pixel/ripple-agentic-plan-repair/main/assets/alexa/ripple-icon-126x126.png"
+              },
+              {
+                "size": "180x180",
+                "uri": "https://raw.githubusercontent.com/rarescos-pixel/ripple-agentic-plan-repair/main/assets/alexa/ripple-icon-180x180.png"
+              },
+              {
+                "size": "241x241",
+                "uri": "https://raw.githubusercontent.com/rarescos-pixel/ripple-agentic-plan-repair/main/assets/alexa/ripple-icon-241x241.png"
+              }
+            ],
+            "dark": []
+          },
+          "carouselImages": [
+            {
+              "uri": "https://ripple-v12-production.up.railway.app/assets/alexa/ripple-carousel-600x900.png",
+              "altText": "Ripple Repair Card showing five affected commitments, $116 at risk, $42 repair cost, $74 net preserved, and an exact approval prompt.",
+              "size": "600x900"
+            }
+          ],
+          "bannerImages": []
+        }
+      }
+    }
+  },
+  "integrations": [
+    {
+      "type": "MCP",
+      "config": {
+        "endpoints": {
+          "default": {
+            "type": "HTTPS",
+            "uri": "https://ripple-v12-production.up.railway.app/mcp"
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+from __future__ import annotations
+
+from starlette.responses import Response
+
+from ripple.mcp_server import app as mcp_app
+from ripple.presentation.alexa_assets import load_carousel_png
+
+CAROUSEL_PATH = "/assets/alexa/ripple-carousel-600x900.png"
+
+
+class RippleASGI:
+    async def __call__(self, scope, receive, send) -> None:
+        if (
+            scope.get("type") == "http"
+            and scope.get("path") == CAROUSEL_PATH
+            and scope.get("method") in {"GET", "HEAD"}
+        ):
+            body = load_carousel_png()
+            if scope.get("method") == "HEAD":
+                body = b""
+            response = Response(
+                content=body,
+                media_type="image/png",
+                headers={
+                    "Cache-Control": "public, max-age=86400, immutable",
+                    "X-Content-Type-Options": "nosniff",
+                },
+            )
+            await response(scope, receive, send)
+            return
+        await mcp_app(scope, receive, send)
+
+
+app = RippleASGI()
