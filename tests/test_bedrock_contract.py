@@ -31,9 +31,33 @@ def test_bedrock_tool_call_normalizes_only_changed_fact():
     assert event.node_id == "flight:return"
     assert event.old_value == "2026-09-10T21:00:00"  # authoritative context, not model
     assert event.new_value == "2026-09-11T18:00:00"
+    assert event.id.startswith("change:bedrock:")
     assert len(fake.calls) == 1
     assert fake.calls[0]["inferenceConfig"] == {"maxTokens": 256, "temperature": 0}
     assert fake.calls[0]["toolConfig"]["toolChoice"]["tool"]["name"] == "record_change"
+
+
+def test_bedrock_change_identity_is_stable_for_same_canonical_transition():
+    payload = {"node_id": "flight:return", "field": "arrival_at", "new_value": "2026-09-11T18:00:00", "confidence": 0.98}
+    first = BedrockChangeInterpreter(FakeBedrock(payload)).interpret("We land tomorrow at six", context())
+    second = BedrockChangeInterpreter(FakeBedrock(payload)).interpret("Arrival is 18:00 tomorrow", context())
+    assert first.id == second.id
+
+
+def test_bedrock_distinct_changes_get_distinct_idempotency_identity():
+    first_payload = {"node_id": "flight:return", "field": "arrival_at", "new_value": "2026-09-11T18:00:00", "confidence": 0.98}
+    second_payload = {"node_id": "flight:return", "field": "arrival_at", "new_value": "2026-09-11T23:55:00", "confidence": 0.98}
+    first = BedrockChangeInterpreter(FakeBedrock(first_payload)).interpret("We land tomorrow at six", context())
+    second = BedrockChangeInterpreter(FakeBedrock(second_payload)).interpret("We now land tomorrow at 23:55", context())
+    assert first.id != second.id
+
+
+def test_explicit_change_id_remains_authoritative():
+    payload = {"node_id": "flight:return", "field": "arrival_at", "new_value": "2026-09-11T18:00:00", "confidence": 0.98}
+    ctx = context()
+    ctx["change_id"] = "change:external-authoritative"
+    event = BedrockChangeInterpreter(FakeBedrock(payload)).interpret("We land tomorrow at six", ctx)
+    assert event.id == "change:external-authoritative"
 
 
 def test_bedrock_cannot_inject_unknown_node():
