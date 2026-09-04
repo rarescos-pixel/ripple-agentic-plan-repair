@@ -1,6 +1,6 @@
 [project]
 name = "ripple-agentic-plan-repair"
-version = "1.4.0"
+version = "1.5.0"
 description = "Money-aware consequence repair agent for Alexa+"
 requires-python = ">=3.11"
 dependencies = ["starlette>=0.45", "uvicorn>=0.30", "httpx>=0.27"]
