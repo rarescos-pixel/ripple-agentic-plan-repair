@@ -2,11 +2,11 @@
   "version": 1,
   "provider": "browserbase-bridge",
   "bridgeUrl": "https://hook.eu1.make.com/3skbft8lf1g8lcvsf5hu8rk33a2wjm13",
-  "url": "https://example.com",
-  "authenticatedUrlContains": "example.com",
-  "timeoutMs": 60000,
-  "holdMs": 0,
+  "url": "https://console.aws.amazon.com/cloudshell/home?region=eu-central-1",
+  "authenticatedUrlContains": "console.aws.amazon.com/cloudshell",
+  "timeoutMs": 120000,
+  "holdMs": 420000,
   "sensitive": true,
   "allowArtifacts": false,
-  "runTag": "broker-active-retry-20260904"
+  "runTag": "aws-login-human-handoff-20260904"
 }
