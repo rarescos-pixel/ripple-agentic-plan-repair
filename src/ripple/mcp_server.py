@@ -23,14 +23,28 @@ from ripple.golden import build_golden
 from ripple.orchestration.agent import RippleAgent
 from ripple.orchestration.session import RippleSession
 from ripple.presentation import build_repair_card
+from ripple.presentation.mcp_app import (
+    REPAIR_CARD_RESOURCE_URI,
+    repair_card_resource_contents,
+    repair_card_resource_descriptor,
+)
 
 PROTOCOL_VERSION = "2025-11-25"
 SERVER_INFO = {"name": "ripple-plan-repair", "version": "1.5.0"}
 DEFAULT_ALLOWED_ORIGINS = {"http://127.0.0.1", "http://localhost", "https://127.0.0.1", "https://localhost"}
 
 
-def _tool(name: str, description: str, properties: Dict[str, Any], required: list[str], *, read_only=False, destructive=False) -> Dict[str, Any]:
-    return {
+def _tool(
+    name: str,
+    description: str,
+    properties: Dict[str, Any],
+    required: list[str],
+    *,
+    read_only: bool = False,
+    destructive: bool = False,
+    ui_resource_uri: str | None = None,
+) -> Dict[str, Any]:
+    tool: Dict[str, Any] = {
         "name": name,
         "description": description,
         "inputSchema": {"type": "object", "properties": properties, "required": required, "additionalProperties": False},
@@ -41,18 +55,35 @@ def _tool(name: str, description: str, properties: Dict[str, Any], required: lis
             "openWorldHint": False,
         },
     }
+    if ui_resource_uri:
+        tool["_meta"] = {
+            "ui": {
+                "resourceUri": ui_resource_uri,
+                "visibility": ["model", "app"],
+            }
+        }
+    return tool
 
 
 TOOLS = [
     _tool("record_change", "Record one user-reported flight-arrival change. This tool does not execute repairs.",
           {"utterance": {"type": "string", "description": "Example: Our flight home was cancelled. We'll land tomorrow at 18:00."}}, ["utterance"]),
-    _tool("preview_repair_plan", "Return the downstream repair plan, money-first Repair Card, and exact approval snapshot. No external writes occur.", {}, [], read_only=True),
+    _tool(
+        "preview_repair_plan",
+        "Return the downstream repair plan, money-first Repair Card, and exact approval snapshot. No external writes occur.",
+        {},
+        [],
+        read_only=True,
+        ui_resource_uri=REPAIR_CARD_RESOURCE_URI,
+    ),
     _tool("approve_repair_plan", "Persist explicit user approval of the exact snapshot previously shown by the client. The client must only call this after human confirmation.",
           {"plan_id": {"type": "string"}, "plan_version": {"type": "integer"}, "snapshot_hash": {"type": "string"}, "max_total_cost": {"type": "number"}, "external_people_notified": {"type": "integer"}, "user_confirmed": {"type": "boolean", "const": True}},
           ["plan_id", "plan_version", "snapshot_hash", "max_total_cost", "external_people_notified", "user_confirmed"]),
     _tool("execute_repair_plan", "Execute only a previously approved exact plan snapshot. Replay is idempotent and consults persisted authoritative receipts when a durable state backend is configured.", {}, [], destructive=True),
     _tool("get_repair_status", "Return current phase, receipts, unique external writes, and unresolved items.", {}, [], read_only=True),
 ]
+
+APP_RESOURCES = [repair_card_resource_descriptor()]
 
 
 class McpRippleSession:
@@ -252,12 +283,15 @@ def _accepts_streamable(request: Request) -> bool:
     return "application/json" in accept and "text/event-stream" in accept
 
 
-def _tool_result(payload: Dict[str, Any], *, is_error: bool = False) -> Dict[str, Any]:
-    return {
+def _tool_result(payload: Dict[str, Any], *, is_error: bool = False, ui_resource_uri: str | None = None) -> Dict[str, Any]:
+    result: Dict[str, Any] = {
         "content": [{"type": "text", "text": json.dumps(payload, sort_keys=True, default=str)}],
         "structuredContent": payload,
         "isError": is_error,
     }
+    if ui_resource_uri:
+        result["_meta"] = {"ui": {"resourceUri": ui_resource_uri}}
+    return result
 
 
 async def mcp_post(request: Request) -> Response:
@@ -291,7 +325,10 @@ async def mcp_post(request: Request) -> Response:
         SESSIONS[sid] = sess
         result = {
             "protocolVersion": negotiated,
-            "capabilities": {"tools": {"listChanged": False}},
+            "capabilities": {
+                "tools": {"listChanged": False},
+                "resources": {"subscribe": False, "listChanged": False},
+            },
             "serverInfo": SERVER_INFO,
             "instructions": "Ripple repairs downstream commitments. Show preview_repair_plan and its Repair Card to the user before calling approve_repair_plan; execute only after explicit human confirmation.",
         }
@@ -335,6 +372,13 @@ async def mcp_post(request: Request) -> Response:
         return JSONResponse(_rpc_result(req_id, {}))
     if method == "tools/list":
         return JSONResponse(_rpc_result(req_id, {"tools": TOOLS}))
+    if method == "resources/list":
+        return JSONResponse(_rpc_result(req_id, {"resources": APP_RESOURCES}))
+    if method == "resources/read":
+        params = msg.get("params") or {}
+        if params.get("uri") != REPAIR_CARD_RESOURCE_URI:
+            return JSONResponse(_rpc_error(req_id, -32002, "Resource not found"))
+        return JSONResponse(_rpc_result(req_id, {"contents": [repair_card_resource_contents()]}))
     if method == "tools/call":
         params = msg.get("params") or {}
         name = params.get("name")
@@ -346,7 +390,13 @@ async def mcp_post(request: Request) -> Response:
             elif name == "execute_repair_plan": payload = sess.execute()
             elif name == "get_repair_status": payload = sess.status()
             else: return JSONResponse(_rpc_error(req_id, -32602, f"Unknown tool: {name}"))
-            return JSONResponse(_rpc_result(req_id, _tool_result(payload)))
+            return JSONResponse(_rpc_result(
+                req_id,
+                _tool_result(
+                    payload,
+                    ui_resource_uri=REPAIR_CARD_RESOURCE_URI if name == "preview_repair_plan" else None,
+                ),
+            ))
         except (KeyError, TypeError, ValueError) as exc:
             return JSONResponse(_rpc_result(req_id, _tool_result({"error": str(exc)}, is_error=True)))
     return JSONResponse(_rpc_error(req_id, -32601, "Method not found"))
