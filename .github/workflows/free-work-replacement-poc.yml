@@ -1,4 +1,4 @@
-name: Free Work Replacement Browser POC
+name: Free Work Replacement Browser Runner
 
 on:
   push:
@@ -6,25 +6,21 @@ on:
       - poc/free-work-replacement
     paths:
       - .github/workflows/free-work-replacement-poc.yml
-      - scripts/browser_poc.mjs
+      - scripts/browser_runner.mjs
+      - automation/browser-request.json
+      - fixtures/browser-automation/**
   workflow_dispatch:
-    inputs:
-      url:
-        description: URL to open with Playwright
-        required: true
-        default: https://example.com
-        type: string
 
 permissions:
   contents: read
 
 jobs:
-  browser-poc:
+  browser-runner:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      TARGET_URL: ${{ github.event.inputs.url || 'https://example.com' }}
-      ARTIFACT_DIR: artifacts/browser-poc
+      BROWSER_REQUEST_PATH: automation/browser-request.json
+      ARTIFACT_DIR: artifacts/browser-runner
 
     steps:
       - name: Checkout
@@ -40,14 +36,27 @@ jobs:
           npm install --no-save --no-package-lock playwright@1.55.0
           npx playwright install --with-deps chromium
 
-      - name: Run browser POC
-        run: node scripts/browser_poc.mjs
+      - name: Start local browser fixture server
+        run: |
+          python3 -m http.server 8765 --bind 127.0.0.1 > /tmp/browser-fixture.log 2>&1 &
+          echo $! > /tmp/browser-fixture.pid
+          for i in {1..20}; do
+            if curl --fail --silent http://127.0.0.1:8765/fixtures/browser-automation/form.html > /dev/null; then
+              exit 0
+            fi
+            sleep 0.25
+          done
+          cat /tmp/browser-fixture.log
+          exit 1
+
+      - name: Run browser request
+        run: node scripts/browser_runner.mjs
 
       - name: Show machine-readable result
         if: always()
         run: |
-          if [ -f artifacts/browser-poc/result.json ]; then
-            cat artifacts/browser-poc/result.json
+          if [ -f artifacts/browser-runner/result.json ]; then
+            cat artifacts/browser-runner/result.json
           else
             echo '{"ok":false,"error":"result.json was not produced"}'
           fi
@@ -56,7 +65,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: browser-poc-${{ github.run_id }}
-          path: artifacts/browser-poc
+          name: browser-runner-${{ github.run_id }}
+          path: artifacts/browser-runner
           if-no-files-found: error
           retention-days: 7
