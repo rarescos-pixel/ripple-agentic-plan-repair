@@ -1,0 +1,62 @@
+name: Free Work Replacement Browser POC
+
+on:
+  push:
+    branches:
+      - poc/free-work-replacement
+    paths:
+      - .github/workflows/free-work-replacement-poc.yml
+      - scripts/browser_poc.mjs
+  workflow_dispatch:
+    inputs:
+      url:
+        description: URL to open with Playwright
+        required: true
+        default: https://example.com
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  browser-poc:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TARGET_URL: ${{ github.event.inputs.url || 'https://example.com' }}
+      ARTIFACT_DIR: artifacts/browser-poc
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Playwright
+        run: |
+          npm install --no-save --no-package-lock playwright@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Run browser POC
+        run: node scripts/browser_poc.mjs
+
+      - name: Show machine-readable result
+        if: always()
+        run: |
+          if [ -f artifacts/browser-poc/result.json ]; then
+            cat artifacts/browser-poc/result.json
+          else
+            echo '{"ok":false,"error":"result.json was not produced"}'
+          fi
+
+      - name: Upload browser artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-poc-${{ github.run_id }}
+          path: artifacts/browser-poc
+          if-no-files-found: error
+          retention-days: 7
