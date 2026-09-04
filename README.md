@@ -1,5 +1,7 @@
 # Ripple
 
+[![Ripple quality gate](https://github.com/rarescos-pixel/ripple-agentic-plan-repair/actions/workflows/quality-gate.yml/badge.svg)](https://github.com/rarescos-pixel/ripple-agentic-plan-repair/actions/workflows/quality-gate.yml)
+
 **v1.2 — Alexa+ remote MCP milestone**
 
 **Tell Alexa one thing that changed. Ripple fixes what breaks downstream.**
