@@ -3,10 +3,10 @@
   "provider": "browserbase-bridge",
   "bridgeUrl": "https://hook.eu1.make.com/3skbft8lf1g8lcvsf5hu8rk33a2wjm13",
   "url": "https://console.aws.amazon.com/cloudshell/home?region=eu-central-1",
-  "authenticatedUrlContains": "console.aws.amazon.com/cloudshell",
   "timeoutMs": 120000,
-  "holdMs": 20000,
+  "holdMs": 0,
+  "keepSessionOpen": true,
   "sensitive": true,
   "allowArtifacts": false,
-  "runTag": "aws-persistence-verification-20260904-2030"
+  "runTag": "aws-login-handoff-20260904-2038"
 }
