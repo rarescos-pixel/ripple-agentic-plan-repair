@@ -1,0 +1,50 @@
+name: Browserbase Build Status Check
+
+on:
+  push:
+    branches:
+      - poc/free-work-replacement
+    paths:
+      - .github/workflows/browserbase-build-check.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      BROWSERBASE_API_KEY: ${{ secrets.BROWSERBASE_API_KEY }}
+      BUILD_ID: 9502412c-244a-42d9-ba31-b8e4ed62efff
+    steps:
+      - name: Verify secret availability
+        run: |
+          if [ -z "$BROWSERBASE_API_KEY" ]; then
+            echo "BROWSERBASE_API_KEY_UNAVAILABLE"
+            exit 2
+          fi
+          echo "BROWSERBASE_API_KEY_AVAILABLE"
+      - name: Check Browserbase build
+        run: |
+          curl --fail --silent --show-error \
+            -H "X-BB-API-Key: $BROWSERBASE_API_KEY" \
+            "https://api.browserbase.com/v1/functions/builds/$BUILD_ID" \
+            -o /tmp/build.json
+          node - <<'NODE'
+          const fs = require('fs');
+          const x = JSON.parse(fs.readFileSync('/tmp/build.json','utf8'));
+          const out = {
+            id: x.id,
+            status: x.status,
+            cause: x.cause ? { code: x.cause.code, message: x.cause.message } : null,
+            builtFunctions: Array.isArray(x.builtFunctions) ? x.builtFunctions.map(f => ({
+              id: f.id,
+              name: f.name,
+              versionId: f.createdVersion?.id ?? null
+            })) : []
+          };
+          console.log(JSON.stringify(out));
+          if (x.status !== 'COMPLETED') process.exit(3);
+          NODE
