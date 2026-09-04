@@ -245,7 +245,13 @@ async def token(request: Request) -> Response:
     form = {k: v[-1] for k, v in parse_qs(raw, keep_blank_values=True).items()}
     grant_type = str(form.get("grant_type", ""))
     resource = str(form.get("resource", ""))
-    if resource != c.resource:
+
+    # Alexa includes the RFC 8707 resource parameter for client credentials
+    # and authorization-code exchanges, but intentionally omits it on refresh.
+    if grant_type in {"client_credentials", "authorization_code"}:
+        if resource != c.resource:
+            return _oauth_error("invalid_target", "resource must match the canonical MCP URI")
+    elif grant_type == "refresh_token" and resource and resource != c.resource:
         return _oauth_error("invalid_target", "resource must match the canonical MCP URI")
 
     if grant_type == "client_credentials":
@@ -263,6 +269,8 @@ async def token(request: Request) -> Response:
         rec = AUTH_CODES.pop(code, None)
         if not rec or time.time() >= rec.expires_at:
             return _oauth_error("invalid_grant", "Authorization code is invalid or expired")
+        if rec.resource != c.resource:
+            return _oauth_error("invalid_grant", "Authorization code resource mismatch")
         if str(form.get("client_id", "")) != rec.client_id or str(form.get("redirect_uri", "")) != rec.redirect_uri:
             return _oauth_error("invalid_grant", "Client or redirect mismatch")
         verifier = str(form.get("code_verifier", ""))
@@ -280,6 +288,8 @@ async def token(request: Request) -> Response:
         rec = REFRESH_TOKENS.get(refresh_token)
         if not rec or not rec.active():
             return _oauth_error("invalid_grant", "Refresh token is invalid or expired")
+        if rec.resource != c.resource:
+            return _oauth_error("invalid_grant", "Refresh token resource mismatch")
         if str(form.get("client_id", "")) != rec.client_id:
             return _oauth_error("invalid_client", "Client mismatch", 401)
         access = _issue_access(c, rec.client_id, rec.scopes, subject=rec.subject)
