@@ -1,5 +1,5 @@
 import pytest
-from ripple.webapp import DemoController
+from ripple.webapp import DemoController, INDEX_HTML
 
 
 def test_web_demo_is_two_phase_and_replay_safe():
@@ -19,6 +19,34 @@ def test_web_demo_is_two_phase_and_replay_safe():
     replay = c.replay()
     assert replay["deduplicated"] == 5
     assert replay["external_write_count"] == 5
+
+
+def test_web_demo_primary_surface_uses_canonical_alexa_repair_card():
+    c = DemoController()
+    proposal = c.propose("Our flight home was cancelled. We'll land tomorrow at 18:00.")
+    card = proposal["repair_card"]
+    assert card["schema"] == "ripple.repair-card.v1"
+    assert card["headline"] == "5 commitments affected"
+    assert card["money_summary"] == "$116 at risk → $42 repair → $74 net preserved"
+    assert [m["value"] for m in card["metrics"]] == ["$116", "$42", "$74"]
+    assert [i["label"] for i in card["top_impacts"]] == [
+        "Dinner reservation",
+        "Pet care",
+        "Airport pickup",
+    ]
+    assert card["remaining_impacts"] == 2
+    assert card["decision"]["label"] == "Approve $42 repair"
+    assert card["voice_summary"].endswith("Approve the $42 repair?")
+
+
+def test_web_demo_html_renders_repair_card_as_primary_and_technical_evidence_secondary():
+    assert "j.repair_card" in INDEX_HTML
+    assert "c.money_summary" in INDEX_HTML
+    assert "c.top_impacts" in INDEX_HTML
+    assert "c.decision.label" in INDEX_HTML
+    assert "<details><summary>Technical evidence</summary>" in INDEX_HTML
+    assert "Approve this exact plan" not in INDEX_HTML
+    assert "Repair the cascade, not just the calendar" not in INDEX_HTML
 
 
 def test_web_demo_rejects_approve_without_proposal():
