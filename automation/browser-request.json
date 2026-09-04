@@ -1,24 +1,9 @@
 {
   "version": 1,
   "provider": "local",
-  "url": "https://example.com",
+  "url": "https://hook.eu1.make.com/slzqmwp6l6tsrpako9bob2vqkjv2056o",
   "timeoutMs": 30000,
-  "sensitive": false,
-  "allowArtifacts": true,
-  "steps": [
-    {
-      "action": "assertTitle",
-      "contains": "Example Domain"
-    },
-    {
-      "action": "assertText",
-      "selector": "h1",
-      "contains": "Example Domain"
-    },
-    {
-      "action": "screenshot",
-      "name": "example-domain.png"
-    }
-  ],
-  "finalScreenshot": "final.png"
+  "sensitive": true,
+  "allowArtifacts": false,
+  "steps": []
 }
