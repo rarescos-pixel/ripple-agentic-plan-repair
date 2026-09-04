@@ -1,7 +1,10 @@
 {
   "version": 1,
+  "provider": "local",
   "url": "https://example.com",
   "timeoutMs": 30000,
+  "sensitive": false,
+  "allowArtifacts": true,
   "steps": [
     {
       "action": "assertTitle",
