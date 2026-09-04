@@ -32,6 +32,8 @@ def test_bedrock_tool_call_normalizes_only_changed_fact():
     assert event.old_value == "2026-09-10T21:00:00"  # authoritative context, not model
     assert event.new_value == "2026-09-11T18:00:00"
     assert event.id.startswith("change:bedrock:")
+    assert event.correlation_id.startswith("bedrock:")
+    assert fake.calls[0]["requestMetadata"]["ripple_correlation_id"] == event.correlation_id
     assert len(fake.calls) == 1
     assert fake.calls[0]["inferenceConfig"] == {"maxTokens": 256, "temperature": 0}
     assert fake.calls[0]["toolConfig"]["toolChoice"]["tool"]["name"] == "record_change"
@@ -42,6 +44,26 @@ def test_bedrock_change_identity_is_stable_for_same_canonical_transition():
     first = BedrockChangeInterpreter(FakeBedrock(payload)).interpret("We land tomorrow at six", context())
     second = BedrockChangeInterpreter(FakeBedrock(payload)).interpret("Arrival is 18:00 tomorrow", context())
     assert first.id == second.id
+
+
+def test_bedrock_trace_identity_is_unique_without_changing_replay_identity():
+    payload = {"node_id": "flight:return", "field": "arrival_at", "new_value": "2026-09-11T18:00:00", "confidence": 0.98}
+    first = BedrockChangeInterpreter(FakeBedrock(payload)).interpret("We land tomorrow at six", context())
+    second = BedrockChangeInterpreter(FakeBedrock(payload)).interpret("Arrival is 18:00 tomorrow", context())
+    assert first.id == second.id
+    assert first.correlation_id != second.correlation_id
+    assert first.correlation_id.startswith("bedrock:")
+    assert second.correlation_id.startswith("bedrock:")
+
+
+def test_explicit_correlation_id_remains_authoritative():
+    payload = {"node_id": "flight:return", "field": "arrival_at", "new_value": "2026-09-11T18:00:00", "confidence": 0.98}
+    fake = FakeBedrock(payload)
+    ctx = context()
+    ctx["correlation_id"] = "judge-trace-123"
+    event = BedrockChangeInterpreter(fake).interpret("We land tomorrow at six", ctx)
+    assert event.correlation_id == "judge-trace-123"
+    assert fake.calls[0]["requestMetadata"]["ripple_correlation_id"] == "judge-trace-123"
 
 
 def test_bedrock_distinct_changes_get_distinct_idempotency_identity():
