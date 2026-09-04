@@ -8,7 +8,8 @@
 - declarative simulated repair options enable non-flight scenarios without hard-coding planner branches;
 - added event-operations economic fixture: $5,800 avoidable loss, $620 repair cost, $5,180 net preserved;
 - baseline: 48 tests, 7 executable evidence scenarios;
-- added cost model and pre-AWS win-hardening documents.
+- added cost model and pre-AWS win-hardening documents;
+- candidate validated locally before promotion to `main`.
 
 ## v1.2
 
