@@ -25,10 +25,10 @@ class DependencyEngine:
         new_value = self._dt(change.new_value if isinstance(change.new_value, str) else None)
         if new_value is None:
             return False
-        if edge.condition == "arrival_after_start":
+        if edge.condition in {"arrival_after_start", "changed_time_after_start"}:
             start = self._dt(node.start_at)
             return start is not None and new_value > start
-        if edge.condition == "arrival_after_end":
+        if edge.condition in {"arrival_after_end", "changed_time_after_end"}:
             end = self._dt(node.end_at)
             return end is not None and new_value > end
         raise ValueError(f"Unknown dependency condition: {edge.condition}")
@@ -42,10 +42,12 @@ class DependencyEngine:
             for edge in self.outgoing.get(current, []):
                 if edge.downstream_id in seen:
                     continue
-                seen.add(edge.downstream_id)
                 node = self.nodes[edge.downstream_id]
                 if not self._condition_met(edge, node, change):
                     continue
+                # Mark a node seen only after a dependency condition actually fires.
+                # Otherwise an earlier non-matching path can suppress a later valid path.
+                seen.add(edge.downstream_id)
                 options = self.tools.repair_options(node)
                 # Facts may be intermediate dependency nodes. Actionable nodes
                 # remain visible as impacts even when no safe repair exists.

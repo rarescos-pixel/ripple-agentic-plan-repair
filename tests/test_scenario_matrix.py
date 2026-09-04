@@ -67,7 +67,6 @@ def test_content_drift_after_approval_requires_reapproval_even_without_version_b
     _, tools, planner, executor, change = build_golden()
     plan = planner.build_plan(change)
     approval = Approval(plan.id, plan.version, 42, 3, plan.snapshot_hash())
-    # Mutate exact plan content after approval without changing version.
     plan.actions[0].params["new_start_at"] = "2026-09-11T19:30:00"
     with pytest.raises(ValueError, match="content drifted"):
         executor.execute(plan, approval)
@@ -83,9 +82,16 @@ def test_interrupted_execution_recovers_without_duplicate_writes():
     assert len(tools.execution_log) == 2
     assert len(executor.receipt_log) == 2
     assert plan.status == "interrupted"
-
     resumed = executor.execute(plan, approval)
     assert sum(r.status == "deduplicated" for r in resumed) == 2
     assert sum(r.status == "executed" for r in resumed) == 3
     assert len(tools.execution_log) == 5
     assert plan.status == "executed"
+
+
+def test_event_operations_fixture_preserves_serious_money_with_generic_engine():
+    from ripple.evaluation.matrix import event_operations_evidence
+    evidence = event_operations_evidence()
+    assert evidence.passed
+    assert evidence.observed["net_preserved"] == 5180
+    assert evidence.observed["av_choice"] == "move_av_delivery"

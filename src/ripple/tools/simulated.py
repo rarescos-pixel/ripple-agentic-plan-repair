@@ -32,6 +32,23 @@ class ToolRegistry:
 
     def repair_options(self, node: PlanNode) -> List[RepairOption]:
         a = node.attributes
+        # Optional declarative options make the dependency/repair engine usable
+        # beyond the golden travel fixture without adding a new hard-coded adapter
+        # for every business domain. Production adapters can replace these simulated
+        # tool names behind the same RepairOption contract.
+        if a.get("repair_options"):
+            return [
+                RepairOption(
+                    tool=str(raw["tool"]),
+                    operation=str(raw["operation"]),
+                    params=dict(raw.get("params", {})),
+                    added_cost=float(raw.get("added_cost", 0)),
+                    avoidable_loss=float(raw.get("avoidable_loss", node.financial_exposure)),
+                    reversible=bool(raw.get("reversible", True)),
+                    external_side_effect=bool(raw.get("external_side_effect", True)),
+                )
+                for raw in a["repair_options"]
+            ]
         if node.kind.value == "ride":
             return [RepairOption("ride", "reschedule_ride", {"new_start_at": a["new_start_at"]}, added_cost=a.get("added_cost", 0), avoidable_loss=node.financial_exposure)]
         if node.kind.value == "reservation":

@@ -8,4 +8,4 @@ def test_release_gate_is_green_and_quantified():
     assert evidence["golden"]["impacts"] == 5
     assert evidence["golden"]["writes_before_approval"] == 0
     assert evidence["golden"]["replay_deduplicated"] == 5
-    assert len(evidence["scenario_matrix"]) == 6
+    assert len(evidence["scenario_matrix"]) == 7

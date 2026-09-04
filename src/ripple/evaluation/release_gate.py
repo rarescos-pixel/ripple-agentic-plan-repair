@@ -53,7 +53,7 @@ def render_markdown(evidence: Dict[str, Any]) -> str:
     checks = evidence["checks"]
     golden = evidence["golden"]
     lines = [
-        "# Ripple — Release Gate v1.2",
+        "# Ripple — Release Gate v1.3",
         "",
         f"**Overall: {'PASS' if evidence['passed'] else 'FAIL'}**",
         "",
@@ -84,7 +84,7 @@ def render_markdown(evidence: Dict[str, Any]) -> str:
         lines.append(f"- **{'PASS' if row['passed'] else 'FAIL'}** `{row['scenario']}` — {row['invariant']}")
     lines += [
         "",
-        "This deterministic gate does not claim a live Alexa+ client, AWS runtime, or real external-service integrations. Ripple v1.2 separately exposes a real local MCP Streamable HTTP server validated by the MCP protocol-conformance suite.",
+        "This deterministic gate does not claim a live Alexa+ client, AWS runtime, or real external-service integrations. Ripple v1.3 keeps the publicly verified MCP Streamable HTTP transport separate from the deterministic repair engine; live AWS/provider integrations are not claimed by this gate.",
         "",
     ]
     return "\n".join(lines)

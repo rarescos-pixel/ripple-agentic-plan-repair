@@ -53,7 +53,7 @@ def test_web_demo_exposes_judge_relevant_dependency_and_approval_evidence():
 def test_web_demo_exposes_executable_adversarial_evidence():
     c = DemoController()
     evidence = c.evidence()
-    assert evidence["passed"] == evidence["total"] == 6
+    assert evidence["passed"] == evidence["total"] == 7
 
 
 def test_web_approval_rejects_server_side_drift_after_user_saw_snapshot():

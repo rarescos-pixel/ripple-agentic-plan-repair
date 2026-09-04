@@ -39,3 +39,47 @@ def test_two_step_dependency_path_is_preserved():
     impacts = DependencyEngine(nodes, edges, ToolRegistry()).detect_impacts(change)
     assert len(impacts) == 1
     assert impacts[0].dependency_path == ["flight:return", "home:presence", "delivery:G1"]
+
+
+def test_generic_changed_time_alias_drives_non_flight_dependency():
+    nodes = {
+        "event:start": PlanNode("event:start", NodeKind.FACT, "Event start"),
+        "delivery:gear": PlanNode(
+            "delivery:gear", NodeKind.DELIVERY, "Equipment delivery",
+            start_at="2026-10-10T14:00:00", financial_exposure=1200,
+            attributes={"new_start_at": "2026-10-10T19:00:00", "urgency": 90},
+        ),
+    }
+    edges = [DependencyEdge("event:start", "delivery:gear", "time_dependency", condition="changed_time_after_start")]
+    change = ChangeEvent("event-change", "event:start", "start_at", "2026-10-10T12:00:00", "2026-10-10T18:00:00")
+    impacts = DependencyEngine(nodes, edges, ToolRegistry()).detect_impacts(change)
+    assert len(impacts) == 1
+    assert impacts[0].affected_node_id == "delivery:gear"
+
+
+def test_non_matching_path_does_not_suppress_later_valid_path():
+    nodes = {
+        "root": PlanNode("root", NodeKind.FACT, "Root change"),
+        "early": PlanNode("early", NodeKind.FACT, "Early branch"),
+        "late": PlanNode("late", NodeKind.FACT, "Late branch"),
+        "delivery:x": PlanNode(
+            "delivery:x", NodeKind.DELIVERY, "Critical delivery",
+            start_at="2026-10-10T14:00:00", financial_exposure=500,
+            attributes={"new_start_at": "2026-10-10T20:00:00", "urgency": 80},
+        ),
+    }
+    edges = [
+        DependencyEdge("root", "early", "branch", condition="always"),
+        DependencyEdge("root", "late", "branch", condition="always"),
+        DependencyEdge("early", "delivery:x", "time_dependency", condition="changed_time_after_end"),
+        DependencyEdge("late", "delivery:x", "time_dependency", condition="changed_time_after_start"),
+    ]
+    nodes["delivery:x"] = PlanNode(
+        "delivery:x", NodeKind.DELIVERY, "Critical delivery",
+        start_at="2026-10-10T14:00:00", end_at="2026-10-10T22:00:00", financial_exposure=500,
+        attributes={"new_start_at": "2026-10-10T20:00:00", "urgency": 80},
+    )
+    change = ChangeEvent("c", "root", "start_at", "2026-10-10T10:00:00", "2026-10-10T18:00:00")
+    impacts = DependencyEngine(nodes, edges, ToolRegistry()).detect_impacts(change)
+    assert len(impacts) == 1
+    assert impacts[0].dependency_path == ["root", "late", "delivery:x"]

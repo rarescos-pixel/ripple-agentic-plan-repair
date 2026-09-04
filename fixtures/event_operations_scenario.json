@@ -1,0 +1,19 @@
+{
+  "scenario": "event_operations_cascade",
+  "change": {
+    "node": "event:start",
+    "field": "start_at",
+    "old_value": "2026-10-10T12:00:00",
+    "new_value": "2026-10-10T18:00:00"
+  },
+  "expected": {
+    "impacts": 5,
+    "actions": 5,
+    "added_cost": 620,
+    "avoidable_loss": 5800,
+    "net_direct_cash_preserved": 5180,
+    "external_people_notified": 8,
+    "selected_av_operation": "move_av_delivery"
+  },
+  "note": "Executable scenario lives in ripple.evaluation.matrix.event_operations_evidence; this fixture documents the judge-facing economic contract."
+}

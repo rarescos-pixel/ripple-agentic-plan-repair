@@ -89,6 +89,81 @@ def hard_preference_evidence() -> ScenarioEvidence:
     })
 
 
+def event_operations_evidence() -> ScenarioEvidence:
+    """A non-flight, money-heavy fixture proving the engine is not travel-hardcoded."""
+    nodes = {
+        "event:start": PlanNode("event:start", NodeKind.FACT, "Conference start time"),
+        "delivery:av": PlanNode(
+            "delivery:av", NodeKind.DELIVERY, "AV equipment delivery",
+            start_at="2026-10-10T14:00:00", financial_exposure=1200,
+            attributes={
+                "urgency": 95,
+                "repair_options": [
+                    {"tool": "delivery", "operation": "move_av_delivery", "params": {"new_start_at": "2026-10-10T19:00:00"}, "added_cost": 140, "avoidable_loss": 1200, "reversible": True},
+                    {"tool": "delivery", "operation": "abandon_av_slot", "params": {}, "added_cost": 0, "avoidable_loss": 100, "reversible": False},
+                ],
+            },
+        ),
+        "reservation:catering": PlanNode(
+            "reservation:catering", NodeKind.RESERVATION, "Catering service window",
+            start_at="2026-10-10T15:00:00", financial_exposure=2500,
+            attributes={"urgency": 100, "repair_options": [
+                {"tool": "reservation", "operation": "reschedule_catering", "params": {"new_start_at": "2026-10-10T19:30:00"}, "added_cost": 180, "avoidable_loss": 2500, "reversible": True}
+            ]},
+        ),
+        "ride:vip": PlanNode(
+            "ride:vip", NodeKind.RIDE, "VIP transport",
+            start_at="2026-10-10T16:00:00", financial_exposure=600,
+            attributes={"urgency": 85, "repair_options": [
+                {"tool": "ride", "operation": "move_vip_transport", "params": {"new_start_at": "2026-10-10T19:15:00"}, "added_cost": 80, "avoidable_loss": 600, "reversible": True}
+            ]},
+        ),
+        "care:security": PlanNode(
+            "care:security", NodeKind.CARE, "Security staffing coverage",
+            end_at="2026-10-10T17:00:00", financial_exposure=1500,
+            attributes={"urgency": 90, "repair_options": [
+                {"tool": "care", "operation": "extend_security_staffing", "params": {"new_end_at": "2026-10-10T23:00:00"}, "added_cost": 220, "avoidable_loss": 1500, "reversible": True}
+            ]},
+        ),
+        "calendar:sponsors": PlanNode(
+            "calendar:sponsors", NodeKind.CALENDAR, "Sponsor briefing",
+            start_at="2026-10-10T16:30:00", external_people=8,
+            attributes={"urgency": 70, "repair_options": [
+                {"tool": "calendar", "operation": "move_sponsor_briefing", "params": {"new_start_at": "2026-10-10T20:00:00", "notify_attendees": True}, "added_cost": 0, "avoidable_loss": 0, "reversible": True}
+            ]},
+        ),
+    }
+    edges = [
+        DependencyEdge("event:start", "delivery:av", "time_dependency", condition="changed_time_after_start"),
+        DependencyEdge("event:start", "reservation:catering", "time_dependency", condition="changed_time_after_start"),
+        DependencyEdge("event:start", "ride:vip", "time_dependency", condition="changed_time_after_start"),
+        DependencyEdge("event:start", "care:security", "coverage_dependency", condition="changed_time_after_end"),
+        DependencyEdge("event:start", "calendar:sponsors", "time_dependency", condition="changed_time_after_start"),
+    ]
+    tools = ToolRegistry()
+    change = ChangeEvent("change:event-delay-v1", "event:start", "start_at", "2026-10-10T12:00:00", "2026-10-10T18:00:00")
+    plan = Planner(nodes, DependencyEngine(nodes, edges, tools)).build_plan(change)
+    selected = {a.target_id: a.operation for a in plan.actions}
+    passed = (
+        len(plan.impacts) == 5 and len(plan.actions) == 5
+        and plan.total_added_cost == 620
+        and plan.total_avoidable_loss == 5800
+        and plan.net_direct_cash_preserved == 5180
+        and selected["delivery:av"] == "move_av_delivery"
+        and plan.external_people_notified == 8
+    )
+    return ScenarioEvidence(
+        "event_operations_cascade", passed,
+        "generic changed-time graph chooses the repair bundle that preserves the most net cash",
+        {
+            "impacts": len(plan.impacts), "actions": len(plan.actions),
+            "added_cost": plan.total_added_cost, "avoidable_loss": plan.total_avoidable_loss,
+            "net_preserved": plan.net_direct_cash_preserved, "external_people": plan.external_people_notified,
+            "av_choice": selected.get("delivery:av"),
+        },
+    )
+
+
 def content_drift_evidence() -> ScenarioEvidence:
     _, tools, planner, executor, change = build_golden()
     plan = planner.build_plan(change)
@@ -133,13 +208,13 @@ def interruption_recovery_evidence() -> ScenarioEvidence:
 def run_matrix() -> List[ScenarioEvidence]:
     return [
         golden_evidence(), missed_deadline_evidence(), ambiguous_provider_evidence(),
-        hard_preference_evidence(), content_drift_evidence(), interruption_recovery_evidence(),
+        hard_preference_evidence(), event_operations_evidence(), content_drift_evidence(), interruption_recovery_evidence(),
     ]
 
 
 def render_markdown(rows: List[ScenarioEvidence]) -> str:
     lines = [
-        "# Ripple — Local Evidence Matrix v1.0", "",
+        "# Ripple — Evidence Matrix v1.3", "",
         "This report is generated from executable scenarios. It is evidence, not marketing copy.", "",
         "| Scenario | Result | Invariant | Observed |", "|---|---|---|---|",
     ]

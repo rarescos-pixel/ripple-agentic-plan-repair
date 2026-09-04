@@ -24,7 +24,15 @@ class Planner:
             if not options:
                 unresolved.append(impact.affected_node_id)
                 continue
-            option = min(options, key=lambda o: (o.added_cost, -o.avoidable_loss, o.operation))
+            option = min(
+                options,
+                key=lambda o: (
+                    -(o.avoidable_loss - o.added_cost),  # maximize net cash preserved
+                    o.added_cost,                       # then minimize new spend
+                    not o.reversible,                   # prefer reversible actions
+                    o.operation,                        # deterministic final tie-break
+                ),
+            )
             key_material = f"{change.id}|{impact.affected_node_id}|{option.tool}|{option.operation}|{option.params}"
             idem = hashlib.sha256(key_material.encode()).hexdigest()[:24]
             actions.append(RepairAction(
