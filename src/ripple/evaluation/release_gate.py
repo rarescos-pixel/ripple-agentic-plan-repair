@@ -28,8 +28,16 @@ def collect_release_evidence() -> Dict[str, Any]:
         ),
         "repair_card_money_first": (
             card["display_hint"] == "inline"
+            and card["money_summary"] == "$116 at risk → $42 repair → $74 net preserved"
             and [m["value"] for m in card["metrics"]] == ["$116", "$42", "$74"]
             and card["decision"]["label"] == "Approve $42 repair"
+        ),
+        "repair_card_alexa_parity": (
+            [impact["label"] for impact in card["top_impacts"]]
+            == ["Dinner reservation", "Pet care", "Airport pickup"]
+            and card["decision"]["voice_prompt"] == "Approve the $42 repair?"
+            and card["voice_summary"].endswith("Approve the $42 repair?")
+            and card["accessibility_label"].endswith("Approve the $42 repair?")
         ),
         "exact_approval_disclosure": (
             proposal["approval_disclosure"]["snapshot_hash"] == proposal["plan"]["snapshot_hash"]
@@ -91,7 +99,7 @@ def render_markdown(evidence: Dict[str, Any]) -> str:
         lines.append(f"- **{'PASS' if row['passed'] else 'FAIL'}** `{row['scenario']}` — {row['invariant']}")
     lines += [
         "",
-        "This deterministic gate does not claim a live Alexa+ client, live AWS runtime, or real external-service integrations. Ripple v1.5 preserves the v1.4 money-first Repair Card and restart-durability contract while adding opt-in AWS runtime switches. AWS readiness is audited separately in AWS_READY_REPORT.md; live Bedrock, DynamoDB and CloudWatch use is not claimed until provisioned and exercised.",
+        "This deterministic gate does not claim a live Alexa+ client, live AWS runtime, or real external-service integrations. Ripple v1.5 preserves the money-first Repair Card, exact approval and restart-durability contracts while adding opt-in AWS runtime switches and Alexa-first decision-surface parity. AWS readiness is audited separately in AWS_READY_REPORT.md; live Bedrock, DynamoDB and CloudWatch use is not claimed until provisioned and exercised.",
         "",
     ]
     return "\n".join(lines)
