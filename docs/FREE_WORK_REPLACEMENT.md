@@ -20,7 +20,7 @@ This path is zero-cost, deterministic, and best for public or unauthenticated wo
 
 `ChatGPT -> private Make on-demand scenario -> Browserbase Functions API -> managed Browserbase session -> persistent Browserbase Context -> private Make result -> ChatGPT`
 
-The Browserbase API key is stored in Make's API-key credential store and is not committed to GitHub or pasted into chat. The persistent Context identifier is intentionally omitted from this public documentation.
+The Browserbase API key is stored in Make's API-key credential store and is not committed to GitHub or pasted into chat. The persistent Context state itself remains server-side in Browserbase. The Context identifier is operational metadata and may appear in the POC source; it is not sufficient to access the stored browser state without valid Browserbase authorization.
 
 ## GitHub command path
 
@@ -62,22 +62,30 @@ The second verification targeted the IAM console, proving the result was not mer
 
 `browserbase_function/persistent_runner.ts` is intentionally restricted to read-only browser operations while attached to the authenticated persistent Context. Its allowed operations are navigation, waits, assertions, targeted text reads, and targeted attribute reads. Generic authenticated click/fill/write capabilities are deliberately not enabled in this persistent runner.
 
-A build for this richer read-only function has been submitted to Browserbase. Completion still needs a final status verification before this function is marked canonical.
+The package is now independently validated with the official Browserbase Functions CLI dry-run path. GitHub Actions run `33908767299` completed successfully: checkout, frozen-lockfile install, and `bb publish persistent_runner.ts --dry-run` all passed. This proves the current package/entrypoint is structurally publishable with Browserbase Functions SDK `1.0.1`.
+
+A previously submitted remote Browserbase build for this richer runner has build id `9502412c-244a-42d9-ba31-b8e4ed62efff`. Its final remote status still needs to be read through an authenticated Browserbase API path before that remote deployment is marked canonical.
 
 ## Private Make command bus
 
 The free Make plan permits only two active scenarios in the private space, so the active slots are reserved for the runtime path rather than build tooling.
 
-Current runtime scenarios:
+Intended runtime scenarios:
 
 - `Browserbase Persistent Readonly Invoke - Private`
 - `Browserbase Invocation Status - Private`
 
 The invocation scenario accepts a target URL, an expected authenticated URL fragment, and a sensitive-mode flag. It invokes the persistent Browserbase Function without editing a scenario for every request. The status scenario accepts an invocation ID and returns the Browserbase invocation result.
 
-This pair has been verified end-to-end against the authenticated AWS IAM console: invoke -> Browserbase managed session -> persistent Context -> completed result -> status retrieval.
+This pair was previously verified end-to-end against the authenticated AWS IAM console: invoke -> Browserbase managed session -> persistent Context -> completed result -> status retrieval.
 
-The older generic API bridge and Browserbase Function publisher remain available but are inactive so they do not consume the two active-scenario slots. They can be temporarily activated when publishing or diagnosing infrastructure.
+The older generic API bridge and Browserbase Function publisher remain non-runtime tooling and should stay inactive except during publishing or diagnosis.
+
+### ChatGPT connector state
+
+The Make app was reinstalled/reconnected in ChatGPT on 2026-09-04. The app catalog reports it installed and enabled, but direct Make tool invocations in the same conversation currently fail at the ChatGPT tool-routing layer with `Resource not found` even after successful rediscovery of the Make tool schemas. Treat this as a connector/tool-routing blocker, not as evidence that the Make scenarios or Browserbase credential were deleted.
+
+Do not rebuild the Browserbase credential or re-enter the API key merely because of this ChatGPT routing failure.
 
 ## Browserbase free-plan constraint
 
@@ -94,7 +102,7 @@ Never commit passwords, API tokens, cookies, session storage, private form conte
 ## Security boundary
 
 - Browserbase API key: Make credential store only for the current private Functions path.
-- Browserbase Context: server-side Browserbase state; identifier omitted from public documentation.
+- Browserbase Context state: server-side Browserbase state.
 - Login/MFA: user may need to perform unavoidable authentication manually in Browserbase Live View when a site invalidates the stored session.
 - Public GitHub artifacts: disabled for sensitive authenticated work.
 - Authenticated mutation: not generalized into the persistent runner. Any future write path must be target-specific and separately audited.
@@ -125,17 +133,22 @@ The generic Browserbase Function was built and invoked successfully against `htt
 
 Separate managed Browserbase sessions using the same persistent Context both reached authenticated AWS Console locations and returned `authenticated: true`. A later invocation through the reusable private Make invoke/status pair also completed successfully against AWS IAM.
 
+### Persistent read-only package validation
+
+Run `33908767299` completed successfully and validates the current `persistent_runner.ts` package through Browserbase CLI dry-run using the frozen lockfile.
+
 ## Production isolation audit
 
 Browser automation work remains on `poc/free-work-replacement`. The Browserbase example request file is present on the POC branch and was explicitly checked as absent from `main`.
 
-Functional browser-code milestone: `ce556d067fafc0f8858269231be75ad001745bf9` (`Restrict persistent Browserbase runner to read-only actions`). Later documentation-only commits may advance the branch head beyond this SHA.
+Functional browser-code milestone: `ce556d067fafc0f8858269231be75ad001745bf9` (`Restrict persistent Browserbase runner to read-only actions`). Later validation/documentation commits advance the branch head beyond this SHA.
 
 Do not merge this branch wholesale into `main`; it has diverged from production and must be retargeted/audited before any selective production change.
 
 ## Canonical files
 
 - `.github/workflows/free-work-replacement-poc.yml`
+- `.github/workflows/browserbase-function-validate.yml`
 - `scripts/browser_runner.mjs`
 - `scripts/browser_bridge_runner.mjs`
 - `automation/browser-request.json`
@@ -148,7 +161,8 @@ Do not merge this branch wholesale into `main`; it has diverged from production 
 
 ## Next gate
 
-1. Verify completion of the submitted `persistent_runner.ts` Browserbase build.
-2. If successful, point the private Make invoke scenario at that function and expose a safe read-only step schema.
-3. Verify one targeted authenticated `readText` operation with sensitive output controls.
-4. Keep the local GitHub Actions path as the default for public browser work to conserve Browserbase minutes.
+1. Recover direct ChatGPT -> Make tool invocation without rebuilding credentials.
+2. Read remote build `9502412c-244a-42d9-ba31-b8e4ed62efff`.
+3. If `COMPLETED`, point the reusable private Make invoke scenario at the new read-only Function ID and expose a safe `steps` input schema.
+4. Verify one targeted authenticated `readText` operation with sensitive output controls.
+5. Keep the local GitHub Actions path as the default for public browser work to conserve Browserbase minutes.
