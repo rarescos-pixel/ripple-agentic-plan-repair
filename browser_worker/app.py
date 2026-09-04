@@ -9,7 +9,7 @@ import socket
 from typing import Any
 from urllib.parse import urlparse
 
-from playwright.async_api import BrowserContext, Page, Playwright, async_playwright
+from playwright.async_api import BrowserContext, Frame, Locator, Page, Playwright, async_playwright
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
@@ -286,23 +286,111 @@ async def run_browser(request: Request) -> JSONResponse:
         return _no_store_json(result, 502)
 
 
+async def _frame_focus(frame: Frame) -> dict[str, Any] | None:
+    try:
+        info = await frame.evaluate(
+            """() => {
+                const e = document.activeElement;
+                if (!e) return null;
+                const tag = (e.tagName || '').toLowerCase();
+                const type = (e.getAttribute && e.getAttribute('type') || '').toLowerCase();
+                const editable = tag === 'textarea' || e.isContentEditable ||
+                  (tag === 'input' && !['button','submit','reset','checkbox','radio','file','hidden','image','range','color'].includes(type));
+                return {editable, tag, type, id: e.id || '', name: (e.getAttribute && e.getAttribute('name')) || ''};
+            }"""
+        )
+        if isinstance(info, dict):
+            return info
+    except Exception:
+        pass
+    return None
+
+
+async def _focused_editable(page: Page) -> dict[str, Any] | None:
+    for frame in page.frames:
+        info = await _frame_focus(frame)
+        if info and info.get("editable"):
+            return info
+    return None
+
+
+async def _first_editable(page: Page, kind: str) -> tuple[Locator, str] | None:
+    if kind == "secret":
+        selectors = [
+            'input[type="password"]',
+            'input[autocomplete="current-password"]',
+            'input[autocomplete="new-password"]',
+            'input[type="text"]',
+            'input:not([type])',
+            'textarea',
+        ]
+    else:
+        selectors = [
+            'input[type="email"]',
+            'input[autocomplete="username"]',
+            'input[type="text"]',
+            'input:not([type])',
+            'input[type="tel"]',
+            'input[inputmode="numeric"]',
+            'input[type="number"]',
+            'textarea',
+        ]
+
+    for frame in page.frames:
+        for selector in selectors:
+            try:
+                locator = frame.locator(selector)
+                count = min(await locator.count(), 20)
+                for idx in range(count):
+                    candidate = locator.nth(idx)
+                    if await candidate.is_visible() and await candidate.is_enabled():
+                        return candidate, selector
+            except Exception:
+                continue
+    return None
+
+
+async def _type_smart(page: Page, text: str, kind: str) -> dict[str, Any]:
+    focused = await _focused_editable(page)
+    if focused:
+        # keyboard.type emits the key/input event sequence that many login forms expect.
+        await page.keyboard.type(text, delay=25)
+        return {"mode": "focused", "target": f"{focused.get('tag','')}:{focused.get('type','')}"}
+
+    found = await _first_editable(page, kind)
+    if found is None:
+        raise RuntimeError("no editable field is focused or visible")
+
+    candidate, selector = found
+    await candidate.click(timeout=10000)
+    try:
+        await candidate.fill(text, timeout=10000)
+        mode = "smart-fill"
+    except Exception:
+        await page.keyboard.type(text, delay=25)
+        mode = "smart-type"
+    return {"mode": mode, "target": selector}
+
+
 LIVE_HTML = """<!doctype html>
 <html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
 <title>Private Browser Login</title>
 <style>
-body{font-family:system-ui,sans-serif;margin:0;background:#111;color:#eee}#bar{position:sticky;top:0;z-index:2;background:#1c1c1c;padding:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}input,button{font-size:16px;padding:9px;border-radius:8px;border:1px solid #555;background:#222;color:#fff}#url{min-width:280px;flex:1}#typebox{min-width:220px}.muted{font-size:12px;color:#aaa}#frame{display:block;width:100%;height:auto;cursor:crosshair;background:#fff}#status{font-size:12px;min-width:120px}</style>
+body{font-family:system-ui,sans-serif;margin:0;background:#111;color:#eee}#bar{position:sticky;top:0;z-index:2;background:#1c1c1c;padding:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}input,button{font-size:16px;padding:9px;border-radius:8px;border:1px solid #555;background:#222;color:#fff}#url{min-width:280px;flex:1}.entry{min-width:220px;flex:0 1 320px}.muted{font-size:12px;color:#aaa;max-width:720px}#frame{display:block;width:100%;height:auto;cursor:crosshair;background:#fff}#status{font-size:12px;min-width:160px;font-weight:600}</style>
 </head><body><div id='bar'>
 <input id='url' placeholder='https://...'><button onclick='nav()'>Go</button><button onclick="act({action:'reload'})">Reload</button>
-<input id='typebox' type='password' autocomplete='off' placeholder='Type into focused field'><button onclick='typeText()'>Type</button>
-<button onclick="key('Tab')">Tab</button><button onclick="key('Enter')">Enter</button><button onclick="key('Backspace')">Backspace</button>
-<span id='status'>connecting…</span><span class='muted'>Click the page, then use Type. Password text goes directly to this browser service, not through ChatGPT.</span>
+<input id='textbox' class='entry' type='text' autocomplete='off' autocapitalize='none' spellcheck='false' placeholder='Email / username / MFA code'><button onclick="sendBox('textbox','text')">Send text</button>
+<input id='secretbox' class='entry' type='password' autocomplete='off' placeholder='Password / secret'><button onclick="sendBox('secretbox','secret')">Send secret</button>
+<button onclick="key('Tab')">Tab</button><button onclick="key('Enter')">Enter</button><button onclick="key('Backspace')">Backspace</button><button onclick='clearRemote()'>Clear field</button>
+<span id='status'>connecting…</span><span class='muted'>Click the remote field if you want. Send text also auto-finds the first visible editable field when focus is missing. Secret text goes directly to this Railway browser service, not through ChatGPT.</span>
 </div><img id='frame' alt='browser view'>
 <script>
 const token=location.pathname.split('/')[2]; const base='/live/'+token; const img=document.getElementById('frame'); const status=document.getElementById('status');
-async function act(body){status.textContent='working…';try{let r=await fetch(base+'/action',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});let j=await r.json();status.textContent=j.ok?'ok':(j.error||'error');if(j.url)document.getElementById('url').value=j.url;}catch(e){status.textContent='network error';}refresh();}
+async function act(body){status.textContent='working…';try{let r=await fetch(base+'/action',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});let j=await r.json();if(j.ok){status.textContent='ok'+(j.inputMode?' – '+j.inputMode:'')+(j.focused===true?' – field focused':'');}else{status.textContent=j.error||'error';}if(j.url)document.getElementById('url').value=j.url;}catch(e){status.textContent='network error';}refresh();}
 function nav(){let u=document.getElementById('url').value.trim();if(u)act({action:'navigate',url:u});}
-function typeText(){let el=document.getElementById('typebox');let text=el.value;el.value='';if(text)act({action:'type',text});}
+function sendBox(id,kind){let el=document.getElementById(id);let text=el.value;el.value='';if(text)act({action:'type',text,kind});}
 function key(k){act({action:'press',key:k});}
+function clearRemote(){act({action:'clearFocused'});}
 img.addEventListener('click',e=>{let r=img.getBoundingClientRect();let x=(e.clientX-r.left)*(img.naturalWidth/r.width);let y=(e.clientY-r.top)*(img.naturalHeight/r.height);act({action:'click',x,y});});
 function refresh(){img.src=base+'/screenshot?t='+Date.now();fetch(base+'/meta').then(r=>r.json()).then(j=>{if(j.url)document.getElementById('url').value=j.url;}).catch(()=>{});}
 img.onload=()=>{if(status.textContent==='connecting…')status.textContent='ready';};setInterval(refresh,1200);refresh();
@@ -337,7 +425,8 @@ async def live_meta(request: Request) -> JSONResponse:
     try:
         async with BROWSER_LOCK:
             page = await _ensure_page()
-            return _no_store_json({"ok": True, "url": page.url, "title": await page.title()})
+            focus = await _focused_editable(page)
+            return _no_store_json({"ok": True, "url": page.url, "title": await page.title(), "editableFocused": bool(focus)})
     except Exception as exc:
         return _no_store_json({"ok": False, "error": str(exc)[:300]}, 503)
 
@@ -355,19 +444,33 @@ async def live_action(request: Request) -> JSONResponse:
     try:
         async with BROWSER_LOCK:
             page = await _ensure_page()
+            extra: dict[str, Any] = {}
             if action == "click":
                 x = max(0.0, min(float(body.get("x", 0)), VIEWPORT_WIDTH))
                 y = max(0.0, min(float(body.get("y", 0)), VIEWPORT_HEIGHT))
                 await page.mouse.click(x, y)
+                extra["focused"] = bool(await _focused_editable(page))
             elif action == "type":
                 text = str(body.get("text") or "")[:4096]
-                await page.keyboard.insert_text(text)
+                if not text:
+                    return _no_store_json({"error": "empty_text"}, 400)
+                kind = str(body.get("kind") or "text")
+                if kind not in {"text", "secret"}:
+                    kind = "text"
+                typed = await _type_smart(page, text, kind)
+                extra["inputMode"] = typed["mode"]
+                extra["focused"] = True
             elif action == "press":
                 key = str(body.get("key") or "")
                 allowed = {"Enter", "Tab", "Escape", "Backspace", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "PageUp", "PageDown"}
                 if key not in allowed:
                     return _no_store_json({"error": "key_not_allowed"}, 403)
                 await page.keyboard.press(key)
+            elif action == "clearFocused":
+                if not await _focused_editable(page):
+                    return _no_store_json({"error": "no_editable_field_focused"}, 409)
+                await page.keyboard.press("Control+A")
+                await page.keyboard.press("Backspace")
             elif action == "navigate":
                 target = str(body.get("url") or "").strip()
                 if not target or not await _url_allowed(target):
@@ -380,7 +483,7 @@ async def live_action(request: Request) -> JSONResponse:
                 await page.mouse.wheel(0, dy)
             else:
                 return _no_store_json({"error": "action_not_allowed"}, 403)
-            return _no_store_json({"ok": True, "url": page.url})
+            return _no_store_json({"ok": True, "url": page.url, **extra})
     except Exception as exc:
         return _no_store_json({"ok": False, "error": str(exc)[:500]}, 502)
 
