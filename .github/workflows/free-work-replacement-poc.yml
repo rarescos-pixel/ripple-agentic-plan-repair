@@ -7,6 +7,7 @@ on:
     paths:
       - .github/workflows/free-work-replacement-poc.yml
       - scripts/browser_runner.mjs
+      - scripts/browser_bridge_runner.mjs
       - automation/browser-request.json
       - fixtures/browser-automation/**
   workflow_dispatch:
@@ -53,7 +54,13 @@ jobs:
           exit 1
 
       - name: Run browser request
-        run: node scripts/browser_runner.mjs
+        run: |
+          PROVIDER="$(node -e "const r=require('./automation/browser-request.json'); process.stdout.write(String(r.provider||'local'))")"
+          if [ "$PROVIDER" = "browserbase-bridge" ]; then
+            node scripts/browser_bridge_runner.mjs
+          else
+            node scripts/browser_runner.mjs
+          fi
 
       - name: Show machine-readable result
         if: always()
