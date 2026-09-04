@@ -45,6 +45,7 @@ class BedrockChangeInterpreter:
         allowed_fields = context.get("allowed_fields", {"flight:return": ["arrival_at"]})
         canonical = json.dumps({"allowed_nodes": allowed_nodes, "allowed_fields": allowed_fields}, sort_keys=True, default=str)
         self.budget.validate_input(utterance, canonical)
+        correlation_id = str(context.get("correlation_id", "bedrock"))[:256]
 
         response = self.client.converse(
             modelId=self.model_id,
@@ -55,6 +56,7 @@ class BedrockChangeInterpreter:
             messages=[{"role": "user", "content": [{"text": f"CANONICAL_CONTEXT={canonical}\nUSER_CHANGE={utterance}"}]}],
             toolConfig=RECORD_CHANGE_TOOL,
             inferenceConfig={"maxTokens": self.budget.max_output_tokens, "temperature": 0},
+            requestMetadata={"ripple_correlation_id": correlation_id},
         )
         blocks = response.get("output", {}).get("message", {}).get("content", [])
         tool_uses = [b["toolUse"] for b in blocks if "toolUse" in b]
@@ -77,7 +79,6 @@ class BedrockChangeInterpreter:
         if confidence < float(context.get("minimum_confidence", 0.80)):
             raise ValueError("Model confidence below execution-planning threshold")
 
-        # Old value is authoritative application state, never model-provided.
         old_value = allowed_nodes[node_id].get(field)
         if old_value is None:
             raise ValueError("Canonical old value is missing")
@@ -89,5 +90,5 @@ class BedrockChangeInterpreter:
             new_value=new_value,
             source="voice",
             confidence=confidence,
-            correlation_id=context.get("correlation_id", "bedrock"),
+            correlation_id=correlation_id,
         )
