@@ -1,0 +1,57 @@
+name: Browserbase Secure Runtime
+
+on:
+  push:
+    branches:
+      - poc/free-work-replacement
+    paths:
+      - automation/browser-secure-request.json
+      - scripts/browserbase_secure_runtime.py
+      - .github/workflows/browserbase-secure-runtime.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      BROWSERBASE_API_KEY: ${{ secrets.BROWSERBASE_API_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: poc/free-work-replacement
+
+      - name: Verify secret availability
+        shell: bash
+        run: |
+          if [ -z "$BROWSERBASE_API_KEY" ]; then
+            echo "BROWSERBASE_API_KEY_UNAVAILABLE"
+            exit 2
+          fi
+          echo "BROWSERBASE_API_KEY_AVAILABLE"
+
+      - name: Execute Browserbase operation without logging response body
+        run: python scripts/browserbase_secure_runtime.py
+
+      - name: Encrypt result for this ChatGPT run
+        shell: bash
+        run: |
+          openssl cms -encrypt -binary -aes-256-cbc \
+            -in /tmp/browser-secure-result.json \
+            -out /tmp/browser-secure-result.cms \
+            -outform DER \
+            /tmp/browser-secure-recipient.crt
+          rm -f /tmp/browser-secure-result.json /tmp/browser-secure-recipient.crt
+          echo "ENCRYPTED_RESULT_READY"
+
+      - name: Upload encrypted result only
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-secure-result
+          path: /tmp/browser-secure-result.cms
+          retention-days: 1
+          if-no-files-found: error
