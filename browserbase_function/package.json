@@ -2,8 +2,9 @@
   "name": "free-work-browserbase-function",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@10.12.1",
   "dependencies": {
-    "@browserbasehq/sdk-functions": "1.0.1",
+    "@browserbasehq/sdk-functions": "1.0.2",
     "playwright-core": "1.55.0"
   }
 }
