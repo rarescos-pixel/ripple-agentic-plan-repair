@@ -31,6 +31,15 @@ def set_state(**kwargs: Any) -> None:
         state.update(kwargs)
 
 
+def extract_auth_url(text: str) -> str | None:
+    for candidate in reversed(re.findall(r"https://[^\s\r\n]+", text or "")):
+        candidate = candidate.rstrip(")]}>,.;'\"")
+        lower = candidate.lower()
+        if "amazonaws.com" in lower or "aws.amazon.com" in lower:
+            return candidate
+    return None
+
+
 def run_aws(args: list[str], check: bool = True) -> subprocess.CompletedProcess[str]:
     cmd = ["aws", *args, "--profile", PROFILE, "--region", REGION, "--no-cli-pager"]
     return subprocess.run(cmd, text=True, capture_output=True, check=check, timeout=120)
@@ -231,7 +240,6 @@ def login_worker() -> None:
             timeout=900,
         )
         auth_url = None
-        saw_prompt = False
         while True:
             idx = child.expect([
                 r"https://[^\s\r\n]+",
@@ -240,13 +248,20 @@ def login_worker() -> None:
                 pexpect.EOF,
                 pexpect.TIMEOUT,
             ])
+
+            before = child.before or ""
+            after = child.after if isinstance(child.after, str) else ""
+            buffered_url = extract_auth_url(f"{before}\n{after}")
+            if buffered_url:
+                auth_url = buffered_url
+                set_state(auth_url=auth_url)
+
             if idx == 0:
-                candidate = child.match.group(0).strip()
-                if "signin" in candidate and "amazonaws.com" in candidate:
+                candidate = child.match.group(0).strip().rstrip(")]}>,.;'\"")
+                if "amazonaws.com" in candidate.lower() or "aws.amazon.com" in candidate.lower():
                     auth_url = candidate
                     set_state(phase="awaiting_browser", auth_url=auth_url, detail="Open the AWS link, sign in, then return here with the authorization code.")
             elif idx == 1:
-                saw_prompt = True
                 set_state(phase="waiting_code", auth_url=auth_url, detail="AWS is waiting for the authorization code. Paste it into the field below.")
             elif idx == 2:
                 set_state(phase="verifying", detail="AWS login completed. Verifying identity and creating GitHub OIDC…")
