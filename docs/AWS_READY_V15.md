@@ -7,10 +7,10 @@ Ripple keeps the public MCP/OAuth service on Railway. AWS augments only the capa
 - **Amazon Bedrock** — normalize one user-reported changed fact; never choose repairs or execute tools.
 - **Amazon DynamoDB** — persist exact approvals and authoritative idempotency receipts across process restarts.
 - **Amazon CloudWatch Logs** — structured, redacted judge/debug traces.
-- **AWS Budgets** — project-tag-scoped spend alerts.
+- **AWS Budgets** — account-wide spend guard with 50/80/100% actual-cost alerts.
 - **IAM managed policy** — only DynamoDB state, one CloudWatch stream, and Bedrock invocation through the Ripple inference profile.
 
-No ECS/Fargate duplication is introduced. Railway remains the MCP transport host.
+No ECS/Fargate/Lambda duplication is introduced. Railway remains the MCP transport host and calls the narrow AWS services directly.
 
 ## Infrastructure
 
@@ -20,9 +20,22 @@ No ECS/Fargate duplication is introduced. Railway remains the MCP transport host
 2. `TraceLogGroup` + `TraceLogStream` — 14-day retention.
 3. `RippleInferenceProfile` — tagged Bedrock Application Inference Profile copied from the selected EU geographic inference profile.
 4. `RuntimePolicy` — managed least-privilege policy for the external runtime principal.
-5. `RippleBudget` — monthly budget alerts at 50%, 80%, and 100%, filtered on `Project=Ripple`.
+5. `RippleBudget` — monthly account-wide budget alerts at 50%, 80%, and 100%.
 
 The default Bedrock source is `eu.amazon.nova-2-lite-v1:0`. The benchmark can compare it with `eu.amazon.nova-lite-v1:0` before the final model is locked.
+
+## Why the budget is account-wide
+
+AWS user-defined resource tags must be activated as cost-allocation tags before they can be used as budget filters, and activation is not instantaneous. A fresh hackathon account should not depend on that propagation before its safety guard becomes meaningful.
+
+Therefore the $10 monthly guard intentionally has no `CostFilters`:
+
+- it protects the whole account immediately after creation;
+- Ripple resources still retain `Project=Ripple` and environment tags for attribution/evidence;
+- `scripts/aws_live_verify.py` fails if the deployed guard unexpectedly depends on cost filters;
+- a project-filtered reporting budget can be added later after cost-allocation tags are active, without weakening the account-wide guard.
+
+AWS Budget alerts are notifications, not a guaranteed automatic service shutdown.
 
 ## Deploy
 
@@ -35,7 +48,7 @@ export RIPPLE_MONTHLY_BUDGET_USD=10
 bash scripts/aws_deploy.sh
 ```
 
-Before relying on the tag-scoped budget, activate the user-defined `Project` cost allocation tag in AWS Billing. AWS Budgets alerts are notifications, not a guaranteed service shutdown.
+No cost-allocation-tag activation is required before this bootstrap.
 
 ## Railway runtime mapping
 
@@ -106,7 +119,8 @@ A live AWS pass must prove all of the following on one source SHA:
 - DynamoDB approval survives a new process/session;
 - DynamoDB authoritative receipt suppresses replay duplication;
 - CloudWatch receives redacted `ripple.trace.v1` events;
-- budget exists with 50/80/100% alert thresholds;
+- account-wide budget exists as monthly COST budget with a positive USD limit and no tag-filter activation dependency;
+- budget notifications remain configured at 50/80/100% actual cost;
 - Railway public MCP smoke remains PASS after AWS activation;
 - no AWS credentials appear in logs, repo, reports, or screenshots.
 
