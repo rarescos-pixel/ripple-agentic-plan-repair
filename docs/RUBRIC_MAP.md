@@ -22,7 +22,7 @@ Evidence:
 - independent remote authenticated MCP smoke: PASS;
 - independent Alexa package/store-media gate: PASS;
 - deterministic release/adversarial gate: PASS;
-- CI validation for MCP protocol, MCP App safety, Alexa package, CloudFormation, AWS credential lifecycle and evidence drift.
+- CI validation for MCP protocol, Alexa Local Inspector request-shape compatibility, MCP App safety, Alexa package, CloudFormation, AWS credential lifecycle, submission surfaces and evidence drift.
 
 **Known remaining gap:** AWS components are implemented and AWS-ready but not yet claimed live. A live AWS score gain is accepted only after Bedrock + DynamoDB + CloudWatch + IAM/Budget are provisioned/exercised and the public Railway runtime passes post-cutover restart/replay evidence.
 
@@ -85,6 +85,37 @@ The Alexa+ fit is structural:
 - the Repair Card complements voice with an exact money/approval surface;
 - bounded authority and replay safety make agentic action credible rather than merely impressive.
 
+## AWS Builder mini challenge
+
+Target only after live verification.
+
+The AWS architecture is deliberately structural rather than a single decorative model call:
+
+- Bedrock performs constrained language normalization only;
+- DynamoDB makes approvals/idempotency/receipts durable;
+- CloudWatch stores redacted evidence traces;
+- IAM scopes runtime authority;
+- Budgets constrains spend.
+
+The repository is AWS-ready. A competitive AWS Builder claim is unlocked only by the live benchmark, real resource verification, Railway cutover and fresh-session replay proof.
+
+## Open Source mini challenge
+
+**Eligible low-risk additional target.**
+
+Ripple is a new public MIT-licensed repository created during the hackathon window, not a pre-existing project with a formatting-only contribution. The repository publishes the complete project plus reusable safety/interoperability patterns and tests.
+
+Representative contribution: **PR #22**, which turns a real Alexa Local Inspector request-shape mismatch into:
+
+- a bounded interoperability fix;
+- a regression test reproducing the documented request sequence;
+- protocol negotiation verification;
+- `ui://` MCP App discovery verification;
+- a reusable remote probe;
+- an evidence-linked friction-log entry.
+
+Required Devpost fields are frozen in `docs/OPEN_SOURCE_SUBMISSION.md`.
+
 ## Bonus — friction log
 
 `docs/FRICTION_LOG.md` contains real development friction with the complete required fields: task, steps, expected vs actual result, severity, workaround and actionable suggestion.
@@ -94,7 +125,8 @@ Current entries cover:
 1. Alexa-compatible OAuth refresh behavior;
 2. MCP App visual resource binding;
 3. add-on package/public-media preflight;
-4. least-privilege AWS credentials for an external PaaS runtime.
+4. least-privilege AWS credentials for an external PaaS runtime;
+5. Alexa Local Inspector JSON-only `Accept` request-shape interoperability.
 
 No friction entry is fabricated solely to chase bonus points.
 
