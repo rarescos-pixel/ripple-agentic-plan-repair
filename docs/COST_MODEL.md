@@ -1,10 +1,10 @@
-# Ripple — Cost Model and Economic Guardrails v1.3
+# Ripple — Cost Model and Economic Guardrails
 
 ## Principle
 
 Ripple should preserve more customer value than it costs to run or to repair a plan. Cost is therefore part of the decision policy, not only an infrastructure concern.
 
-For each repair option the deterministic planner now ranks by:
+For each repair option the deterministic planner ranks by:
 
 1. hard safety/user constraints;
 2. **maximum net cash preserved = avoidable loss - added repair cost**;
@@ -50,17 +50,32 @@ Decision: do **not** trade away interpretation accuracy merely to save fractions
 
 ## Durable-state AWS cost shape
 
-The next AWS architecture should use serverless/pay-per-use components where they improve correctness:
+The structural AWS runtime uses serverless/pay-per-use components where they improve correctness:
 
-- DynamoDB on-demand for plan graph, approval snapshot, idempotency keys, and receipts;
-- Lambda for a narrow Bedrock boundary if needed;
-- CloudWatch for structured trace evidence.
+- DynamoDB on-demand for approval state, idempotency keys, and authoritative receipts;
+- Bedrock invoked directly from the Railway-hosted Ripple runtime for the narrow normalization boundary;
+- CloudWatch Logs for redacted structured trace evidence.
 
-DynamoDB on-demand has no idle-capacity requirement and Lambda is request/duration based. This is a better fit for a low-duty-cycle consequence engine than moving the always-on MCP endpoint to a larger container stack.
+There is no Lambda/ECS/Fargate layer in the locked architecture because it would add cost and operational surface without a demonstrated correctness or scoring gain.
+
+## Budget guard — account-wide by design
+
+Ripple provisions a **$10/month AWS Budget** with actual-cost alerts at **50%, 80%, and 100%**.
+
+The budget intentionally has **no tag-based CostFilters**. AWS requires user-defined resource tags to be activated as cost-allocation tags before they can be used for budget filtering, and a new tag can take time to become available and active. Depending on that activation during the hackathon live bootstrap would weaken the guard exactly when it is most useful.
+
+Instead:
+
+- the budget covers the **whole AWS account** immediately;
+- Ripple resources still carry `Project=Ripple` and environment tags for attribution/evidence;
+- the live verifier rejects a budget that unexpectedly depends on CostFilters;
+- if the account later hosts unrelated workloads, a project-scoped reporting budget can be added after cost-allocation tags are active, without replacing the account-wide safety guard.
+
+This is intentionally conservative because the hackathon account's primary requirement is **bounded spend with minimal setup dependency**.
 
 ## Why not move the MCP endpoint to ECS/Fargate now
 
-ECS Express Mode itself has no separate fee, but it creates billable Fargate, load-balancer, monitoring, and transfer resources. Fargate also bills requested vCPU/memory rather than Ripple's observed tiny idle consumption. The smallest continuous Fargate task therefore has a materially higher baseline than the measured Railway service before the load balancer is counted.
+ECS/Fargate would create additional persistent/container, load-balancing, monitoring and transfer cost surfaces. Fargate also bills requested vCPU/memory rather than Ripple's observed tiny idle consumption. The smallest continuous task therefore has a materially higher baseline than the measured Railway service before ancillary resources are counted.
 
 Decision: **AWS should strengthen the architecture, not replace a working low-cost transport for logo value.**
 
