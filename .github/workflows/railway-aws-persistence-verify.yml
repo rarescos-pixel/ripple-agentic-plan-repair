@@ -1,0 +1,93 @@
+name: Railway AWS persistence verifier
+
+on:
+  push:
+    branches:
+      - poc/free-work-replacement
+    paths:
+      - .github/workflows/railway-aws-persistence-verify.yml
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: poc/free-work-replacement
+          fetch-depth: 0
+
+      - name: Patch sanitized verification status into worker
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          verifier = Path('browser_worker/verify_startup.py')
+          s = verifier.read_text()
+          if 'STATUS_FILE = ' not in s:
+              s = s.replace(
+                  'TARGET = "https://console.aws.amazon.com/cloudshell/home?region=eu-central-1"\n',
+                  'TARGET = "https://console.aws.amazon.com/cloudshell/home?region=eu-central-1"\nSTATUS_FILE = os.getenv("AWS_VERIFY_STATUS_FILE", "/data/aws_verify.json").strip() or "/data/aws_verify.json"\n'
+              )
+          if 'from datetime import datetime, timezone' not in s:
+              s = s.replace('import os\n', 'import os\nfrom datetime import datetime, timezone\n')
+          old = '    print("AWS_AUTH_VERIFY " + json.dumps(outcome, sort_keys=True), flush=True)\n'
+          if old in s:
+              new = '''    outcome["verifiedAt"] = datetime.now(timezone.utc).isoformat()\n    public = {\n        key: outcome.get(key)\n        for key in (\n            "ok", "signedIn", "cloudShellReached", "hostClass",\n            "pathClass", "httpStatus", "verifiedAt", "errorType"\n        )\n        if key in outcome\n    }\n    try:\n        with open(STATUS_FILE, "w", encoding="utf-8") as handle:\n            json.dump(public, handle, sort_keys=True)\n    except Exception:\n        pass\n    print("AWS_AUTH_VERIFY " + json.dumps(public, sort_keys=True), flush=True)\n'''
+              s = s.replace(old, new)
+          verifier.write_text(s)
+
+          app = Path('browser_worker/app.py')
+          a = app.read_text()
+          if 'VERIFY_STATUS_FILE = ' not in a:
+              a = a.replace(
+                  'PROFILE_DIR = os.getenv("BROWSER_PROFILE_DIR", "/data/chromium-profile").strip() or "/data/chromium-profile"\n',
+                  'PROFILE_DIR = os.getenv("BROWSER_PROFILE_DIR", "/data/chromium-profile").strip() or "/data/chromium-profile"\nVERIFY_STATUS_FILE = os.getenv("AWS_VERIFY_STATUS_FILE", "/data/aws_verify.json").strip() or "/data/aws_verify.json"\n'
+              )
+          marker = 'async def health(_: Request) -> JSONResponse:\n    ready = CONTEXT is not None and BROWSER_ERROR is None\n'
+          if marker in a and 'awsAuthVerify' not in a:
+              replacement = '''async def health(_: Request) -> JSONResponse:\n    ready = CONTEXT is not None and BROWSER_ERROR is None\n    verify_status = None\n    try:\n        if os.path.exists(VERIFY_STATUS_FILE):\n            with open(VERIFY_STATUS_FILE, "r", encoding="utf-8") as handle:\n                raw = json.load(handle)\n            if isinstance(raw, dict):\n                allowed = {\n                    "ok", "signedIn", "cloudShellReached", "hostClass",\n                    "pathClass", "httpStatus", "verifiedAt", "errorType"\n                }\n                verify_status = {k: raw.get(k) for k in allowed if k in raw}\n    except Exception:\n        verify_status = {"ok": False, "errorType": "StatusReadError"}\n'''
+              a = a.replace(marker, replacement)
+              a = a.replace(
+                  '            "browserError": None if ready else BROWSER_ERROR,\n',
+                  '            "browserError": None if ready else BROWSER_ERROR,\n            "awsAuthVerify": verify_status,\n'
+              )
+          app.write_text(a)
+          PY
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add browser_worker/app.py browser_worker/verify_startup.py
+          if git diff --cached --quiet; then
+            echo "No patch needed"
+          else
+            git commit -m "Expose sanitized AWS persistence verification"
+            git push origin HEAD:poc/free-work-replacement
+          fi
+
+      - name: Wait for Railway deployment and verify persisted AWS auth
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="https://browser-worker-free-production.up.railway.app/healthz"
+          echo "Polling sanitized health endpoint only"
+          for i in $(seq 1 90); do
+            body="$(curl -fsS --max-time 10 "$url" 2>/dev/null || true)"
+            if [ -n "$body" ] && echo "$body" | jq -e '.awsAuthVerify.verifiedAt != null' >/dev/null 2>&1; then
+              echo "$body" | jq '{browserReady,profilePersistenceConfigured,awsAuthVerify}'
+              signed="$(echo "$body" | jq -r '.awsAuthVerify.signedIn // false')"
+              shell="$(echo "$body" | jq -r '.awsAuthVerify.cloudShellReached // false')"
+              echo "AWS_PERSISTENCE_VERDICT signedIn=$signed cloudShellReached=$shell"
+              if [ "$signed" = "true" ]; then
+                exit 0
+              fi
+              exit 2
+            fi
+            sleep 10
+          done
+          echo "Timed out waiting for sanitized AWS verification status"
+          exit 3
