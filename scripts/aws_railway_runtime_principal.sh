@@ -54,6 +54,25 @@ if [[ -n "${ACTIVE_KEYS//[[:space:]]/}" ]]; then
 fi
 
 KEY_JSON="$(aws iam create-access-key --user-name "$IAM_USER" --output json)"
+ACCESS_KEY_ID="$(python3 -c 'import json,os; print(json.loads(os.environ["KEY_JSON"])["AccessKey"]["AccessKeyId"])' KEY_JSON="$KEY_JSON" 2>/dev/null || true)"
+# The inline environment assignment above is not portable across every shell/python invocation;
+# derive the ID again through stdin if needed without printing the secret.
+if [[ -z "$ACCESS_KEY_ID" ]]; then
+  ACCESS_KEY_ID="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["AccessKey"]["AccessKeyId"])' <<<"$KEY_JSON")"
+fi
+
+rollback() {
+  local status=$?
+  trap - EXIT
+  if [[ $status -ne 0 && -n "${ACCESS_KEY_ID:-}" ]]; then
+    aws iam delete-access-key --user-name "$IAM_USER" --access-key-id "$ACCESS_KEY_ID" >/dev/null 2>&1 || true
+    rm -f "$CREDENTIAL_FILE" >/dev/null 2>&1 || true
+  fi
+  unset KEY_JSON
+  exit "$status"
+}
+trap rollback EXIT
+
 umask 077
 mkdir -p "$(dirname "$CREDENTIAL_FILE")"
 
@@ -81,10 +100,11 @@ values = {
 }
 out.write_text("".join(f"{name}={value}\n" for name, value in values.items()), encoding="utf-8")
 out.chmod(0o600)
-print(key["AccessKeyId"][-4:])
 PY
-KEY_SUFFIX="$(python3 -c 'import json,os; print(json.loads(os.environ["KEY_JSON"])["AccessKey"]["AccessKeyId"][-4:])')"
+
+KEY_SUFFIX="${ACCESS_KEY_ID: -4}"
 unset KEY_JSON
+trap - EXIT
 
 cat <<EOF
 RIPPLE_AWS_RAILWAY_PRINCIPAL_BEGIN
