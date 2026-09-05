@@ -29,6 +29,7 @@ def main() -> int:
     video = read("docs/VIDEO_SCRIPT.md")
     rubric = read("docs/RUBRIC_MAP.md")
     master = read("docs/MASTER.md")
+    open_source = read("docs/OPEN_SOURCE_SUBMISSION.md")
 
     for needle in (
         "Tell Alexa one thing that changed. Ripple fixes what breaks downstream.",
@@ -53,7 +54,7 @@ def main() -> int:
     ):
         forbid(readme, needle, "README", errors)
 
-    for entry in ("F1", "F2", "F3", "F4"):
+    for entry in ("F1", "F2", "F3", "F4", "F5"):
         require(friction, f"## {entry} —", "FRICTION_LOG", errors)
     for field in (
         "**Task attempted:**",
@@ -64,9 +65,9 @@ def main() -> int:
         "**Workaround:**",
         "**Actionable suggestion:**",
     ):
-        if friction.count(field) < 4:
+        if friction.count(field) < 5:
             errors.append(
-                f"FRICTION_LOG: expected field {field!r} in at least four real entries; "
+                f"FRICTION_LOG: expected field {field!r} in at least five real entries; "
                 f"found {friction.count(field)}"
             )
 
@@ -85,6 +86,11 @@ def main() -> int:
         "5/5 deduplicated",
         "AWS-ready, not AWS-live verified",
         "No actual Alexa+ production-client session is claimed",
+        "**Primary Track:** Alexa+",
+        "**Mini Challenge:** AWS Builder",
+        "**Mini Challenge:** Open Source",
+        "## Open Source Mini Challenge",
+        "https://github.com/rarescos-pixel/ripple-agentic-plan-repair/pull/22",
     ):
         require(submission, needle, "SUBMISSION_DRAFT", errors)
 
@@ -120,6 +126,18 @@ def main() -> int:
     ):
         forbid(master, needle, "MASTER", errors)
 
+    for needle in (
+        "# Open Source Mini Challenge — submission packet",
+        "Repository created: **2026-09-04**",
+        "License: **MIT**",
+        "GitHub username: **rarescos-pixel**",
+        "https://github.com/rarescos-pixel/ripple-agentic-plan-repair/pull/22",
+        "### What I did",
+        "### How it works",
+        "### Why it matters",
+    ):
+        require(open_source, needle, "OPEN_SOURCE_SUBMISSION", errors)
+
     if errors:
         print("Ripple submission surface gate: FAIL")
         for error in errors:
@@ -128,8 +146,9 @@ def main() -> int:
 
     print("Ripple submission surface gate: PASS")
     print("judge_hook: 5 commitments / $116 at risk / $42 repair / $74 net preserved")
-    print("friction_entries: 4 complete")
+    print("friction_entries: 5 complete")
     print("aws_claim: AWS-ready / not AWS-live until live gate")
+    print("mini_challenges: AWS Builder + Open Source")
     return 0
 
 
