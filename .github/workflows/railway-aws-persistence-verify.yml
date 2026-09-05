@@ -6,6 +6,10 @@ on:
       - poc/free-work-replacement
     paths:
       - .github/workflows/railway-aws-persistence-verify.yml
+  pull_request:
+    branches:
+      - poc/free-work-replacement
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: write
