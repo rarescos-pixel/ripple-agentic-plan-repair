@@ -15,6 +15,7 @@ type Step = {
 
 type Request = {
   url: string;
+  urlContains?: string;
   waitUntil?: "load" | "domcontentloaded" | "networkidle" | "commit";
   timeoutMs?: number;
   sensitive?: boolean;
@@ -130,9 +131,13 @@ defineFn(
         stepResults.push(item);
       }
 
+      const finalUrl = page.url();
       result.ok = true;
+      if (request.urlContains) {
+        result.authenticated = finalUrl.includes(request.urlContains);
+      }
       if (canReturnObserved) {
-        result.finalUrl = page.url();
+        result.finalUrl = finalUrl;
         result.title = await page.title();
       }
       return result;
