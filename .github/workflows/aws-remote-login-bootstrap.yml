@@ -104,3 +104,5 @@ jobs:
           echo "✅ GitHub OIDC ready for Ripple." >> "$GITHUB_STEP_SUMMARY"
           echo "Role: $ROLE_ARN" >> "$GITHUB_STEP_SUMMARY"
           gh issue comment 31 --repo "$GITHUB_REPOSITORY" --body "OIDC_READY=true\nGITHUB_ROLE_ARN=$ROLE_ARN"
+
+# mobile-form-fix retrigger 2026-09-05
