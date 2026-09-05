@@ -18,6 +18,7 @@ from starlette.routing import Route
 BROKER_TOKEN = os.getenv("BROKER_TOKEN", "").strip()
 LIVE_TOKEN = os.getenv("LIVE_TOKEN", "").strip()
 PROFILE_DIR = os.getenv("BROWSER_PROFILE_DIR", "/data/chromium-profile").strip() or "/data/chromium-profile"
+VERIFY_STATUS_FILE = os.getenv("AWS_VERIFY_STATUS_FILE", "/data/aws_verify.json").strip() or "/data/aws_verify.json"
 VIEWPORT_WIDTH = 1440
 VIEWPORT_HEIGHT = 900
 
@@ -150,6 +151,19 @@ async def browser_shutdown() -> None:
 
 async def health(_: Request) -> JSONResponse:
     ready = CONTEXT is not None and BROWSER_ERROR is None
+    verify_status = None
+    try:
+        if os.path.exists(VERIFY_STATUS_FILE):
+            with open(VERIFY_STATUS_FILE, "r", encoding="utf-8") as handle:
+                raw = json.load(handle)
+            if isinstance(raw, dict):
+                allowed = {
+                    "ok", "signedIn", "cloudShellReached", "hostClass",
+                    "pathClass", "httpStatus", "verifiedAt", "errorType"
+                }
+                verify_status = {k: raw.get(k) for k in allowed if k in raw}
+    except Exception:
+        verify_status = {"ok": False, "errorType": "StatusReadError"}
     return _no_store_json(
         {
             "ok": True,
@@ -159,6 +173,7 @@ async def health(_: Request) -> JSONResponse:
             "liveHandoffConfigured": bool(LIVE_TOKEN),
             "viewport": [VIEWPORT_WIDTH, VIEWPORT_HEIGHT],
             "browserError": None if ready else BROWSER_ERROR,
+            "awsAuthVerify": verify_status,
         }
     )
 

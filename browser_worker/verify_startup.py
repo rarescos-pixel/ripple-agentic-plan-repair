@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+from datetime import datetime, timezone
 from urllib.parse import urlparse
 
 from playwright.async_api import async_playwright
@@ -10,6 +11,7 @@ from playwright.async_api import async_playwright
 PROFILE_DIR = os.getenv("BROWSER_PROFILE_DIR", "/data/chromium-profile").strip() or "/data/chromium-profile"
 VERIFY_ENABLED = os.getenv("AWS_VERIFY_ON_START", "").strip() == "1"
 TARGET = "https://console.aws.amazon.com/cloudshell/home?region=eu-central-1"
+STATUS_FILE = os.getenv("AWS_VERIFY_STATUS_FILE", "/data/aws_verify.json").strip() or "/data/aws_verify.json"
 
 
 def classify_url(url: str) -> dict[str, object]:
@@ -72,7 +74,21 @@ async def main() -> None:
             except Exception:
                 pass
 
-    print("AWS_AUTH_VERIFY " + json.dumps(outcome, sort_keys=True), flush=True)
+    outcome["verifiedAt"] = datetime.now(timezone.utc).isoformat()
+    public = {
+        key: outcome.get(key)
+        for key in (
+            "ok", "signedIn", "cloudShellReached", "hostClass",
+            "pathClass", "httpStatus", "verifiedAt", "errorType"
+        )
+        if key in outcome
+    }
+    try:
+        with open(STATUS_FILE, "w", encoding="utf-8") as handle:
+            json.dump(public, handle, sort_keys=True)
+    except Exception:
+        pass
+    print("AWS_AUTH_VERIFY " + json.dumps(public, sort_keys=True), flush=True)
 
 
 if __name__ == "__main__":
