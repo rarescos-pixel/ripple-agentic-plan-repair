@@ -2,11 +2,13 @@
 
 The video must lead with customer value, not architecture. Do not show internal hashes, test matrices or AWS diagrams before the judge understands the product.
 
-If an actual Alexa+ client is not available at recording time, label the shown web/Repair Card surface clearly as the **Alexa+ simulated experience backed by the real public MCP server**. Never imply an official Alexa session that did not happen.
+The Sep 3 Amazon build-session guidance strongly favors a **customer talking to an agent**, a working web Alexa+ simulation connected to the real MCP server, and useful in-place feedback such as a rich card. Treat that as the default demo shape.
 
-## 0:00–0:20 — The whole product in one disruption
+If an actual Alexa+ client is not available at recording time, label the shown web/Repair Card surface clearly as the **Alexa+ simulated experience backed by the real public MCP server**. This is an explicitly permitted submission path; do not waste demo time apologizing for it or imply an official Alexa session that did not happen.
 
-Show the user speaking / simulated Alexa+ prompt:
+## 0:00–0:20 — Customer → agent → consequence repair
+
+Show the customer speaking / simulated Alexa+ prompt:
 
 > “Our flight home was cancelled. We’ll land tomorrow at six.”
 
@@ -16,7 +18,9 @@ Immediately show the money-first Repair Card:
 
 Voiceover:
 
-> “Plans rarely break one thing. Ripple repairs the consequences, not just the calendar.”
+> “Plans rarely break one thing. Ripple repairs the consequences — without making you open five apps or sites.”
+
+This first shot must visibly look like a customer using an agent, not a developer testing an endpoint.
 
 ## 0:20–0:50 — Exact approval → visible outcome
 
@@ -29,6 +33,8 @@ Voiceover:
 > “One spoken change becomes one bounded repair plan. Nothing is written before approval. The approval applies only to this exact cost, scope and notification set.”
 
 Do **not** lead with snapshot hashes. They can appear briefly in technical evidence later if needed.
+
+The visual decision surface should remain the real display-only MCP App Repair Card. Do not add a second direct-UI approval authority merely to make the demo more clickable.
 
 ## 0:50–1:08 — Replay safety
 
@@ -68,21 +74,23 @@ Voiceover:
 
 Show one failure state for only a few seconds: ambiguous provider or expired repair window stays unresolved instead of being fabricated as success.
 
-## 1:52–2:12 — Alexa+ is real infrastructure, not a mock API
+## 1:52–2:12 — Why this is a real Alexa+ MCP build
 
-Show the live public MCP URL / inspector or evidence surface and the Repair Card MCP App.
+Show the simulated Alexa+ surface and, briefly, the live public MCP evidence / Repair Card resource.
 
-On screen, keep only the judge-relevant proof:
+On screen, keep only judge-relevant proof:
 
-- MCP 2025-11-25 / Streamable HTTP
+- real public MCP 2025-11-25 / Streamable HTTP
 - OAuth + PKCE
-- MCP App Repair Card
+- real MCP App Repair Card
 - remote authenticated smoke: PASS
 - store-media gate: PASS
 
 Voiceover:
 
-> “The public MCP server is live. OAuth, tool discovery, exact approval, execution and replay were exercised from a separate remote container. The Repair Card is a real MCP App resource, not a screenshot.”
+> “The conversation is backed by a real public MCP server. OAuth, tool discovery, exact approval, execution and replay were exercised from a separate remote container. The Repair Card is a real MCP App resource, not a screenshot.”
+
+Do not make Local Inspector or certification footage mandatory. If official Alexa+ Inspector/on-device access works cleanly, one short shot can replace part of this proof section; otherwise the simulated Alexa+ path remains the primary demo.
 
 ## 2:12–2:30 — AWS structural proof
 
@@ -103,17 +111,19 @@ If AWS LIVE has **not** passed, omit this section entirely rather than showing a
 
 ## 2:30–2:40 — Close
 
-Return to the Repair Card and the $74 saved outcome.
+Return to the customer-facing Repair Card and the $74 saved outcome.
 
-> “One thing changed. Five commitments broke. Ripple repaired the cascade safely. Tell Alexa one thing that changed. Ripple fixes what breaks downstream.”
+> “One thing changed. Five commitments broke. Ripple repaired the cascade safely — without five separate apps. Tell Alexa one thing that changed. Ripple fixes what breaks downstream.”
 
 ## Recording rules
 
 - Keep the final cut under **3:00**; target under **2:45**.
 - First value proposition must land within **20 seconds**.
+- First minute must primarily show **customer → agent → rich card → approval → outcome**.
 - No terminal scrolling as the primary demo.
 - No long dependency-graph explanation.
 - Do not claim real airline/ride/reservation/delivery/care transactions: those adapters are deterministic simulations.
 - Do not claim actual Alexa+ production-client use unless it is recorded from an exercised official client/onboarding path.
+- Do not imply that official Alexa+ client access is required for the track; a simulated Alexa+ experience is explicitly permitted.
 - Do not claim AWS live until the real AWS gate and Railway cutover pass.
 - Prefer large numbers and human-readable commitment names over implementation identifiers.
