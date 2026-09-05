@@ -1,9 +1,10 @@
 """Independent public-endpoint proof for Ripple's structural AWS runtime.
 
 Run only after the Railway service has been cut over to DynamoDB + Bedrock +
-CloudWatch. The script proves Bedrock normalization from the returned ChangeEvent
-and DynamoDB durability by destroying the first MCP session and requiring a
-fresh session to deduplicate the exact same five provider writes.
+CloudWatch. The script proves the public service advertises the structural AWS
+composition without exposing resource identifiers, Bedrock normalization from
+the returned ChangeEvent, and DynamoDB durability by destroying the first MCP
+session and requiring a fresh session to deduplicate the same provider writes.
 """
 from __future__ import annotations
 
@@ -96,6 +97,10 @@ def main() -> None:
         health.raise_for_status()
         ready = client.get(f"{BASE_URL}/readyz")
         ready.raise_for_status()
+        readiness = ready.json()
+        assert readiness["structural_aws_runtime"] is True, readiness
+        assert readiness["runtime_mode"] == "aws-structural", readiness
+        assert readiness["aws_components"] == ["dynamodb", "bedrock", "cloudwatch"], readiness
 
         service_access = service_token(client)
         user_access = user_token(client)
@@ -125,6 +130,7 @@ def main() -> None:
         close_session(client, service_access, second_sid)
 
         print("Ripple AWS runtime smoke: PASS")
+        print("structural AWS readiness: DynamoDB + Bedrock + CloudWatch")
         print("Bedrock normalization: PASS")
         print("fresh-session durable replay: 5/5 deduplicated, 0 provider writes")
         print("base:", BASE_URL)
