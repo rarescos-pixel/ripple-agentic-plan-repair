@@ -28,6 +28,7 @@ def main() -> int:
     submission = read("docs/SUBMISSION_DRAFT.md")
     video = read("docs/VIDEO_SCRIPT.md")
     rubric = read("docs/RUBRIC_MAP.md")
+    master = read("docs/MASTER.md")
 
     for needle in (
         "Tell Alexa one thing that changed. Ripple fixes what breaks downstream.",
@@ -103,6 +104,21 @@ def main() -> int:
         "## Bonus — friction log",
     ):
         require(rubric, needle, "RUBRIC_MAP", errors)
+
+    for needle in (
+        "# Ripple — MASTER competition state",
+        "$5,180",
+        "AWS-READY, NOT AWS-LIVE VERIFIED",
+        "## Submission lock",
+    ):
+        require(master, needle, "MASTER", errors)
+    for needle in (
+        "# Ripple — MASTER v1.2",
+        "43/43 tests",
+        "DynamoDB/Lambda/DynamoDB/CloudWatch",
+        "Lambda deterministic boundary",
+    ):
+        forbid(master, needle, "MASTER", errors)
 
     if errors:
         print("Ripple submission surface gate: FAIL")
