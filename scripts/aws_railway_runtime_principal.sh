@@ -71,16 +71,16 @@ trap rollback EXIT
 umask 077
 mkdir -p "$(dirname "$CREDENTIAL_FILE")"
 
-# Feed the one-time secret JSON over stdin rather than exporting it into the
-# child-process environment. All command-line arguments below are non-secret.
-python3 - "$CREDENTIAL_FILE" "$AWS_REGION" "$TABLE" "$PROFILE_ARN" "$LOG_GROUP" "$LOG_STREAM" <<PY
+# Pipe the one-time credential JSON to the writer: it never appears in argv,
+# exported environment variables, stdout, or repository content.
+printf '%s' "$KEY_JSON" | python3 -c '
 import json
 import pathlib
 import sys
 
 out = pathlib.Path(sys.argv[1]).expanduser()
 region, table, profile_arn, log_group, log_stream = sys.argv[2:]
-key = json.loads('''$KEY_JSON''')["AccessKey"]
+key = json.load(sys.stdin)["AccessKey"]
 values = {
     "AWS_ACCESS_KEY_ID": key["AccessKeyId"],
     "AWS_SECRET_ACCESS_KEY": key["SecretAccessKey"],
@@ -96,7 +96,7 @@ values = {
 }
 out.write_text("".join(f"{name}={value}\n" for name, value in values.items()), encoding="utf-8")
 out.chmod(0o600)
-PY
+' "$CREDENTIAL_FILE" "$AWS_REGION" "$TABLE" "$PROFILE_ARN" "$LOG_GROUP" "$LOG_STREAM"
 
 KEY_SUFFIX="${ACCESS_KEY_ID: -4}"
 unset KEY_JSON
