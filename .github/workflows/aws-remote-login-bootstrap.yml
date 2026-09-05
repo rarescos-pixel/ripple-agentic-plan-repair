@@ -1,0 +1,102 @@
+name: AWS Remote Login Bootstrap
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - poc/free-work-replacement
+    paths:
+      - 'aws_bootstrap/**'
+      - '.github/workflows/aws-remote-login-bootstrap.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install latest AWS CLI v2
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o /tmp/awscliv2.zip
+          unzip -q /tmp/awscliv2.zip -d /tmp
+          sudo /tmp/aws/install --update
+          aws --version
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install bootstrap dependencies
+        shell: bash
+        run: pip install --disable-pip-version-check -r aws_bootstrap/requirements.txt
+
+      - name: Install Cloudflare tunnel client
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /tmp/cloudflared
+          chmod +x /tmp/cloudflared
+          /tmp/cloudflared --version
+
+      - name: Run temporary remote-login bridge
+        shell: bash
+        env:
+          AWS_REGION: eu-central-1
+        run: |
+          set -euo pipefail
+          cd aws_bootstrap
+          uvicorn app:app --host 127.0.0.1 --port 8000 --no-access-log --log-level warning >/tmp/ripple-aws-bootstrap.log 2>&1 &
+          APP_PID=$!
+          /tmp/cloudflared tunnel --url http://127.0.0.1:8000 --no-autoupdate >/tmp/ripple-cloudflared.log 2>&1 &
+          CF_PID=$!
+          cleanup() { kill "$CF_PID" "$APP_PID" 2>/dev/null || true; }
+          trap cleanup EXIT
+
+          URL=""
+          for _ in $(seq 1 60); do
+            URL=$(grep -Eo 'https://[-a-z0-9]+\.trycloudflare\.com' /tmp/ripple-cloudflared.log | head -n1 || true)
+            if [ -n "$URL" ]; then break; fi
+            sleep 1
+          done
+          if [ -z "$URL" ]; then
+            echo 'Cloudflare quick tunnel did not become ready.' >&2
+            sed -n '1,80p' /tmp/ripple-cloudflared.log >&2 || true
+            exit 1
+          fi
+
+          echo "### Ripple AWS bootstrap" >> "$GITHUB_STEP_SUMMARY"
+          echo "Open: $URL" >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice title=Ripple AWS bootstrap::$URL"
+          echo "BOOTSTRAP_URL=$URL"
+
+          FINAL_PHASE=""
+          for _ in $(seq 1 900); do
+            STATUS=$(curl -fsS http://127.0.0.1:8000/status || true)
+            PHASE=$(python -c 'import json,sys; print(json.loads(sys.stdin.read() or "{}").get("phase", ""))' <<<"$STATUS" 2>/dev/null || true)
+            if [ "$PHASE" = "done" ] || [ "$PHASE" = "error" ]; then
+              FINAL_PHASE="$PHASE"
+              break
+            fi
+            sleep 2
+          done
+
+          if [ "$FINAL_PHASE" != "done" ]; then
+            echo "Bootstrap did not complete successfully (phase=${FINAL_PHASE:-timeout})." >&2
+            curl -fsS http://127.0.0.1:8000/status >&2 || true
+            exit 1
+          fi
+
+          ACCOUNT=$(aws sts get-caller-identity --profile ripple-bootstrap --region eu-central-1 --query Account --output text)
+          ROLE_ARN="arn:aws:iam::${ACCOUNT}:role/RippleGitHubOidcRole"
+          echo "OIDC_READY=true"
+          echo "GITHUB_ROLE_ARN=$ROLE_ARN"
+          echo "✅ GitHub OIDC ready for Ripple." >> "$GITHUB_STEP_SUMMARY"
+          echo "Role: $ROLE_ARN" >> "$GITHUB_STEP_SUMMARY"
