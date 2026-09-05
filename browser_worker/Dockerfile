@@ -28,5 +28,4 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=20s --retries=3 \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:' + __import__('os').getenv('PORT','8000') + '/healthz', timeout=2).read()"
 
-# Temporary source-sync marker; removed after GitHub-to-Railway autodeploy verification.
 CMD ["sh", "-c", "python verify_startup.py; exec uvicorn app:app --host 0.0.0.0 --port ${PORT:-8000} --no-access-log --log-level warning"]
