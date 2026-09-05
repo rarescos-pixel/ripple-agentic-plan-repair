@@ -47,7 +47,9 @@ def test_runtime_bundle_is_private_complete_and_never_printed():
     assert '"RIPPLE_REQUIRE_AWS_RUNTIME": "true"' in s
     assert 'cat "$CREDENTIAL_FILE"' not in s
     assert 'echo "$KEY_JSON"' not in s
+    assert "export KEY_JSON" not in s
     assert 'print(key["SecretAccessKey"])' not in s
+    assert "printf '%s' \"$KEY_JSON\" | python3" in s
 
 
 def test_failed_bundle_creation_revokes_new_key():
