@@ -55,3 +55,16 @@ Severity scale: **Critical** blocks the project; **High** blocks a major judged 
 **Actionable suggestion:** Add a concise “external PaaS workload” guide comparing OIDC federation, Roles Anywhere and a bounded temporary IAM-user fallback, including threat model, rotation/teardown steps and copyable least-privilege examples for Bedrock + DynamoDB + CloudWatch.
 
 **Evidence:** `docs/AWS_RUNTIME_CREDENTIALS.md`, `scripts/aws_railway_runtime_principal.sh`, `scripts/aws_teardown.sh`.
+
+## F5 — Local Inspector documentation uses a JSON-only `Accept` request shape
+
+**Date:** 2026-09-05  
+**Task attempted:** Preflight Ripple against the request sequence published for the Alexa+ Add-on Local Inspector before spending time on partner-only onboarding.  
+**Steps taken:** Compared the production MCP request validation with the current Local Inspector guide, reproduced the documented initialize/initialized/tool/resource sequence in an integration test, and built a standalone remote probe that uses the same request shape.  
+**Expected:** The documented Inspector request headers would match the strict Streamable HTTP request shape already accepted by Ripple (`Accept: application/json, text/event-stream`).  
+**Actual:** The Local Inspector guide's example sends `Accept: application/json`. Ripple's strict server therefore would have returned HTTP 406 before the Inspector reached authentication, tool discovery or the Repair Card. The guide also shows an older client protocol version in the initialization example, so the server must negotiate its supported `2025-11-25` version cleanly.  
+**Severity:** **High** — a standards-focused MCP server could pass its own protocol suite and still fail the documented Alexa Inspector sequence at the first POST.  
+**Workaround:** Ripple now accepts both the normal dual `Accept` form and JSON-only requests because the server emits JSON responses; SSE-only requests remain rejected. A dedicated test drives the documented older client-version request and proves negotiation to `2025-11-25`, `notifications/initialized`, tool listing and `ui://` resource discovery. A remote probe is included for the deployed service.  
+**Actionable suggestion:** Align the Local Inspector request examples with the required MCP transport contract, or explicitly document that Inspector intentionally sends JSON-only `Accept` headers and that servers should tolerate that form. Also state clearly why the Inspector example advertises an older client protocol while Alexa+ submissions require MCP `2025-11-25` or newer.
+
+**Evidence:** `tests/test_alexa_local_inspector_compat.py`, `scripts/alexa_local_inspector_probe.py`.
