@@ -54,12 +54,7 @@ if [[ -n "${ACTIVE_KEYS//[[:space:]]/}" ]]; then
 fi
 
 KEY_JSON="$(aws iam create-access-key --user-name "$IAM_USER" --output json)"
-ACCESS_KEY_ID="$(python3 -c 'import json,os; print(json.loads(os.environ["KEY_JSON"])["AccessKey"]["AccessKeyId"])' KEY_JSON="$KEY_JSON" 2>/dev/null || true)"
-# The inline environment assignment above is not portable across every shell/python invocation;
-# derive the ID again through stdin if needed without printing the secret.
-if [[ -z "$ACCESS_KEY_ID" ]]; then
-  ACCESS_KEY_ID="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["AccessKey"]["AccessKeyId"])' <<<"$KEY_JSON")"
-fi
+ACCESS_KEY_ID="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["AccessKey"]["AccessKeyId"])' <<<"$KEY_JSON")"
 
 rollback() {
   local status=$?
