@@ -41,16 +41,97 @@ if ! aws iam get-user --user-name "$IAM_USER" >/dev/null 2>&1; then
     --tags Key=Project,Value=Ripple Key=Environment,Value=demo Key=Purpose,Value=RailwayRuntime >/dev/null
 fi
 
+# This principal is dedicated to Ripple. Remove any stale attached policy before
+# attaching the current stack policy so its effective permissions cannot grow
+# across a stack recreation.
+ATTACHED_POLICIES="$(aws iam list-attached-user-policies \
+  --user-name "$IAM_USER" \
+  --query 'AttachedPolicies[].PolicyArn' \
+  --output text)"
+for attached in $ATTACHED_POLICIES; do
+  if [[ "$attached" != "$POLICY_ARN" ]]; then
+    aws iam detach-user-policy --user-name "$IAM_USER" --policy-arn "$attached"
+  fi
+done
 aws iam attach-user-policy --user-name "$IAM_USER" --policy-arn "$POLICY_ARN"
 
 ACTIVE_KEYS="$(aws iam list-access-keys \
   --user-name "$IAM_USER" \
   --query 'AccessKeyMetadata[?Status==`Active`].AccessKeyId' \
   --output text)"
-if [[ -n "${ACTIVE_KEYS//[[:space:]]/}" ]]; then
-  echo "Refusing to create another long-lived key: $IAM_USER already has an active access key." >&2
-  echo "Rotate or remove the existing key deliberately before rerunning this bootstrap." >&2
+read -r -a ACTIVE_KEY_ARRAY <<<"$ACTIVE_KEYS"
+
+if (( ${#ACTIVE_KEY_ARRAY[@]} > 1 )); then
+  echo "Refusing ambiguous credential state: $IAM_USER has more than one active access key." >&2
   exit 4
+fi
+
+if (( ${#ACTIVE_KEY_ARRAY[@]} == 1 )); then
+  ACCESS_KEY_ID="${ACTIVE_KEY_ARRAY[0]}"
+  if [[ ! -f "$CREDENTIAL_FILE" ]]; then
+    echo "Refusing to rotate implicitly: an active key exists but the private credential bundle is missing." >&2
+    exit 4
+  fi
+  BUNDLE_ACCESS_KEY_ID="$(python3 -c '
+import pathlib, sys
+values = {}
+for line in pathlib.Path(sys.argv[1]).read_text(encoding="utf-8").splitlines():
+    if "=" in line:
+        key, value = line.split("=", 1)
+        values[key] = value
+print(values.get("AWS_ACCESS_KEY_ID", ""))
+' "$CREDENTIAL_FILE")"
+  if [[ "$BUNDLE_ACCESS_KEY_ID" != "$ACCESS_KEY_ID" ]]; then
+    echo "Refusing to rotate implicitly: active AWS key does not match the private credential bundle." >&2
+    exit 4
+  fi
+
+  # Reconcile non-secret runtime outputs after a stack update/recreation while
+  # preserving the existing private key material entirely inside the 0600 file.
+  python3 -c '
+import pathlib, sys
+out = pathlib.Path(sys.argv[1]).expanduser()
+region, table, profile_arn, log_group, log_stream = sys.argv[2:]
+values = {}
+for line in out.read_text(encoding="utf-8").splitlines():
+    if "=" in line:
+        key, value = line.split("=", 1)
+        values[key] = value
+if not values.get("AWS_ACCESS_KEY_ID") or not values.get("AWS_SECRET_ACCESS_KEY"):
+    raise SystemExit("Credential bundle is incomplete")
+values.update({
+    "AWS_REGION": region,
+    "RIPPLE_STATE_BACKEND": "dynamodb",
+    "RIPPLE_DYNAMODB_TABLE": table,
+    "RIPPLE_CHANGE_INTERPRETER": "bedrock",
+    "RIPPLE_BEDROCK_MODEL_ID": profile_arn,
+    "RIPPLE_TRACE_BACKEND": "cloudwatch",
+    "RIPPLE_CLOUDWATCH_LOG_GROUP": log_group,
+    "RIPPLE_CLOUDWATCH_LOG_STREAM": log_stream,
+    "RIPPLE_REQUIRE_AWS_RUNTIME": "true",
+})
+order = [
+    "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION",
+    "RIPPLE_STATE_BACKEND", "RIPPLE_DYNAMODB_TABLE",
+    "RIPPLE_CHANGE_INTERPRETER", "RIPPLE_BEDROCK_MODEL_ID",
+    "RIPPLE_TRACE_BACKEND", "RIPPLE_CLOUDWATCH_LOG_GROUP",
+    "RIPPLE_CLOUDWATCH_LOG_STREAM", "RIPPLE_REQUIRE_AWS_RUNTIME",
+]
+out.write_text("".join(f"{name}={values[name]}\n" for name in order), encoding="utf-8")
+out.chmod(0o600)
+' "$CREDENTIAL_FILE" "$AWS_REGION" "$TABLE" "$PROFILE_ARN" "$LOG_GROUP" "$LOG_STREAM"
+
+  cat <<EOF
+RIPPLE_AWS_RAILWAY_PRINCIPAL_BEGIN
+status=REUSED
+iam_user=$IAM_USER
+runtime_policy_arn=$POLICY_ARN
+access_key_suffix=${ACCESS_KEY_ID: -4}
+credential_bundle=$CREDENTIAL_FILE
+credential_bundle_mode=0600
+RIPPLE_AWS_RAILWAY_PRINCIPAL_END
+EOF
+  exit 0
 fi
 
 KEY_JSON="$(aws iam create-access-key --user-name "$IAM_USER" --output json)"
