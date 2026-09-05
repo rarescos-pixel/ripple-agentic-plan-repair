@@ -1,0 +1,22 @@
+name: Railway health snapshot
+
+on:
+  pull_request:
+    branches:
+      - poc/free-work-replacement
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Read sanitized worker health
+        shell: bash
+        run: |
+          set -euo pipefail
+          body="$(curl -fsS --max-time 15 https://browser-worker-free-production.up.railway.app/healthz)"
+          echo "$body" | jq '{ok,browserReady,profilePersistenceConfigured,awsAuthVerify}'
