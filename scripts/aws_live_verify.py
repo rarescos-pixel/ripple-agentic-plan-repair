@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import time
+import uuid
 from pathlib import Path
 
 import boto3
@@ -14,6 +15,28 @@ from ripple.evaluation.bedrock_benchmark import load_cases
 from ripple.observability.cloudwatch import CloudWatchTraceSink
 from ripple.orchestration.bedrock_interpreter import BedrockChangeInterpreter
 from ripple.persistence.store import DynamoDbStateStore
+
+
+def wait_for_trace(logs, *, log_group: str, log_stream: str, correlation_id: str, timeout_seconds: float = 12.0) -> str:
+    """Read back one just-written CloudWatch event with a bounded consistency wait."""
+    deadline = time.monotonic() + timeout_seconds
+    last_error: Exception | None = None
+    while time.monotonic() < deadline:
+        try:
+            events = logs.get_log_events(
+                logGroupName=log_group,
+                logStreamName=log_stream,
+                startFromHead=False,
+                limit=100,
+            ).get("events", [])
+            matching = [e.get("message", "") for e in events if correlation_id in e.get("message", "")]
+            if matching:
+                return matching[-1]
+        except Exception as exc:  # bounded retry only; final failure remains visible
+            last_error = exc
+        time.sleep(0.75)
+    suffix = f" Last read error: {last_error}" if last_error else ""
+    raise RuntimeError(f"CloudWatch verification event was not readable within {timeout_seconds:.0f}s.{suffix}")
 
 
 def main() -> None:
@@ -31,9 +54,12 @@ def main() -> None:
     identity = sts.get_caller_identity()
     account_id = identity["Account"]
 
+    # A random per-run suffix prevents two rapid or concurrent live verifiers
+    # from accidentally reusing the same approval/idempotency evidence keys.
+    stamp = f"{int(time.time())}-{uuid.uuid4().hex[:10]}"
+
     # 1) DynamoDB: real durable approval + atomic authoritative receipt semantics.
     store = DynamoDbStateStore(args.table, region_name=args.region)
-    stamp = str(int(time.time()))
     plan_id = f"live-verify-{stamp}"
     snapshot = f"live-snapshot-{stamp}"
     approval = Approval(
@@ -83,17 +109,12 @@ def main() -> None:
         correlation_id=correlation_id,
         payload={"safe": "ok", "password": secret_probe, "access_token": secret_probe},
     )
-    time.sleep(1.0)
-    events = logs.get_log_events(
-        logGroupName=args.log_group,
-        logStreamName=args.log_stream,
-        startFromHead=False,
-        limit=50,
-    ).get("events", [])
-    matching = [e.get("message", "") for e in events if correlation_id in e.get("message", "")]
-    if not matching:
-        raise RuntimeError("CloudWatch verification event was not readable after write")
-    stored_message = matching[-1]
+    stored_message = wait_for_trace(
+        logs,
+        log_group=args.log_group,
+        log_stream=args.log_stream,
+        correlation_id=correlation_id,
+    )
     if secret_probe in stored_message or "[REDACTED]" not in stored_message:
         raise RuntimeError("CloudWatch secret-redaction invariant failed")
 
@@ -138,6 +159,7 @@ def main() -> None:
             "trace_written": True,
             "secret_redaction_verified": True,
             "correlation_id": correlation_id,
+            "bounded_readback_retry": True,
         },
         "bedrock": {
             "application_profile_arn": args.profile_arn,
