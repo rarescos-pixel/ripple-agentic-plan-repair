@@ -27,6 +27,7 @@ UTTERANCE = os.getenv(
     "RIPPLE_SMOKE_UTTERANCE",
     "Our flight home was cancelled. We'll land tomorrow at 18:00.",
 )
+EXPECTED_SOURCE_SHA = os.getenv("RIPPLE_EXPECTED_SOURCE_SHA", "").strip().lower()
 
 
 def open_session(client: httpx.Client, service_access: str, user_access: str, req_id: int):
@@ -101,6 +102,11 @@ def main() -> None:
         assert readiness["structural_aws_runtime"] is True, readiness
         assert readiness["runtime_mode"] == "aws-structural", readiness
         assert readiness["aws_components"] == ["dynamodb", "bedrock", "cloudwatch"], readiness
+        source_revision = readiness.get("source_revision")
+        if EXPECTED_SOURCE_SHA:
+            assert source_revision == EXPECTED_SOURCE_SHA, (
+                f"Public runtime source drift: expected {EXPECTED_SOURCE_SHA}, got {source_revision}"
+            )
 
         service_access = service_token(client)
         user_access = user_token(client)
@@ -134,6 +140,7 @@ def main() -> None:
         print("Bedrock normalization: PASS")
         print("fresh-session durable replay: 5/5 deduplicated, 0 provider writes")
         print("base:", BASE_URL)
+        print("source revision:", source_revision or "unavailable")
         print("change id:", change["id"])
         print("trace correlation:", change["correlation_id"])
         print("net preserved:", first_preview["plan"]["net_direct_cash_preserved"])

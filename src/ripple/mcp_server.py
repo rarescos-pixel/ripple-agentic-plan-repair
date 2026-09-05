@@ -13,6 +13,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
+from ripple.aws.profile import validate_runtime_profile
 from ripple.aws.runtime import build_change_interpreter, build_trace_sink
 from ripple.domain.models import Approval
 from ripple.auth import (
@@ -431,10 +432,41 @@ async def healthz(request: Request) -> Response:
     return JSONResponse({"status": "ok", "service": SERVER_INFO["name"], "version": SERVER_INFO["version"], "protocol": PROTOCOL_VERSION})
 
 
+def _aws_component_names(profile) -> list[str]:
+    components: list[str] = []
+    if profile.state_backend == "dynamodb":
+        components.append("dynamodb")
+    if profile.change_interpreter == "bedrock":
+        components.append("bedrock")
+    if profile.trace_backend == "cloudwatch":
+        components.append("cloudwatch")
+    return components
+
+
+def _public_source_revision() -> str | None:
+    sha = os.getenv("RAILWAY_GIT_COMMIT_SHA", "").strip().lower()
+    if len(sha) == 40 and all(ch in "0123456789abcdef" for ch in sha):
+        return sha
+    return None
+
+
 async def readyz(request: Request) -> Response:
     try:
         c = load_auth_config()
-        return JSONResponse({"status": "ready", "resource": c.resource, "environment": c.environment})
+        profile = validate_runtime_profile()
+        structural = profile.full_aws_runtime
+        payload: Dict[str, Any] = {
+            "status": "ready",
+            "resource": c.resource,
+            "environment": c.environment,
+            "runtime_mode": "aws-structural" if structural else "non-aws",
+            "structural_aws_runtime": structural,
+            "aws_components": _aws_component_names(profile),
+        }
+        source_revision = _public_source_revision()
+        if source_revision:
+            payload["source_revision"] = source_revision
+        return JSONResponse(payload)
     except Exception as exc:
         return JSONResponse({"status": "not_ready", "error": str(exc)}, status_code=503)
 
