@@ -32,6 +32,30 @@ function timeoutFor(step: Step = { action: "" }, request: Request): number {
   return Number.isFinite(raw) ? Math.max(1, Math.min(raw, 120_000)) : 30_000;
 }
 
+function classifyAws(finalUrl: string) {
+  try {
+    const u = new URL(finalUrl);
+    const host = u.hostname.toLowerCase();
+    const path = u.pathname.toLowerCase();
+    const signin = host === "signin.aws.amazon.com" || host.endsWith(".signin.aws.amazon.com");
+    const consoleHost = host === "console.aws.amazon.com" || host.endsWith(".console.aws.amazon.com");
+    const cloudShellReached = consoleHost && path.includes("/cloudshell");
+    return {
+      signedIn: consoleHost && !signin,
+      cloudShellReached,
+      hostClass: signin ? "signin" : consoleHost ? "console" : "other",
+      pathClass: cloudShellReached ? "cloudshell" : consoleHost ? "console-other" : "other",
+    };
+  } catch {
+    return {
+      signedIn: false,
+      cloudShellReached: false,
+      hostClass: "invalid",
+      pathClass: "invalid",
+    };
+  }
+}
+
 defineFn(
   "free-work-persistent-readonly",
   async (context, rawParams) => {
@@ -133,9 +157,8 @@ defineFn(
 
       const finalUrl = page.url();
       result.ok = true;
-      if (request.urlContains) {
-        result.authenticated = finalUrl.includes(request.urlContains);
-      }
+      if (request.urlContains) result.authenticated = finalUrl.includes(request.urlContains);
+      if (parsed.hostname.includes("aws.amazon.com")) result.awsAuthVerify = classifyAws(finalUrl);
       if (canReturnObserved) {
         result.finalUrl = finalUrl;
         result.title = await page.title();
