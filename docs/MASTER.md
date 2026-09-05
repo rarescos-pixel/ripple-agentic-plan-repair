@@ -1,5 +1,13 @@
 # Ripple — MASTER competition state
 
+## Competition targets — LOCKED
+
+- **Primary Track:** Alexa+
+- **Mini Challenge:** AWS Builder, only after structural AWS LIVE evidence passes
+- **Mini Challenge:** Open Source, using the new MIT-licensed Ripple repository created during the hackathon window
+
+Entering Open Source adds no product feature and does not alter the Alexa+ architecture. Required fields/evidence are frozen in `docs/OPEN_SOURCE_SUBMISSION.md`.
+
 ## Product lock
 
 **Tell Alexa one thing that changed. Ripple fixes what breaks downstream.**
@@ -61,6 +69,7 @@ Event Operations scenario:
 - Remote semantics: 5 impacts → 0 preview writes → 0 approval writes → 5 receipts / 5 unique writes → replay 5/5 deduplicated.
 - Money-first Repair Card is a real display-only MCP App resource.
 - Alexa+ package/media remote gate: PASS for 600×900 carousel, six icon dimensions, privacy/terms and canonical MCP endpoint.
+- The documented Alexa Local Inspector JSON-only `Accept` request shape is regression-tested; production remote proof is accepted only after deployment of the compatibility change.
 
 Evidence: `docs/ALEXA_REMOTE_EVIDENCE.md`, `docs/REMOTE_SMOKE_REPORT.md`, `docs/MCP_APP_EVIDENCE.md`.
 
@@ -88,6 +97,19 @@ Implemented and CI-validated:
 
 Do not claim AWS LIVE until one real source SHA proves Bedrock + DynamoDB + CloudWatch + Budget/IAM and the public Railway service passes fresh-session replay with zero duplicate provider writes.
 
+## Open Source boundary — ELIGIBLE / SUBMISSION-READY
+
+The repository was created on **2026-09-04**, inside the submission window that began **2026-08-31**, and is public with an MIT license.
+
+Open Source submission packet:
+
+- project repo: `https://github.com/rarescos-pixel/ripple-agentic-plan-repair`
+- GitHub user: `rarescos-pixel`
+- representative contribution URL: `https://github.com/rarescos-pixel/ripple-agentic-plan-repair/pull/22`
+- required what/how/why text: `docs/OPEN_SOURCE_SUBMISSION.md`
+
+No separate feature work is required merely to qualify. Any further open-source work must have independent engineering/judging value.
+
 ## Current limitations — explicit
 
 - airline, ride, reservation, delivery, pet-care and calendar provider adapters are deterministic simulators;
@@ -106,7 +128,7 @@ Do not lead with protocol details, dependency graphs, hashes, logs or AWS diagra
 
 Required submission-close sequence:
 
-1. README / rubric / friction / product-feedback coherence — gate in CI;
+1. README / rubric / friction / product-feedback / Open Source coherence — gate in CI;
 2. AWS LIVE evidence and Railway cutover;
 3. official Alexa+ onboarding/inspection if accessible, otherwise documented external constraint;
 4. final judge-first video under 3 minutes;

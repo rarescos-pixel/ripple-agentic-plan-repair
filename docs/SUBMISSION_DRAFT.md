@@ -9,6 +9,12 @@ Ripple
 ## One-sentence pitch
 Ripple is a money-aware consequence-repair layer for Alexa+: it turns one changed fact into a safe, economically optimized repair of every downstream commitment it actually affects.
 
+## Track selections
+
+- **Primary Track:** Alexa+
+- **Mini Challenge:** AWS Builder
+- **Mini Challenge:** Open Source
+
 ## The problem
 Plans rarely break one thing. A cancelled flight can invalidate a ride, dinner reservation, grocery delivery, pet-care window and tomorrow's meeting. The user must discover the cascade manually while already dealing with the original disruption.
 
@@ -102,6 +108,20 @@ Ripple keeps the public MCP host on Railway and uses AWS only where it is struct
 
 The IaC, adapters, benchmark harness, runtime cutover, least-privilege credential lifecycle and live verification scripts are implemented and CI-validated. **Current evidence status is AWS-ready, not AWS-live verified.** The final submission will claim live AWS use only after the real stack, Railway cutover and post-restart replay proof pass on one source SHA.
 
+## Open Source Mini Challenge
+
+Ripple is a **new MIT-licensed public project created during the hackathon submission window**.
+
+Required fields:
+
+- **Contribution URL:** `https://github.com/rarescos-pixel/ripple-agentic-plan-repair/pull/22`
+- **Project repository URL:** `https://github.com/rarescos-pixel/ripple-agentic-plan-repair`
+- **GitHub username:** `rarescos-pixel`
+
+What I did / how it works / why it matters is captured in `docs/OPEN_SOURCE_SUBMISSION.md`.
+
+The contribution is not a README-only change. The public project includes the complete MCP consequence-repair engine, exact-approval and replay-safety patterns, MCP App integration, OAuth interoperability, AWS infrastructure/lifecycle tooling, adversarial tests and reproducible remote probes. PR #22 is supplied as a representative concrete contribution because it turns a real Alexa Local Inspector interoperability mismatch into an integration test, bounded compatibility fix and reusable remote probe.
+
 ## Trust and disclosure
 Real running software: MCP transport, OAuth/PKCE, dependency analysis, economic optimization, approval boundary, execution ledger, receipts, replay suppression, MCP App and Alexa package/media surfaces.
 
@@ -110,7 +130,7 @@ Deterministic simulated integrations: airline, ride, reservation, delivery, pet-
 No actual Alexa+ production-client session is claimed until the official onboarding/inspection path is successfully exercised. No live Bedrock/DynamoDB/CloudWatch runtime is claimed until the AWS live gate passes.
 
 ## Product feedback / friction
-The project includes real friction-log entries covering Alexa-compatible OAuth refresh behavior, MCP App rendering contracts, add-on package/media validation and least-privilege AWS credentials for an external PaaS runtime. Each entry includes steps, expected vs actual behavior, severity, workaround and an actionable suggestion.
+The project includes real friction-log entries covering Alexa-compatible OAuth refresh behavior, MCP App rendering contracts, add-on package/media validation, least-privilege AWS credentials for an external PaaS runtime and Local Inspector request-shape interoperability. Each entry includes steps, expected vs actual behavior, severity, workaround and an actionable suggestion.
 
 ## Open source
-Public GitHub repository, MIT licensed. The project and its tests/integration patterns were created during the hackathon window.
+Public GitHub repository, MIT licensed. The repository was created on **2026-09-04**, after the hackathon submission period opened on **2026-08-31**. The project and its tests/integration patterns were created during the hackathon window.

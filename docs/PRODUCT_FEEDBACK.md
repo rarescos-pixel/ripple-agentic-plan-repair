@@ -21,15 +21,16 @@ The public MCP server exposes five tools: record a changed fact, preview a repai
 ### What needs work?
 
 - A complete Alexa+ OAuth example should include the **refresh-token exchange**, not only initial authorization. Our strict implementation initially expected the resource binding to be repeated, while the Alexa-compatible refresh path omitted `resource`. A wrong explicit resource still needs rejection. One normative transcript would remove ambiguity.
+- The current Local Inspector guide documents MCP POSTs with `Accept: application/json`, while a strict Streamable HTTP implementation commonly validates the dual JSON + SSE Accept form. The sample also advertises an older client protocol version before the server negotiates its required `2025-11-25` version. That difference is easy to miss and can produce an HTTP 406 before tool discovery even when the server passes its normal MCP conformance suite. The docs should either align the example with the transport contract or explicitly say that Inspector intentionally uses JSON-only Accept and expects the server to tolerate it.
 - The visual integration path spans base MCP, Alexa+ guidance and the MCP Apps extension. A single canonical sample should show tool metadata → `ui://` resource → `resources/read` → MIME profile → host lifecycle in one place.
 - Add-on packaging would benefit from an official preflight validator that checks the manifest and resolves every public media/privacy/terms URL, verifies required image sizes/content types and catches missing packaged resources before onboarding.
 - Access/onboarding boundaries should be stated prominently: what can every hackathon participant run locally, what requires an enabled Alexa+ partner/developer surface, and what evidence is acceptable when an official client surface is unavailable.
 
 ### How was onboarding from zero to hello world?
 
-Getting a basic self-hosted MCP endpoint running was straightforward. The expensive part was moving from “MCP tool calls work” to an Alexa-ready product surface: OAuth refresh interoperability, visual-resource binding, store/package assets, public media behavior and evidence that the deployed artifact actually contains what the manifest references.
+Getting a basic self-hosted MCP endpoint running was straightforward. The expensive part was moving from “MCP tool calls work” to an Alexa-ready product surface: OAuth refresh interoperability, Local Inspector request-shape compatibility, visual-resource binding, store/package assets, public media behavior and evidence that the deployed artifact actually contains what the manifest references.
 
-We solved that by building independent gates for protocol behavior, OAuth refresh, MCP App safety and store media rather than treating a successful deployment status as proof.
+We solved that by building independent gates for protocol behavior, the documented Inspector request shape, OAuth refresh, MCP App safety and store media rather than treating a successful deployment status as proof.
 
 ### Would you build with Alexa+ / this path again?
 
@@ -107,7 +108,7 @@ The AWS application code and IaC were straightforward to make testable. The larg
 
 ### 1. Alexa+ self-hosted MCP interoperability validator — **Important**
 
-A CLI/Inspector mode that validates OAuth discovery, authorization + refresh behavior, MCP protocol version, tool schemas, `ui://` resources, MCP App MIME/lifecycle, and public package assets in one run.
+A CLI/Inspector mode that validates OAuth discovery, authorization + refresh behavior, MCP protocol version, JSON/SSE Accept compatibility, tool schemas, `ui://` resources, MCP App MIME/lifecycle, and public package assets in one run.
 
 Why it matters: a service can be healthy at the HTTP/container level while still failing a specific Alexa onboarding contract.
 
