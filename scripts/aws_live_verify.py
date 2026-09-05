@@ -109,9 +109,19 @@ def main() -> None:
     if observed != case.expected:
         raise RuntimeError(f"Application Inference Profile normalization mismatch: {observed!r} != {case.expected!r}")
 
-    # 4) Budget exists. Budget APIs are account-scoped.
+    # 4) Budget exists and is an effective account-wide guard. User-defined tag
+    # filters require cost-allocation-tag activation and can take up to 24h to
+    # become usable on a new account, so the live safety budget intentionally
+    # has no CostFilters dependency.
     budgets = boto3.client("budgets", region_name="us-east-1")
     budget = budgets.describe_budget(AccountId=account_id, BudgetName=args.budget_name)["Budget"]
+    if budget.get("BudgetType") != "COST" or budget.get("TimeUnit") != "MONTHLY":
+        raise RuntimeError("AWS Budget is not the expected monthly COST guard")
+    if budget.get("CostFilters"):
+        raise RuntimeError("AWS Budget unexpectedly depends on cost filters/tag activation")
+    limit = budget.get("BudgetLimit") or {}
+    if limit.get("Unit") != "USD" or float(limit.get("Amount", 0)) <= 0:
+        raise RuntimeError("AWS Budget has no positive USD limit")
 
     result = {
         "status": "PASS",
@@ -137,7 +147,10 @@ def main() -> None:
         },
         "budget": {
             "name": budget.get("BudgetName"),
-            "limit": budget.get("BudgetLimit"),
+            "limit": limit,
+            "scope": "account-wide",
+            "cost_filters": budget.get("CostFilters") or {},
+            "tag_activation_dependency": False,
         },
     }
     print("RIPPLE_AWS_LIVE_VERIFY_BEGIN")
