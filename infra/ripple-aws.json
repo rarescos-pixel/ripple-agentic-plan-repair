@@ -1,6 +1,6 @@
 {
   "AWSTemplateFormatVersion": "2010-09-09",
-  "Description": "Ripple v1.5 AWS augmentation: durable state, Bedrock cost attribution, traces, least-privilege runtime policy, and tagged budget alerts.",
+  "Description": "Ripple v1.5 AWS augmentation: durable state, Bedrock cost attribution, traces, least-privilege runtime policy, and account-wide budget alerts.",
   "Parameters": {
     "EnvironmentName": {"Type": "String", "Default": "demo", "AllowedPattern": "[a-zA-Z0-9-]+"},
     "BudgetEmail": {"Type": "String", "Description": "Email address for AWS Budget alerts."},
@@ -110,9 +110,6 @@
           "BudgetType": "COST",
           "TimeUnit": "MONTHLY",
           "BudgetLimit": {"Amount": {"Ref": "MonthlyBudgetUSD"}, "Unit": "USD"},
-          "CostFilters": {
-            "TagKeyValue": [{"Fn::Sub": "user:Project$${ProjectTagValue}"}]
-          },
           "CostTypes": {
             "IncludeCredit": true,
             "IncludeDiscount": true,
