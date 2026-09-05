@@ -15,6 +15,7 @@ def collect() -> dict[str, Any]:
     resources = template["Resources"]
     cases = json.loads(CASES.read_text(encoding="utf-8"))
     statements = resources["RuntimePolicy"]["Properties"]["PolicyDocument"]["Statement"]
+    budget = resources["RippleBudget"]["Properties"]["Budget"]
     thresholds = [
         n["Notification"]["Threshold"]
         for n in resources["RippleBudget"]["Properties"]["NotificationsWithSubscribers"]
@@ -29,7 +30,8 @@ def collect() -> dict[str, Any]:
             for s in statements
         ),
         "cloudwatch_bounded_retention": resources["TraceLogGroup"]["Properties"]["RetentionInDays"] == 14,
-        "budget_project_tag_filter": "TagKeyValue" in resources["RippleBudget"]["Properties"]["Budget"]["CostFilters"],
+        "budget_account_wide_no_tag_activation_dependency": "CostFilters" not in budget,
+        "budget_monthly_cost_guard": budget.get("BudgetType") == "COST" and budget.get("TimeUnit") == "MONTHLY",
         "budget_thresholds": thresholds == [50, 80, 100],
         "normalizer_fixture_count": len(cases) >= 5,
     }
@@ -49,6 +51,8 @@ def render(evidence: dict[str, Any]) -> str:
     lines += [
         "",
         f"Bedrock normalization benchmark fixtures: **{evidence['fixture_count']}**",
+        "",
+        "The budget check intentionally requires an account-wide guard with no cost-allocation-tag activation dependency.",
         "",
         "This gate proves deployable configuration and local contracts only. It does not claim that an AWS stack has been created or that either Nova model has been invoked live.",
         "",
