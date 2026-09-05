@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  deployments: read
 
 jobs:
   snapshot:
@@ -33,3 +34,15 @@ jobs:
           echo "LIVE_TOKEN_AVAILABLE=$HAS_LIVE_TOKEN"
           echo "BROKER_TOKEN_AVAILABLE=$HAS_BROKER_TOKEN"
           echo "BROWSER_WORKER_TOKEN_AVAILABLE=$HAS_BROWSER_WORKER_TOKEN"
+
+      - name: Inspect GitHub deployment metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/deployments?ref=poc%2Ffree-work-replacement&per_page=20" \
+            | jq 'map({id,sha,ref,task,environment,created_at,creator:(.creator.login // null)})'
