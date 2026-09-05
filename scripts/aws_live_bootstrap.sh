@@ -101,6 +101,12 @@ python3 scripts/aws_live_verify.py \
   --profile-arn "$PROFILE_ARN" \
   --budget-name "ripple-demo-monthly" | tee "$WORKDIR/aws-live-verify.log"
 
+# Only after the AWS stack itself has passed live verification, prepare the
+# tightly-scoped external-runtime credential bundle. The secret is written to a
+# 0600 file in the authenticated CloudShell home directory and is never echoed.
+echo "Preparing least-privilege Railway runtime credential bundle..."
+bash scripts/aws_railway_runtime_principal.sh
+
 cat <<EOF
 
 RIPPLE_AWS_LIVE_HANDOFF_BEGIN
@@ -116,9 +122,10 @@ application_inference_profile_arn=$PROFILE_ARN
 runtime_policy_arn=$POLICY_ARN
 monthly_budget_usd=$MONTHLY_BUDGET_USD
 aws_account_suffix=${ACCOUNT_ID: -4}
+runtime_principal_prepared=true
 RIPPLE_AWS_LIVE_HANDOFF_END
 
-AWS LIVE verification is complete.
-Do NOT paste AWS access keys or secret keys into ChatGPT.
-Paste only the two RIPPLE_AWS_LIVE_* blocks above back into the conversation.
+AWS resources are live-verified and the least-privilege Railway runtime bundle is prepared.
+Do NOT print, commit, email, or paste the credential bundle or AWS secret values into ChatGPT.
+Only the RIPPLE_AWS_LIVE_VERIFY_* / RIPPLE_AWS_LIVE_HANDOFF_* / RIPPLE_AWS_RAILWAY_PRINCIPAL_* non-secret blocks are safe to share.
 EOF
