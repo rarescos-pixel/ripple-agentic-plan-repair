@@ -71,26 +71,27 @@ trap rollback EXIT
 umask 077
 mkdir -p "$(dirname "$CREDENTIAL_FILE")"
 
-export KEY_JSON TABLE LOG_GROUP LOG_STREAM PROFILE_ARN AWS_REGION
-python3 - "$CREDENTIAL_FILE" <<'PY'
+# Feed the one-time secret JSON over stdin rather than exporting it into the
+# child-process environment. All command-line arguments below are non-secret.
+python3 - "$CREDENTIAL_FILE" "$AWS_REGION" "$TABLE" "$PROFILE_ARN" "$LOG_GROUP" "$LOG_STREAM" <<PY
 import json
-import os
 import pathlib
 import sys
 
 out = pathlib.Path(sys.argv[1]).expanduser()
-key = json.loads(os.environ["KEY_JSON"])["AccessKey"]
+region, table, profile_arn, log_group, log_stream = sys.argv[2:]
+key = json.loads('''$KEY_JSON''')["AccessKey"]
 values = {
     "AWS_ACCESS_KEY_ID": key["AccessKeyId"],
     "AWS_SECRET_ACCESS_KEY": key["SecretAccessKey"],
-    "AWS_REGION": os.environ["AWS_REGION"],
+    "AWS_REGION": region,
     "RIPPLE_STATE_BACKEND": "dynamodb",
-    "RIPPLE_DYNAMODB_TABLE": os.environ["TABLE"],
+    "RIPPLE_DYNAMODB_TABLE": table,
     "RIPPLE_CHANGE_INTERPRETER": "bedrock",
-    "RIPPLE_BEDROCK_MODEL_ID": os.environ["PROFILE_ARN"],
+    "RIPPLE_BEDROCK_MODEL_ID": profile_arn,
     "RIPPLE_TRACE_BACKEND": "cloudwatch",
-    "RIPPLE_CLOUDWATCH_LOG_GROUP": os.environ["LOG_GROUP"],
-    "RIPPLE_CLOUDWATCH_LOG_STREAM": os.environ["LOG_STREAM"],
+    "RIPPLE_CLOUDWATCH_LOG_GROUP": log_group,
+    "RIPPLE_CLOUDWATCH_LOG_STREAM": log_stream,
     "RIPPLE_REQUIRE_AWS_RUNTIME": "true",
 }
 out.write_text("".join(f"{name}={value}\n" for name, value in values.items()), encoding="utf-8")
