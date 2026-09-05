@@ -49,6 +49,18 @@ def test_web_demo_html_renders_repair_card_as_primary_and_technical_evidence_sec
     assert "Repair the cascade, not just the calendar" not in INDEX_HTML
 
 
+def test_web_demo_is_explicit_customer_to_alexa_story_without_overclaiming_transport():
+    assert "rules-permitted simulated Alexa+ experience" in INDEX_HTML
+    assert "Repair the cascade without opening five apps/sites." in INDEX_HTML
+    assert "Customer → agent" in INDEX_HTML
+    assert "Send to Alexa+" in INDEX_HTML
+    assert '<div class="who">You</div>' in INDEX_HTML
+    assert '<div class="who">Alexa+</div>' in INDEX_HTML
+    assert "same Ripple planner, policy and receipt engine exposed by the public MCP service" in INDEX_HTML
+    assert "public MCP transport is verified separately" in INDEX_HTML
+    assert "does not pretend to be an official Alexa+ client" in INDEX_HTML
+
+
 def test_web_demo_rejects_approve_without_proposal():
     c = DemoController()
     with pytest.raises(ValueError, match="No active proposal"):
