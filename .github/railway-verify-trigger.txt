@@ -6,3 +6,4 @@ snapshot retry 4
 snapshot retry 5 token probe
 snapshot retry 6 unconditional verifier
 snapshot retry 7 worker token probe
+snapshot retry 8 deployed revision probe
