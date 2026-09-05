@@ -9,7 +9,6 @@ from urllib.parse import urlparse
 from playwright.async_api import async_playwright
 
 PROFILE_DIR = os.getenv("BROWSER_PROFILE_DIR", "/data/chromium-profile").strip() or "/data/chromium-profile"
-VERIFY_ENABLED = os.getenv("AWS_VERIFY_ON_START", "").strip() == "1"
 TARGET = "https://console.aws.amazon.com/cloudshell/home?region=eu-central-1"
 STATUS_FILE = os.getenv("AWS_VERIFY_STATUS_FILE", "/data/aws_verify.json").strip() or "/data/aws_verify.json"
 
@@ -30,9 +29,6 @@ def classify_url(url: str) -> dict[str, object]:
 
 
 async def main() -> None:
-    if not VERIFY_ENABLED:
-        return
-
     outcome: dict[str, object] = {
         "ok": False,
         "signedIn": False,
