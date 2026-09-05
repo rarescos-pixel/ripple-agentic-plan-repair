@@ -43,11 +43,17 @@ def test_runtime_policy_has_no_unbounded_resource_star():
     assert "bedrock:InferenceProfileArn" in bedrock_models["Condition"]["StringEquals"]
 
 
-def test_budget_is_project_tag_scoped_and_alerts_at_50_80_100_percent():
+def test_budget_is_account_wide_and_alerts_at_50_80_100_percent():
     t = load_template()
     b = t["Resources"]["RippleBudget"]["Properties"]
-    filters = b["Budget"]["CostFilters"]
-    assert "TagKeyValue" in filters
+    budget = b["Budget"]
+    # A new AWS account cannot rely on a user-defined cost-allocation tag being
+    # activated before the live gate. The safety budget therefore covers the
+    # whole account; Project tags remain on resources for later attribution.
+    assert "CostFilters" not in budget
+    assert budget["BudgetType"] == "COST"
+    assert budget["TimeUnit"] == "MONTHLY"
+    assert budget["BudgetLimit"] == {"Amount": {"Ref": "MonthlyBudgetUSD"}, "Unit": "USD"}
     thresholds = [x["Notification"]["Threshold"] for x in b["NotificationsWithSubscribers"]]
     assert thresholds == [50, 80, 100]
     assert all(x["Notification"]["NotificationType"] == "ACTUAL" for x in b["NotificationsWithSubscribers"])
