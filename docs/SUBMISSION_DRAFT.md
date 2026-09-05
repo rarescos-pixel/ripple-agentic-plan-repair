@@ -7,7 +7,7 @@ Ripple
 **Tell Alexa one thing that changed. Ripple fixes what breaks downstream.**
 
 ## One-sentence pitch
-Ripple is a money-aware consequence-repair layer for Alexa+: it turns one changed fact into a safe, economically optimized repair of every downstream commitment it actually affects.
+Ripple is a money-aware consequence-repair layer for Alexa+: it turns one changed fact into a safe, economically optimized repair of every downstream commitment it actually affects — without making the customer open five separate apps or sites.
 
 ## Track selections
 
@@ -47,6 +47,8 @@ The model never chooses the money-spending repair and never receives write autho
 Disruptions are divided-attention moments when opening five apps is the wrong interface. One utterance captures the changed fact; one compact voice + visual proposal explains the cascade; one exact approval authorizes only that snapshot.
 
 Ripple uses Alexa+'s self-hosted MCP path as an agentic orchestration surface rather than as a Q&A wrapper. The Repair Card is a real MCP App resource, so screen and voice expose the same consequences, money and approval boundary.
+
+For the final demo, if an official Alexa+ client is unavailable, Ripple will use the rules-permitted **simulated Alexa+ experience backed by the real public MCP server**. This keeps the customer/agent conversation central while preserving a real runtime integration instead of a fake screenshot.
 
 ## Golden scenario
 
@@ -127,7 +129,7 @@ Real running software: MCP transport, OAuth/PKCE, dependency analysis, economic 
 
 Deterministic simulated integrations: airline, ride, reservation, delivery, pet-care and calendar provider adapters. Ripple does not claim real third-party bookings or payments.
 
-No actual Alexa+ production-client session is claimed until the official onboarding/inspection path is successfully exercised. No live Bedrock/DynamoDB/CloudWatch runtime is claimed until the AWS live gate passes.
+No actual Alexa+ production-client session is claimed unless the official onboarding/inspection path is successfully exercised. The hackathon rules explicitly allow the simulated Alexa+ experience path, so official client access is not treated as a prerequisite. No live Bedrock/DynamoDB/CloudWatch runtime is claimed until the AWS live gate passes.
 
 ## Product feedback / friction
 The project includes real friction-log entries covering Alexa-compatible OAuth refresh behavior, MCP App rendering contracts, add-on package/media validation, least-privilege AWS credentials for an external PaaS runtime and Local Inspector request-shape interoperability. Each entry includes steps, expected vs actual behavior, severity, workaround and an actionable suggestion.
