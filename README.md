@@ -2,6 +2,8 @@
 
 [![Ripple quality gate](https://github.com/rarescos-pixel/ripple-agentic-plan-repair/actions/workflows/quality-gate.yml/badge.svg)](https://github.com/rarescos-pixel/ripple-agentic-plan-repair/actions/workflows/quality-gate.yml)
 
+**Amazon Developer Hackathon 2026:** Alexa+ primary · AWS Builder mini challenge · Open Source mini challenge
+
 ## Tell Alexa one thing that changed. Ripple fixes what breaks downstream.
 
 > **“Our flight home was cancelled. We’ll land tomorrow at six.”**
@@ -117,6 +119,12 @@ The CloudFormation, runtime adapters, live benchmark harness, least-privilege po
 
 See [`docs/AWS_READY_V15.md`](docs/AWS_READY_V15.md), [`docs/AWS_RUNTIME_CREDENTIALS.md`](docs/AWS_RUNTIME_CREDENTIALS.md) and [`docs/AWS_LIVE_ONE_TOUCH.md`](docs/AWS_LIVE_ONE_TOUCH.md).
 
+## Open Source mini challenge
+
+Ripple is a new public MIT-licensed project created during the hackathon window. The submission packet includes the required contribution URL, repository URL, GitHub username, and what/how/why explanation. A representative contribution is PR #22, which converts a real Alexa Local Inspector interoperability mismatch into a tested compatibility fix and reusable remote probe.
+
+See [`docs/OPEN_SOURCE_SUBMISSION.md`](docs/OPEN_SOURCE_SUBMISSION.md).
+
 ## What is real vs simulated
 
 Real running software:
@@ -147,6 +155,8 @@ This distinction is intentional: marketing copy does not count as evidence.
 - [`docs/EVIDENCE_MATRIX.md`](docs/EVIDENCE_MATRIX.md) — claim-to-evidence mapping
 - [`docs/RUBRIC_MAP.md`](docs/RUBRIC_MAP.md) — judging-criterion mapping
 - [`docs/FRICTION_LOG.md`](docs/FRICTION_LOG.md) — real developer friction and actionable Amazon feedback
+- [`docs/PRODUCT_FEEDBACK.md`](docs/PRODUCT_FEEDBACK.md) — required tool/API/SDK feedback
+- [`docs/OPEN_SOURCE_SUBMISSION.md`](docs/OPEN_SOURCE_SUBMISSION.md) — Open Source mini-challenge packet
 - [`docs/COST_MODEL.md`](docs/COST_MODEL.md) — measured/runtime cost model and cost-efficiency decisions
 
 ## Run locally
