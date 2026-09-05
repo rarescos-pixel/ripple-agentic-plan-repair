@@ -19,6 +19,8 @@ jobs:
         run: PYTHONPATH=src python -m pytest -q
       - name: Run MCP 2025-11-25 protocol conformance tests explicitly
         run: PYTHONPATH=src python -m pytest -q tests/test_mcp_protocol_2025_11_25.py
+      - name: Run Alexa Local Inspector request-shape compatibility explicitly
+        run: PYTHONPATH=src python -m pytest -q tests/test_alexa_local_inspector_compat.py
       - name: Run Repair Card MCP App contract tests explicitly
         run: PYTHONPATH=src python -m pytest -q tests/test_mcp_app_repair_card.py
       - name: Run Repair Card MCP App static safety gate
@@ -34,7 +36,7 @@ jobs:
           bash -n scripts/aws_live_bootstrap.sh
           bash -n scripts/aws_railway_runtime_principal.sh
           bash -n scripts/aws_teardown.sh
-          python -m py_compile scripts/aws_live_verify.py scripts/bedrock_benchmark.py scripts/aws_runtime_smoke.py scripts/mcp_latency_probe.py scripts/mcp_app_static_gate.py scripts/alexa_addon_gate.py scripts/alexa_store_media_smoke.py scripts/mcp_smoke.py scripts/submission_surface_gate.py
+          python -m py_compile scripts/aws_live_verify.py scripts/bedrock_benchmark.py scripts/aws_runtime_smoke.py scripts/mcp_latency_probe.py scripts/mcp_app_static_gate.py scripts/alexa_addon_gate.py scripts/alexa_store_media_smoke.py scripts/mcp_smoke.py scripts/alexa_local_inspector_probe.py scripts/submission_surface_gate.py
       - name: Regenerate executable evidence
         run: |
           PYTHONPATH=src python -m ripple.evaluation.matrix

@@ -280,7 +280,11 @@ def _cleanup_sessions() -> None:
 
 def _accepts_streamable(request: Request) -> bool:
     accept = request.headers.get("accept", "")
-    return "application/json" in accept and "text/event-stream" in accept
+    # MCP 2025-11-25 clients normally advertise JSON + SSE. Alexa+'s Local
+    # Inspector documented request flow uses JSON-only Accept headers. Ripple
+    # only emits JSON responses today, so accepting either form is safe and
+    # preserves compatibility with strict MCP clients while allowing Inspector.
+    return "application/json" in accept
 
 
 def _tool_result(payload: Dict[str, Any], *, is_error: bool = False, ui_resource_uri: str | None = None) -> Dict[str, Any]:
@@ -298,7 +302,7 @@ async def mcp_post(request: Request) -> Response:
     if not _valid_origin(request):
         return JSONResponse(_rpc_error(None, -32000, "Invalid Origin"), status_code=403)
     if not _accepts_streamable(request):
-        return JSONResponse(_rpc_error(None, -32600, "Accept must include application/json and text/event-stream"), status_code=406)
+        return JSONResponse(_rpc_error(None, -32600, "Accept must include application/json"), status_code=406)
     if "application/json" not in request.headers.get("content-type", ""):
         return JSONResponse(_rpc_error(None, -32600, "Content-Type must be application/json"), status_code=415)
     try:
