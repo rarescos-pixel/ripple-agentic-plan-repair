@@ -42,5 +42,5 @@ Next: attach RuntimePolicyArn to the AWS principal used by Railway, then set:
   RIPPLE_CLOUDWATCH_LOG_STREAM=runtime
   AWS_REGION=eu-central-1
 
-Do not store AWS credentials in the repository. Activate the user-defined Project cost allocation tag in AWS Billing before relying on the tag-scoped budget.
+Do not store AWS credentials in the repository. The monthly AWS Budget is intentionally account-wide, so no cost-allocation-tag activation is required before relying on the spend guard.
 EOF
