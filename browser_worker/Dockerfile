@@ -4,7 +4,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PORT=8000 \
     PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
-    BROWSER_PROFILE_DIR=/data/chromium-profile
+    BROWSER_PROFILE_DIR=/data/chromium-profile \
+    AWS_VERIFY_ON_START=1
 
 WORKDIR /app
 
