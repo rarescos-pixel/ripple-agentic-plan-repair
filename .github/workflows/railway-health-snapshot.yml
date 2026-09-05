@@ -13,6 +13,10 @@ jobs:
   snapshot:
     runs-on: ubuntu-latest
     timeout-minutes: 2
+    env:
+      HAS_RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN != '' }}
+      HAS_RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN != '' }}
+      HAS_RAILWAY_PROJECT_TOKEN: ${{ secrets.RAILWAY_PROJECT_TOKEN != '' }}
     steps:
       - name: Read sanitized worker health
         shell: bash
@@ -20,3 +24,6 @@ jobs:
           set -euo pipefail
           body="$(curl -fsS --max-time 15 https://browser-worker-free-production.up.railway.app/healthz)"
           echo "$body" | jq '{ok,browserReady,profilePersistenceConfigured,awsAuthVerify}'
+          echo "RAILWAY_TOKEN_AVAILABLE=$HAS_RAILWAY_TOKEN"
+          echo "RAILWAY_API_TOKEN_AVAILABLE=$HAS_RAILWAY_API_TOKEN"
+          echo "RAILWAY_PROJECT_TOKEN_AVAILABLE=$HAS_RAILWAY_PROJECT_TOKEN"
