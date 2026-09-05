@@ -1,0 +1,58 @@
+name: Publish Browserbase persistent AWS runner
+
+on:
+  push:
+    branches:
+      - poc/free-work-replacement
+    paths:
+      - browserbase_function/persistent_runner.ts
+      - browserbase_function/package.json
+      - browserbase_function/pnpm-lock.yaml
+      - .github/workflows/browserbase-persistent-publish.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    env:
+      BROWSERBASE_API_KEY: ${{ secrets.BROWSERBASE_API_KEY }}
+      BROWSERBASE_PROJECT_ID: 0a530d78-8ac4-40b6-bae1-7968f25a0073
+    steps:
+      - name: Checkout canonical branch
+        uses: actions/checkout@v4
+        with:
+          ref: poc/free-work-replacement
+
+      - name: Verify Browserbase credential availability
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$BROWSERBASE_API_KEY" || { echo "BROWSERBASE_API_KEY_UNAVAILABLE"; exit 2; }
+          echo "BROWSERBASE_API_KEY_AVAILABLE"
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Install locked Browserbase function dependencies
+        working-directory: browserbase_function
+        run: pnpm install --frozen-lockfile
+
+      - name: Publish persistent Browserbase runner
+        working-directory: browserbase_function
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm bb publish persistent_runner.ts 2>&1 | tee /tmp/browserbase-publish.log
+          echo "BROWSERBASE_PERSISTENT_RUNNER_PUBLISH_COMPLETE"
+
+      - name: Upload publish transcript
+        uses: actions/upload-artifact@v4
+        with:
+          name: browserbase-persistent-publish
+          path: /tmp/browserbase-publish.log
+          retention-days: 1
+          if-no-files-found: error
