@@ -17,10 +17,21 @@ def test_runtime_principal_is_dedicated_least_privilege_and_single_key():
     assert 'IAM_USER="${RIPPLE_RUNTIME_IAM_USER:-ripple-railway-runtime}"' in s
     assert 'aws iam attach-user-policy --user-name "$IAM_USER" --policy-arn "$POLICY_ARN"' in s
     assert "AccessKeyMetadata[?Status==`Active`].AccessKeyId" in s
-    assert "Refusing to create another long-lived key" in s
+    assert "more than one active access key" in s
     assert 'aws iam create-access-key --user-name "$IAM_USER"' in s
     assert "create-login-profile" not in s
     assert "AdministratorAccess" not in s
+
+
+def test_principal_reuse_requires_matching_private_bundle_and_reconciles_outputs():
+    s = text(PRINCIPAL)
+    assert "status=REUSED" in s
+    assert "active key exists but the private credential bundle is missing" in s
+    assert "active AWS key does not match the private credential bundle" in s
+    assert 'BUNDLE_ACCESS_KEY_ID' in s
+    assert 'values.update({' in s
+    assert 'aws iam list-attached-user-policies' in s
+    assert 'aws iam detach-user-policy --user-name "$IAM_USER" --policy-arn "$attached"' in s
 
 
 def test_runtime_bundle_is_private_complete_and_never_printed():
@@ -72,7 +83,16 @@ def test_teardown_revokes_external_principal_before_cloudformation_delete():
     s = text(TEARDOWN)
     deactivate = s.index("aws iam update-access-key")
     delete_key = s.index("aws iam delete-access-key")
+    detach = s.index("aws iam detach-user-policy")
     delete_user = s.index("aws iam delete-user")
     delete_stack = s.index("aws cloudformation delete-stack")
-    assert deactivate < delete_key < delete_user < delete_stack
-    assert 'aws iam detach-user-policy --user-name "$IAM_USER" --policy-arn "$POLICY_ARN"' in s
+    assert deactivate < delete_key < detach < delete_user < delete_stack
+    assert "aws iam list-attached-user-policies" in s
+
+
+def test_teardown_can_revoke_credentials_even_if_stack_is_already_missing():
+    s = text(TEARDOWN)
+    user_cleanup = s.index('if aws iam get-user --user-name "$IAM_USER"')
+    stack_probe = s.index('if aws cloudformation describe-stacks')
+    assert user_cleanup < stack_probe
+    assert "stack $STACK_NAME is already absent" in s
