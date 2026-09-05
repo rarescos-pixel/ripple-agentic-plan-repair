@@ -16,6 +16,7 @@ type Step = {
 type Request = {
   url: string;
   urlContains?: string;
+  handoffWaitMs?: number;
   waitUntil?: "load" | "domcontentloaded" | "networkidle" | "commit";
   timeoutMs?: number;
   sensitive?: boolean;
@@ -153,6 +154,21 @@ defineFn(
 
         item.ok = true;
         stepResults.push(item);
+      }
+
+      const requestedHandoff = Number(request.handoffWaitMs ?? 0);
+      const handoffWaitMs = Number.isFinite(requestedHandoff)
+        ? Math.max(0, Math.min(requestedHandoff, 780_000))
+        : 0;
+      if (handoffWaitMs > 0) {
+        const deadline = Date.now() + handoffWaitMs;
+        while (Date.now() < deadline) {
+          const currentUrl = page.url();
+          const awsState = parsed.hostname.includes("aws.amazon.com") ? classifyAws(currentUrl) : null;
+          const expectedReached = request.urlContains ? currentUrl.includes(request.urlContains) : false;
+          if (expectedReached || (awsState?.signedIn && awsState.cloudShellReached)) break;
+          await page.waitForTimeout(1000);
+        }
       }
 
       const finalUrl = page.url();
