@@ -271,7 +271,6 @@ def login_worker() -> None:
         )
     except Exception as exc:
         message = str(exc)
-        # Never echo tokens, authorization codes, or login cache content.
         message = re.sub(r"https://[^\s]+", "[url suppressed]", message)
         set_state(phase="error", error=message[:500], detail="Bootstrap failed. No long-term AWS credentials were stored.")
 
@@ -317,7 +316,7 @@ async def submit(request: Request) -> JSONResponse:
 
 PAGE = r'''<!doctype html>
 <html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ripple AWS Bootstrap</title>
-<style>body{font-family:system-ui,sans-serif;max-width:680px;margin:32px auto;padding:0 18px;line-height:1.45}button,a.btn{display:inline-block;padding:12px 16px;border-radius:10px;border:0;background:#111;color:white;text-decoration:none;font-size:16px}input{font-size:18px;padding:12px;width:min(100%,420px);box-sizing:border-box}.card{border:1px solid #ddd;border-radius:14px;padding:18px;margin:18px 0}.muted{color:#666}.ok{font-weight:700}</style></head>
+<style>body{font-family:system-ui,sans-serif;max-width:680px;margin:32px auto;padding:0 18px;line-height:1.45}button,a.btn{display:block;width:100%;box-sizing:border-box;padding:14px 16px;border-radius:10px;border:0;background:#111;color:white;text-decoration:none;font-size:17px;text-align:center;margin-top:12px}input{display:block;font-size:18px;padding:14px;width:100%;box-sizing:border-box;border:1px solid #aaa;border-radius:10px;margin-top:12px}.card{border:1px solid #ddd;border-radius:14px;padding:18px;margin:18px 0}.muted{color:#666}.ok{font-weight:700}</style></head>
 <body><h2>Ripple — AWS bootstrap</h2><p class="muted">Temporary helper. Your AWS password and MFA never pass through this service.</p>
 <div class="card"><div id="detail">Starting…</div><div id="actions"></div></div>
 <script>
@@ -325,11 +324,13 @@ async function poll(){
  const r=await fetch('/status',{cache:'no-store'}); const s=await r.json();
  document.getElementById('detail').textContent=s.detail||s.phase;
  const a=document.getElementById('actions'); a.innerHTML='';
- if(s.auth_url && (s.phase==='awaiting_browser'||s.phase==='waiting_code')){
-   const p=document.createElement('p'); const link=document.createElement('a'); link.className='btn'; link.href=s.auth_url; link.target='_blank'; link.rel='noopener'; link.textContent='1. Open AWS sign-in'; p.appendChild(link); a.appendChild(p);
-   const q=document.createElement('p'); q.textContent='2. After AWS shows an authorization code, paste it here (not in ChatGPT):'; a.appendChild(q);
-   const input=document.createElement('input'); input.id='code'; input.autocomplete='off'; input.placeholder='Authorization code'; a.appendChild(input);
-   const btn=document.createElement('button'); btn.textContent='Submit code'; btn.style.marginLeft='8px'; btn.onclick=async()=>{btn.disabled=true; const rr=await fetch('/submit',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({code:input.value})}); const x=await rr.json(); if(!x.ok){alert(x.error||'Failed');btn.disabled=false;}}; a.appendChild(btn);
+ if((s.phase==='awaiting_browser'||s.phase==='waiting_code')){
+   if(s.auth_url){
+     const p=document.createElement('p'); const link=document.createElement('a'); link.className='btn'; link.href=s.auth_url; link.target='_blank'; link.rel='noopener'; link.textContent='1. Open AWS sign-in'; p.appendChild(link); a.appendChild(p);
+   }
+   const q=document.createElement('p'); q.textContent=s.auth_url?'2. After AWS shows an authorization code, paste it here (not in ChatGPT):':'Paste the AWS authorization code here:'; a.appendChild(q);
+   const input=document.createElement('input'); input.id='code'; input.autocomplete='one-time-code'; input.inputMode='text'; input.placeholder='Authorization code'; a.appendChild(input);
+   const btn=document.createElement('button'); btn.textContent='Submit code'; btn.onclick=async()=>{btn.disabled=true; const rr=await fetch('/submit',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({code:input.value})}); const x=await rr.json(); if(!x.ok){alert(x.error||'Failed');btn.disabled=false;}}; a.appendChild(btn);
  }
  if(s.phase==='done'){a.innerHTML='<p class="ok">✅ AWS login complete. GitHub OIDC is ready. You can return to ChatGPT.</p>';}
  if(s.phase==='error'){a.innerHTML='<p>❌ '+(s.error||'Bootstrap failed')+'</p>';}
