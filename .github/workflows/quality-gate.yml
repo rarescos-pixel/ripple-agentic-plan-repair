@@ -27,9 +27,11 @@ jobs:
         run: PYTHONPATH=src python scripts/alexa_addon_gate.py
       - name: Validate CloudFormation template
         run: cfn-lint infra/ripple-aws.json
-      - name: Validate live and remote evidence scripts
+      - name: Validate live, credential lifecycle, and remote evidence scripts
         run: |
           bash -n scripts/aws_live_bootstrap.sh
+          bash -n scripts/aws_railway_runtime_principal.sh
+          bash -n scripts/aws_teardown.sh
           python -m py_compile scripts/aws_live_verify.py scripts/bedrock_benchmark.py scripts/aws_runtime_smoke.py scripts/mcp_latency_probe.py scripts/mcp_app_static_gate.py scripts/alexa_addon_gate.py scripts/alexa_store_media_smoke.py scripts/mcp_smoke.py
       - name: Regenerate executable evidence
         run: |
