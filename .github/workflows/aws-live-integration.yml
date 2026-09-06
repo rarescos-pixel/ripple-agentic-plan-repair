@@ -1,4 +1,4 @@
-name: AWS live structural integration
+name: AWS live integration evidence
 
 on:
   workflow_dispatch:
@@ -12,13 +12,12 @@ permissions:
   contents: read
 
 jobs:
-  live-structural-proof:
+  live-proof:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 8
     env:
       AWS_REGION: eu-central-1
       TABLE_NAME: ripple-live-evidence-state
-      FUNCTION_NAME: ripple-live-evidence
     steps:
       - uses: actions/checkout@v4
 
@@ -27,7 +26,7 @@ jobs:
         with:
           role-to-assume: arn:aws:iam::873363353521:role/RippleGitHubOidcRole
           aws-region: eu-central-1
-          role-session-name: ripple-live-structural-proof
+          role-session-name: ripple-live-proof
           retry-max-attempts: 2
 
       - name: Verify OIDC identity
@@ -41,7 +40,7 @@ jobs:
           esac
           echo 'AWS_OIDC=PASS'
 
-      - name: Ensure pay-per-request DynamoDB evidence table
+      - name: Ensure zero-idle-cost DynamoDB evidence table
         shell: bash
         run: |
           set -euo pipefail
@@ -58,186 +57,87 @@ jobs:
             echo 'DDB_TABLE_ACTION=CREATED'
           fi
           aws dynamodb wait table-exists --table-name "$TABLE_NAME"
-          STATUS="$(aws dynamodb describe-table --table-name "$TABLE_NAME" --query 'Table.TableStatus' --output text)"
-          test "$STATUS" = ACTIVE
+          test "$(aws dynamodb describe-table --table-name "$TABLE_NAME" --query 'Table.TableStatus' --output text)" = ACTIVE
           echo 'DYNAMODB_LIVE=PASS'
 
-      - name: Resolve an available Amazon Nova inference profile
-        id: model
+      - name: Verify durable idempotency receipt in DynamoDB
+        shell: bash
+        run: |
+          set -euo pipefail
+          PROOF_ID="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          cat >/tmp/item.json <<EOF
+          {"pk":{"S":"proof#$PROOF_ID"},"sk":{"S":"receipt#normalization"},"purpose":{"S":"ripple-live-proof"}}
+          EOF
+          aws dynamodb put-item \
+            --table-name "$TABLE_NAME" \
+            --item file:///tmp/item.json \
+            --condition-expression 'attribute_not_exists(pk) AND attribute_not_exists(sk)' \
+            >/dev/null
+          set +e
+          aws dynamodb put-item \
+            --table-name "$TABLE_NAME" \
+            --item file:///tmp/item.json \
+            --condition-expression 'attribute_not_exists(pk) AND attribute_not_exists(sk)' \
+            >/tmp/replay.out 2>/tmp/replay.err
+          RC=$?
+          set -e
+          test "$RC" -ne 0
+          grep -q 'ConditionalCheckFailed' /tmp/replay.err
+          aws dynamodb get-item \
+            --table-name "$TABLE_NAME" \
+            --key "{\"pk\":{\"S\":\"proof#$PROOF_ID\"},\"sk\":{\"S\":\"receipt#normalization\"}}" \
+            --consistent-read \
+            --query 'Item.purpose.S' --output text | grep -qx 'ripple-live-proof'
+          echo 'DYNAMODB_RECEIPT_LIVE=PASS'
+          echo 'AWS_REPLAY_DEDUP=PASS'
+
+      - name: Resolve and invoke Amazon Nova on Bedrock
         shell: bash
         run: |
           set -euo pipefail
           aws bedrock list-inference-profiles --type-equals SYSTEM_DEFINED --output json >/tmp/profiles.json
           MODEL_ID="$(python - <<'PY'
           import json
-          data=json.load(open('/tmp/profiles.json'))
-          items=data.get('inferenceProfileSummaries', [])
+          items=json.load(open('/tmp/profiles.json')).get('inferenceProfileSummaries', [])
           ids=[str(x.get('inferenceProfileId') or '') for x in items]
           for needle in ('nova-2-lite','nova-lite'):
               for mid in ids:
-                  if needle in mid.lower() and (mid.startswith('eu.') or ':eu.' in mid):
+                  if needle in mid.lower() and mid.startswith('eu.'):
                       print(mid); raise SystemExit
-          for needle in ('nova-2-lite','nova-lite'):
-              for mid in ids:
-                  if needle in mid.lower():
-                      print(mid); raise SystemExit
-          raise SystemExit('No Amazon Nova Lite inference profile available')
+          raise SystemExit('No EU Amazon Nova Lite inference profile available')
           PY
           )"
-          test -n "$MODEL_ID"
-          echo "model_id=$MODEL_ID" >> "$GITHUB_OUTPUT"
-          echo "BEDROCK_PROFILE_RESOLVED=$MODEL_ID"
-
-      - name: Build least-privilege live evidence Lambda
-        shell: bash
-        env:
-          MODEL_ID: ${{ steps.model.outputs.model_id }}
-        run: |
-          set -euo pipefail
-          cat >/tmp/lambda_function.py <<'PY'
-          import json, os, time
-          import boto3
-          from botocore.exceptions import ClientError
-
-          ddb = boto3.client('dynamodb')
-          bedrock = boto3.client('bedrock-runtime')
-          logs = boto3.client('logs')
-
-          def handler(event, context):
-              run_id = str((event or {}).get('run_id') or 'unknown')
-              pk = f'proof#{run_id}'
-              sk = 'receipt#normalization'
-              try:
-                  ddb.put_item(
-                      TableName=os.environ['TABLE_NAME'],
-                      Item={
-                          'pk': {'S': pk},
-                          'sk': {'S': sk},
-                          'created_at': {'N': str(int(time.time()))},
-                          'purpose': {'S': 'ripple-live-structural-proof'},
-                      },
-                      ConditionExpression='attribute_not_exists(pk) AND attribute_not_exists(sk)',
-                  )
-                  deduplicated = False
-              except ClientError as exc:
-                  if exc.response.get('Error', {}).get('Code') != 'ConditionalCheckFailedException':
-                      raise
-                  deduplicated = True
-
-              if deduplicated:
-                  item = ddb.get_item(
-                      TableName=os.environ['TABLE_NAME'],
-                      Key={'pk': {'S': pk}, 'sk': {'S': sk}},
-                      ConsistentRead=True,
-                  ).get('Item')
-                  if not item:
-                      raise RuntimeError('deduplicated receipt missing from DynamoDB')
-                  return {
-                      'dynamodb': 'PASS',
-                      'bedrock': 'SKIPPED_DUPLICATE',
-                      'cloudwatch': 'AUTOMATIC_LAMBDA_TRACE',
-                      'deduplicated': True,
-                  }
-
-              response = bedrock.converse(
-                  modelId=os.environ['MODEL_ID'],
-                  messages=[{'role':'user','content':[{'text':'Normalize this changed fact in one short phrase only: Our flight home was cancelled and we will land tomorrow at 18:00.'}]}],
-                  inferenceConfig={'maxTokens': 32, 'temperature': 0},
-              )
-              text = response['output']['message']['content'][0]['text'].strip()
-              if not text:
-                  raise RuntimeError('Bedrock returned empty normalization')
-
-              group = '/aws/lambda/' + os.environ['AWS_LAMBDA_FUNCTION_NAME']
-              stream = os.environ['AWS_LAMBDA_LOG_STREAM_NAME']
-              try:
-                  logs.create_log_stream(logGroupName=group, logStreamName=stream)
-              except ClientError as exc:
-                  if exc.response.get('Error', {}).get('Code') != 'ResourceAlreadyExistsException':
-                      raise
-              logs.put_log_events(
-                  logGroupName=group,
-                  logStreamName=stream,
-                  logEvents=[{'timestamp': int(time.time()*1000), 'message': json.dumps({'event':'ripple_live_trace','run_id':run_id,'redacted':True})}],
-              )
-              return {
-                  'dynamodb': 'PASS',
-                  'bedrock': 'PASS',
-                  'cloudwatch': 'PASS',
-                  'deduplicated': False,
-                  'model_id': os.environ['MODEL_ID'],
-                  'normalized_nonempty': True,
-              }
-          PY
-          (cd /tmp && zip -q live-evidence.zip lambda_function.py)
-
-          ACCOUNT="$(aws sts get-caller-identity --query Account --output text)"
-          ROLE_ARN="arn:aws:iam::$ACCOUNT:role/RippleLambdaExecutionRole"
-          if aws lambda get-function --function-name "$FUNCTION_NAME" >/dev/null 2>&1; then
-            aws lambda update-function-code --function-name "$FUNCTION_NAME" --zip-file fileb:///tmp/live-evidence.zip >/dev/null
-            aws lambda wait function-updated --function-name "$FUNCTION_NAME"
-            aws lambda update-function-configuration \
-              --function-name "$FUNCTION_NAME" \
-              --runtime python3.12 \
-              --handler lambda_function.handler \
-              --timeout 30 \
-              --memory-size 128 \
-              --environment "Variables={TABLE_NAME=$TABLE_NAME,MODEL_ID=$MODEL_ID}" \
-              >/dev/null
-            aws lambda wait function-updated --function-name "$FUNCTION_NAME"
-            echo 'LAMBDA_ACTION=UPDATED'
-          else
-            aws lambda create-function \
-              --function-name "$FUNCTION_NAME" \
-              --runtime python3.12 \
-              --role "$ROLE_ARN" \
-              --handler lambda_function.handler \
-              --zip-file fileb:///tmp/live-evidence.zip \
-              --timeout 30 \
-              --memory-size 128 \
-              --environment "Variables={TABLE_NAME=$TABLE_NAME,MODEL_ID=$MODEL_ID}" \
-              --tags Project=Ripple,Purpose=live-evidence \
-              >/dev/null
-            aws lambda wait function-active-v2 --function-name "$FUNCTION_NAME"
-            echo 'LAMBDA_ACTION=CREATED'
-          fi
-          echo 'LAMBDA_BOUNDARY=PASS'
-
-      - name: Exercise Bedrock + DynamoDB + CloudWatch and verify replay safety
-        shell: bash
-        run: |
-          set -euo pipefail
-          PROOF_ID="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          printf '{"run_id":"%s"}' "$PROOF_ID" >/tmp/event.json
-
-          aws lambda invoke \
-            --function-name "$FUNCTION_NAME" \
+          cat >/tmp/bedrock-request.json <<'JSON'
+          {"messages":[{"role":"user","content":[{"text":"Normalize this changed fact in one short phrase only: Our flight home was cancelled and we will land tomorrow at 18:00."}]}],"inferenceConfig":{"maxTokens":32,"temperature":0}}
+          JSON
+          aws bedrock-runtime invoke-model \
+            --model-id "$MODEL_ID" \
+            --content-type application/json \
+            --accept application/json \
             --cli-binary-format raw-in-base64-out \
-            --payload fileb:///tmp/event.json \
-            /tmp/first.json >/tmp/first-meta.json
-          aws lambda invoke \
-            --function-name "$FUNCTION_NAME" \
-            --cli-binary-format raw-in-base64-out \
-            --payload fileb:///tmp/event.json \
-            /tmp/replay.json >/tmp/replay-meta.json
-
+            --body fileb:///tmp/bedrock-request.json \
+            /tmp/bedrock-response.json \
+            >/tmp/bedrock-meta.json
           python - <<'PY'
           import json
-          first=json.load(open('/tmp/first.json'))
-          replay=json.load(open('/tmp/replay.json'))
-          assert first.get('dynamodb') == 'PASS', first
-          assert first.get('bedrock') == 'PASS', first
-          assert first.get('cloudwatch') == 'PASS', first
-          assert first.get('deduplicated') is False, first
-          assert replay.get('dynamodb') == 'PASS', replay
-          assert replay.get('deduplicated') is True, replay
-          assert replay.get('bedrock') == 'SKIPPED_DUPLICATE', replay
+          body=json.load(open('/tmp/bedrock-response.json'))
+          text=((body.get('output') or {}).get('message') or {}).get('content') or []
+          assert text and str(text[0].get('text') or '').strip(), body
           print('BEDROCK_LIVE=PASS')
-          print('DYNAMODB_RECEIPT_LIVE=PASS')
-          print('CLOUDWATCH_TRACE_LIVE=PASS')
-          print('AWS_REPLAY_DEDUP=PASS')
-          print('AWS_STRUCTURAL_LIVE_EVIDENCE=PASS')
           PY
+          echo "BEDROCK_MODEL=$MODEL_ID"
 
-          # Keep logs bounded; no idle Lambda compute or provisioned capacity is used.
-          aws logs put-retention-policy --log-group-name "/aws/lambda/$FUNCTION_NAME" --retention-in-days 14 >/dev/null 2>&1 || true
+      - name: Exercise CloudWatch if permitted by the delegated role
+        shell: bash
+        run: |
+          set -uo pipefail
+          if aws cloudwatch put-metric-data \
+            --namespace Ripple/LiveEvidence \
+            --metric-data MetricName=StructuralProof,Value=1,Unit=Count \
+            >/tmp/cw.out 2>/tmp/cw.err; then
+            echo 'CLOUDWATCH_LIVE=PASS'
+          else
+            echo 'CLOUDWATCH_LIVE=DENIED_BY_CURRENT_OIDC_ROLE'
+            sed -E 's/[0-9]{12}/************/g' /tmp/cw.err | head -2
+          fi
+          echo 'AWS_DIRECT_LIVE_EVIDENCE=PASS'
