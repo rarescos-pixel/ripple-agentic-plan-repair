@@ -1,0 +1,83 @@
+name: AWS live audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/aws-live-audit.yml'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Configure AWS credentials from GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::873363353521:role/RippleGitHubOidcRole
+          aws-region: eu-central-1
+          role-session-name: ripple-live-audit
+          retry-max-attempts: 2
+
+      - name: Verify identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARN="$(aws sts get-caller-identity --query Arn --output text)"
+          case "$ARN" in
+            arn:aws:sts::*:assumed-role/RippleGitHubOidcRole/*) ;;
+            *) echo 'Unexpected AWS identity' >&2; exit 1 ;;
+          esac
+          echo 'AWS_OIDC=PASS'
+
+      - name: Audit Ripple live resources without mutation
+        shell: bash
+        run: |
+          set -uo pipefail
+          echo '--- CloudFormation ---'
+          if aws cloudformation describe-stacks --stack-name ripple-demo --query 'Stacks[0].[StackStatus,LastUpdatedTime,CreationTime]' --output text 2>/tmp/cf.err; then
+            echo 'CF_STACK=FOUND'
+          else
+            echo 'CF_STACK=NOT_FOUND_OR_DENIED'
+            sed -E 's/[0-9]{12}/************/g' /tmp/cf.err | head -3
+          fi
+
+          echo '--- DynamoDB ---'
+          if TABLES="$(aws dynamodb list-tables --query 'TableNames[?contains(@, `ripple`) || contains(@, `Ripple`)]' --output text 2>/tmp/ddb.err)"; then
+            echo "DDB_TABLES=${TABLES:-NONE}"
+          else
+            echo 'DDB_TABLES=DENIED'
+            sed -E 's/[0-9]{12}/************/g' /tmp/ddb.err | head -3
+          fi
+
+          echo '--- CloudWatch Logs ---'
+          if GROUPS="$(aws logs describe-log-groups --query 'logGroups[?contains(logGroupName, `ripple`) || contains(logGroupName, `Ripple`)].logGroupName' --output text 2>/tmp/logs.err)"; then
+            echo "CW_LOG_GROUPS=${GROUPS:-NONE}"
+          else
+            echo 'CW_LOG_GROUPS=DENIED'
+            sed -E 's/[0-9]{12}/************/g' /tmp/logs.err | head -3
+          fi
+
+          echo '--- Bedrock ---'
+          if PROFILES="$(aws bedrock list-inference-profiles --type-equals APPLICATION --query 'inferenceProfileSummaries[?contains(inferenceProfileName, `ripple`) || contains(inferenceProfileName, `Ripple`)].inferenceProfileName' --output text 2>/tmp/br.err)"; then
+            echo "BEDROCK_APP_PROFILES=${PROFILES:-NONE}"
+          else
+            echo 'BEDROCK_APP_PROFILES=DENIED'
+            sed -E 's/[0-9]{12}/************/g' /tmp/br.err | head -3
+          fi
+
+          echo '--- Budgets ---'
+          ACCOUNT="$(aws sts get-caller-identity --query Account --output text)"
+          if BUDGET="$(aws budgets describe-budget --account-id "$ACCOUNT" --budget-name Ripple-Zero-Cost-Guard --query 'Budget.[BudgetName,BudgetLimit.Amount,BudgetLimit.Unit]' --output text 2>/tmp/budget.err)"; then
+            echo "BUDGET_GUARD=$BUDGET"
+          else
+            echo 'BUDGET_GUARD=NOT_FOUND_OR_DENIED'
+            sed -E 's/[0-9]{12}/************/g' /tmp/budget.err | head -3
+          fi
+
+          echo 'AWS_LIVE_AUDIT=COMPLETE'
