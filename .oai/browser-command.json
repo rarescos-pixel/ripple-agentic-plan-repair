@@ -1,8 +1,10 @@
 {
-  "id": "init-0",
-  "issuedAt": "2026-09-06T05:20:00Z",
-  "expiresAt": "2099-01-01T00:00:00Z",
-  "action": "noop",
-  "target": {},
+  "id": "canary-focus-cloudshell-20260906T0542Z",
+  "issuedAt": "2026-09-06T05:42:00Z",
+  "expiresAt": "2026-09-06T05:57:00Z",
+  "action": "focus",
+  "target": {
+    "urlContains": "console.aws.amazon.com/cloudshell"
+  },
   "args": {}
 }
