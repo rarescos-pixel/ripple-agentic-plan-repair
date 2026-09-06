@@ -1,0 +1,27 @@
+name: AWS cutover authorization inspect
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/aws-cutover-authz-inspect.yml']
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::873363353521:role/RippleGitHubOidcRole
+          aws-region: eu-central-1
+          role-session-name: ripple-authz-inspect
+          retry-max-attempts: 2
+      - name: Print cutover policy only
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws iam get-role-policy --role-name RippleGitHubOidcRole --policy-name RippleCanonicalRuntimeCutoverPolicy --query PolicyDocument --output json
