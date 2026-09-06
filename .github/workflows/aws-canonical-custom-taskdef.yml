@@ -17,7 +17,7 @@ concurrency:
 jobs:
   cutover-and-prove:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 35
     env:
       AWS_REGION: eu-central-1
       AWS_ACCOUNT_ID: '873363353521'
@@ -84,25 +84,23 @@ jobs:
           echo "image_digest=$DIGEST" >> "$GITHUB_OUTPUT"
           echo 'EXACT_SHA_ECR_IMAGE=PASS'
 
-      - name: Prepare temporary task-definition registrar
+      - name: Add temporary registrar trust in-place
+        id: registrar_setup
         shell: bash
         run: |
           set -euo pipefail
-          MANAGED=arn:aws:iam::aws:policy/service-role/AmazonECSInfrastructureRoleforExpressGatewayServices
-          INFRA_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:role/${INFRA_ROLE}"
           EXEC_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:role/${EXECUTION_ROLE}"
           TASK_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:role/${TASK_ROLE}"
-          aws iam delete-role-policy --role-name "$INFRA_ROLE" --policy-name RippleTaskDefinitionRegistrarTemporary >/dev/null 2>&1 || true
-          aws iam detach-role-policy --role-name "$INFRA_ROLE" --policy-arn "$MANAGED" >/dev/null 2>&1 || true
-          aws iam delete-role --role-name "$INFRA_ROLE" >/dev/null 2>&1 || true
+          ROLE_ID="$(aws iam get-role --role-name "$INFRA_ROLE" --query 'Role.RoleId' --output text)"
+          test -n "$ROLE_ID" && test "$ROLE_ID" != None
+          echo "role_id=$ROLE_ID" >> "$GITHUB_OUTPUT"
           cat >/tmp/dual-trust.json <<JSON
           {"Version":"2012-10-17","Statement":[
-            {"Effect":"Allow","Principal":{"Service":"ecs.amazonaws.com"},"Action":"sts:AssumeRole"},
-            {"Effect":"Allow","Principal":{"Federated":"arn:aws:iam::${AWS_ACCOUNT_ID}:oidc-provider/token.actions.githubusercontent.com"},"Action":"sts:AssumeRoleWithWebIdentity","Condition":{"StringEquals":{"token.actions.githubusercontent.com:aud":"sts.amazonaws.com"},"StringLike":{"token.actions.githubusercontent.com:sub":"${GITHUB_OIDC_SUB}"}}}
+            {"Sid":"AllowECSExpressInfrastructure","Effect":"Allow","Principal":{"Service":"ecs.amazonaws.com"},"Action":"sts:AssumeRole"},
+            {"Sid":"AllowTemporaryGitHubRegistrar","Effect":"Allow","Principal":{"Federated":"arn:aws:iam::${AWS_ACCOUNT_ID}:oidc-provider/token.actions.githubusercontent.com"},"Action":"sts:AssumeRoleWithWebIdentity","Condition":{"StringEquals":{"token.actions.githubusercontent.com:aud":"sts.amazonaws.com"},"StringLike":{"token.actions.githubusercontent.com:sub":"${GITHUB_OIDC_SUB}"}}}
           ]}
           JSON
-          aws iam create-role --role-name "$INFRA_ROLE" --assume-role-policy-document file:///tmp/dual-trust.json >/dev/null
-          aws iam attach-role-policy --role-name "$INFRA_ROLE" --policy-arn "$MANAGED"
+          aws iam update-assume-role-policy --role-name "$INFRA_ROLE" --policy-document file:///tmp/dual-trust.json
           cat >/tmp/registrar.json <<JSON
           {"Version":"2012-10-17","Statement":[
             {"Effect":"Allow","Action":["ecs:RegisterTaskDefinition","ecs:DescribeTaskDefinition","ecs:DeregisterTaskDefinition"],"Resource":"*"},
@@ -110,8 +108,8 @@ jobs:
           ]}
           JSON
           aws iam put-role-policy --role-name "$INFRA_ROLE" --policy-name RippleTaskDefinitionRegistrarTemporary --policy-document file:///tmp/registrar.json
-          sleep 90
-          echo 'TEMP_TASKDEF_REGISTRAR_READY=PASS'
+          sleep 60
+          echo 'TEMP_REGISTRAR_TRUST_IN_PLACE=PASS'
 
       - name: Assume task-definition registrar
         id: registrar
@@ -181,23 +179,23 @@ jobs:
           role-session-name: ripple-custom-td-update
           retry-max-attempts: 2
 
-      - name: Restore infrastructure role and wait for IAM propagation
-        if: steps.registrar.outcome == 'success'
+      - name: Restore infrastructure trust in-place
+        if: always()
+        env:
+          ORIGINAL_ROLE_ID: ${{ steps.registrar_setup.outputs.role_id }}
         shell: bash
         run: |
           set -euo pipefail
-          MANAGED=arn:aws:iam::aws:policy/service-role/AmazonECSInfrastructureRoleforExpressGatewayServices
           aws iam delete-role-policy --role-name "$INFRA_ROLE" --policy-name RippleTaskDefinitionRegistrarTemporary >/dev/null 2>&1 || true
-          aws iam detach-role-policy --role-name "$INFRA_ROLE" --policy-arn "$MANAGED" >/dev/null 2>&1 || true
-          aws iam delete-role --role-name "$INFRA_ROLE" >/dev/null 2>&1 || true
           cat >/tmp/service-trust.json <<'JSON'
           {"Version":"2012-10-17","Statement":[{"Sid":"AllowECSExpressInfrastructure","Effect":"Allow","Principal":{"Service":"ecs.amazonaws.com"},"Action":"sts:AssumeRole"}]}
           JSON
-          aws iam create-role --role-name "$INFRA_ROLE" --assume-role-policy-document file:///tmp/service-trust.json >/dev/null
-          aws iam attach-role-policy --role-name "$INFRA_ROLE" --policy-arn "$MANAGED"
-          echo 'INFRASTRUCTURE_ROLE_RESTORED=PASS'
-          sleep 150
-          echo 'INFRASTRUCTURE_ROLE_PROPAGATED=PASS'
+          aws iam update-assume-role-policy --role-name "$INFRA_ROLE" --policy-document file:///tmp/service-trust.json
+          CURRENT_ROLE_ID="$(aws iam get-role --role-name "$INFRA_ROLE" --query 'Role.RoleId' --output text)"
+          test "$CURRENT_ROLE_ID" = "$ORIGINAL_ROLE_ID"
+          echo 'INFRASTRUCTURE_ROLE_IDENTITY_PRESERVED=PASS'
+          sleep 60
+          echo 'INFRASTRUCTURE_TRUST_RESTORED=PASS'
 
       - name: Update Express using pre-registered task definition
         id: update
@@ -219,7 +217,7 @@ jobs:
         run: |
           set -euo pipefail
           DONE=0
-          for i in $(seq 1 180); do
+          for i in $(seq 1 90); do
             aws ecs describe-express-gateway-service --service-arn "$SERVICE_ARN" >/tmp/service-now.json
             if TD_ARN="$TD_ARN" python - <<'PY'
           import json,os
@@ -233,7 +231,13 @@ jobs:
               echo "control_plane_converged_attempt=$i"
               break
             fi
-            echo "control_plane_wait_attempt=$i"
+            if [ $((i % 6)) -eq 0 ]; then
+              python - <<'PY'
+          import json
+          s=json.load(open('/tmp/service-now.json'))['service']
+          print('active_configurations=',[(c.get('taskDefinitionArn'),c.get('status')) for c in s.get('activeConfigurations',[])])
+          PY
+            fi
             sleep 10
           done
           test "$DONE" -eq 1
