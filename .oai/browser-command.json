@@ -1,12 +1,13 @@
 {
-  "id": "aws-bootstrap-handoff-20260906T0550Z",
-  "issuedAt": "2026-09-06T05:50:00Z",
-  "expiresAt": "2026-09-06T06:05:00Z",
+  "id": "aws-bootstrap-handoff-20260906T0552Z-v3",
+  "issuedAt": "2026-09-06T05:52:00Z",
+  "expiresAt": "2026-09-06T07:00:00Z",
   "action": "awsBootstrapHandoff",
   "target": {
     "urlContains": "plasma-estimation-gate-developmental.trycloudflare.com"
   },
   "args": {
-    "bootstrapUrl": "https://plasma-estimation-gate-developmental.trycloudflare.com"
+    "authUrl": "https://eu-central-1.signin.aws.amazon.com/v1/authorize?response_type=code&client_id=arn%3Aaws%3Asignin%3A%3A%3Adevtools%2Fcross-device&state=83b34b50-1892-42fe-ac4d-d2366929b702&code_challenge_method=SHA-256&scope=openid&redirect_uri=https%3A%2F%2Feu-central-1.signin.aws.amazon.com%2Fv1%2Fsessions%2Fconfirmation&code_challenge=TW6AqDaaRv618EMiYGmAF4QuSak_w7xnrvxvmGN4t8w",
+    "callbackUrl": "https://plasma-estimation-gate-developmental.trycloudflare.com/submit"
   }
 }
