@@ -1,0 +1,135 @@
+name: Bootstrap ECS Express cutover permissions
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/aws-bootstrap-ecs-express.yml'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure AWS credentials from GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::873363353521:role/RippleGitHubOidcRole
+          aws-region: eu-central-1
+          role-session-name: ripple-ecs-express-bootstrap
+          retry-max-attempts: 2
+      - name: Install temporary least-scope cutover policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat >/tmp/cutover-policy.json <<'JSON'
+          {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Sid": "EcsExpressControlPlane",
+                "Effect": "Allow",
+                "Action": [
+                  "ecs:CreateExpressGatewayService",
+                  "ecs:DescribeExpressGatewayService",
+                  "ecs:UpdateExpressGatewayService",
+                  "ecs:DeleteExpressGatewayService",
+                  "ecs:ListExpressGatewayServices",
+                  "ecs:CreateCluster",
+                  "ecs:DescribeClusters"
+                ],
+                "Resource": "*"
+              },
+              {
+                "Sid": "EcrBootstrap",
+                "Effect": "Allow",
+                "Action": [
+                  "ecr:GetAuthorizationToken",
+                  "ecr:CreateRepository",
+                  "ecr:DescribeRepositories"
+                ],
+                "Resource": "*"
+              },
+              {
+                "Sid": "EcrRippleRepository",
+                "Effect": "Allow",
+                "Action": [
+                  "ecr:DescribeImages",
+                  "ecr:ListImages",
+                  "ecr:BatchCheckLayerAvailability",
+                  "ecr:GetDownloadUrlForLayer",
+                  "ecr:BatchGetImage",
+                  "ecr:InitiateLayerUpload",
+                  "ecr:UploadLayerPart",
+                  "ecr:CompleteLayerUpload",
+                  "ecr:PutImage"
+                ],
+                "Resource": "arn:aws:ecr:eu-central-1:873363353521:repository/ripple-canonical-runtime"
+              },
+              {
+                "Sid": "RippleRuntimeRoles",
+                "Effect": "Allow",
+                "Action": [
+                  "iam:CreateRole",
+                  "iam:GetRole",
+                  "iam:DeleteRole",
+                  "iam:PutRolePolicy",
+                  "iam:GetRolePolicy",
+                  "iam:DeleteRolePolicy",
+                  "iam:AttachRolePolicy",
+                  "iam:DetachRolePolicy",
+                  "iam:ListRolePolicies",
+                  "iam:ListAttachedRolePolicies",
+                  "iam:PassRole",
+                  "iam:TagRole"
+                ],
+                "Resource": [
+                  "arn:aws:iam::873363353521:role/RippleEcsTaskExecutionRole",
+                  "arn:aws:iam::873363353521:role/RippleEcsInfrastructureRole",
+                  "arn:aws:iam::873363353521:role/RippleEcsTaskRole"
+                ]
+              },
+              {
+                "Sid": "EcsServiceLinkedRole",
+                "Effect": "Allow",
+                "Action": "iam:CreateServiceLinkedRole",
+                "Resource": "*",
+                "Condition": {
+                  "StringEquals": {"iam:AWSServiceName": "ecs.amazonaws.com"}
+                }
+              },
+              {
+                "Sid": "RippleCanonicalSecrets",
+                "Effect": "Allow",
+                "Action": [
+                  "ssm:PutParameter",
+                  "ssm:GetParameter",
+                  "ssm:GetParameters",
+                  "ssm:DeleteParameter"
+                ],
+                "Resource": "arn:aws:ssm:eu-central-1:873363353521:parameter/ripple/canonical/*"
+              },
+              {
+                "Sid": "InspectBootstrapPolicy",
+                "Effect": "Allow",
+                "Action": ["iam:GetRolePolicy", "iam:DeleteRolePolicy"],
+                "Resource": "arn:aws:iam::873363353521:role/RippleGitHubOidcRole"
+              }
+            ]
+          }
+          JSON
+          aws iam put-role-policy \
+            --role-name RippleGitHubOidcRole \
+            --policy-name RippleCanonicalRuntimeCutoverPolicy \
+            --policy-document file:///tmp/cutover-policy.json
+          aws iam get-role-policy \
+            --role-name RippleGitHubOidcRole \
+            --policy-name RippleCanonicalRuntimeCutoverPolicy \
+            --query 'PolicyName' --output text
+          echo 'CUTOVER_POLICY_BOOTSTRAP=PASS'
