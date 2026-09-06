@@ -1,0 +1,95 @@
+name: AWS Cost Guard
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - poc/free-work-replacement
+    paths:
+      - '.github/workflows/aws-cost-guard.yml'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS credentials from GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::873363353521:role/RippleGitHubOidcRole
+          aws-region: eu-central-1
+          role-session-name: ripple-cost-guard
+          retry-max-attempts: 2
+
+      - name: Read month-to-date AWS cost
+        shell: bash
+        run: |
+          set -euo pipefail
+          START="$(date -u +%Y-%m-01)"
+          END="$(date -u -d '+1 day' +%Y-%m-%d)"
+          aws ce get-cost-and-usage \
+            --region us-east-1 \
+            --time-period Start="$START",End="$END" \
+            --granularity MONTHLY \
+            --metrics UnblendedCost \
+            > /tmp/cost.json
+          python - <<'PY'
+          import json
+          d=json.load(open('/tmp/cost.json'))
+          r=d.get('ResultsByTime') or []
+          m=((r[0].get('Total') or {}).get('UnblendedCost') or {}) if r else {}
+          print('AWS_MTD_COST=' + str(m.get('Amount','UNKNOWN')))
+          print('AWS_MTD_UNIT=' + str(m.get('Unit','USD')))
+          print('AWS_MTD_ESTIMATED=' + str((r[0].get('Estimated') if r else 'UNKNOWN')))
+          PY
+
+      - name: Set Cost Anomaly Detection threshold to 5 USD
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws ce get-anomaly-subscriptions --region us-east-1 --max-results 100 > /tmp/subs.json
+          ARN="$(python - <<'PY'
+          import json
+          d=json.load(open('/tmp/subs.json'))
+          subs=d.get('AnomalySubscriptions') or []
+          chosen=None
+          for s in subs:
+              addresses=[str(x.get('Address','')).lower() for x in (s.get('Subscribers') or [])]
+              if 'rarescos@gmail.com' in addresses and s.get('Frequency') == 'DAILY':
+                  chosen=s; break
+          if chosen is None and len(subs)==1:
+              chosen=subs[0]
+          if chosen is None:
+              raise SystemExit('No unique daily anomaly subscription found for account email')
+          print(chosen['SubscriptionArn'])
+          PY
+          )"
+          echo "ANOMALY_SUBSCRIPTION_ARN=$ARN"
+
+          EXPR='{"Dimensions":{"Key":"ANOMALY_TOTAL_IMPACT_ABSOLUTE","Values":["5"],"MatchOptions":["GREATER_THAN_OR_EQUAL"]}}'
+          aws ce update-anomaly-subscription \
+            --region us-east-1 \
+            --subscription-arn "$ARN" \
+            --threshold-expression "$EXPR" \
+            > /tmp/update.json
+
+          aws ce get-anomaly-subscriptions --region us-east-1 --max-results 100 > /tmp/verify.json
+          ARN="$ARN" python - <<'PY'
+          import json, os, sys
+          arn=os.environ['ARN']
+          d=json.load(open('/tmp/verify.json'))
+          s=next((x for x in (d.get('AnomalySubscriptions') or []) if x.get('SubscriptionArn')==arn), None)
+          if not s:
+              raise SystemExit('Updated subscription not found during verification')
+          expr=s.get('ThresholdExpression')
+          print('ANOMALY_THRESHOLD_EXPRESSION=' + json.dumps(expr, separators=(',',':')))
+          dims=(expr or {}).get('Dimensions') or {}
+          values=[str(v) for v in (dims.get('Values') or [])]
+          if dims.get('Key') != 'ANOMALY_TOTAL_IMPACT_ABSOLUTE' or '5' not in values:
+              raise SystemExit('5 USD anomaly threshold verification failed')
+          print('ANOMALY_THRESHOLD_USD=5')
+          print('COST_GUARD=PASS')
+          PY
