@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+AWS_BASE = "https://ri-9fd0e66d62464ec4ae642ccf46e6864d.ecs.eu-central-1.on.aws"
+AWS_MCP = f"{AWS_BASE}/mcp"
 
 
 def read(path: str) -> str:
@@ -31,6 +33,9 @@ def main() -> int:
     master = read("docs/MASTER.md")
     open_source = read("docs/OPEN_SOURCE_SUBMISSION.md")
     aws_live = read("docs/AWS_DIRECT_LIVE_EVIDENCE.md")
+    aws_readiness = read("docs/AWS_READINESS.md")
+    credentials = read("docs/AWS_RUNTIME_CREDENTIALS.md")
+    addon = read("addon-package/addon.json")
 
     for needle in (
         "Tell Alexa one thing that changed. Ripple fixes what breaks downstream.",
@@ -40,8 +45,10 @@ def main() -> int:
         "$74 net cash preserved",
         "MCP 2025-11-25",
         "MCP App",
-        "AWS services are live and structurally verified",
-        "canonical public Railway AWS-runtime cutover is pending",
+        "AWS is the canonical runtime",
+        AWS_MCP,
+        "5/5 deduplicated",
+        "0 new provider writes",
         "What is real vs simulated",
         "one bounded real external provider integration",
         "docs/FRICTION_LOG.md",
@@ -49,12 +56,10 @@ def main() -> int:
         require(readme, needle, "README", errors)
 
     for needle in (
+        "canonical public Railway AWS-runtime cutover is pending",
+        "Railway remains the public MCP transport host",
         "AWS-ready, not AWS-live verified",
-        "**v1.2 — Alexa+ remote MCP milestone**",
-        "43/43 tests PASS",
-        "6/6 adversarial scenarios PASS",
         "AWS integration remains a later milestone",
-        "DynamoDB/Lambda/CloudWatch",
     ):
         forbid(readme, needle, "README", errors)
 
@@ -71,8 +76,7 @@ def main() -> int:
     ):
         if friction.count(field) < 5:
             errors.append(
-                f"FRICTION_LOG: expected field {field!r} in at least five real entries; "
-                f"found {friction.count(field)}"
+                f"FRICTION_LOG: expected field {field!r} in at least five real entries; found {friction.count(field)}"
             )
 
     for needle in (
@@ -81,19 +85,24 @@ def main() -> int:
         "What needs work?",
         "How was onboarding from zero to hello world?",
         "Would you build with Alexa+ / this path again?",
-        "Direct AWS structural evidence is live verified",
-        "canonical public Railway MCP process",
-        "AWS_DIRECT_LIVE_EVIDENCE=PASS",
+        "canonical public runtime now runs on AWS ECS Express Mode / Fargate",
+        "IAM task roles + GitHub OIDC",
     ):
         require(feedback, needle, "PRODUCT_FEEDBACK", errors)
-    forbid(feedback, "implemented and AWS-ready, but not yet AWS-live verified", "PRODUCT_FEEDBACK", errors)
+    for needle in (
+        "canonical public Railway MCP process",
+        "credential-safe Railway cutover",
+    ):
+        forbid(feedback, needle, "PRODUCT_FEEDBACK", errors)
 
     for needle in (
         "$5,180 net cash preserved",
         "5/5 deduplicated",
-        "REAL_PROVIDER",
+        "0 new provider writes",
+        "one bounded real external provider proof",
         "AWS services are live and structurally verified",
-        "canonical public Railway AWS-runtime cutover is pending",
+        "canonical public runtime runs on AWS",
+        AWS_MCP,
         "No actual Alexa+ production-client session is claimed",
         "**Primary Track:** Alexa+",
         "**Mini Challenge:** AWS Builder",
@@ -101,14 +110,14 @@ def main() -> int:
         "## Open Source Mini Challenge",
         "https://github.com/rarescos-pixel/ripple-agentic-plan-repair/pull/22",
     ):
-        # REAL_PROVIDER is represented as prose in the draft; accept the exact
-        # live-provider contract phrase below instead of a workflow-only marker.
-        if needle == "REAL_PROVIDER":
-            require(submission, "one bounded real external provider proof", "SUBMISSION_DRAFT", errors)
-        else:
-            require(submission, needle, "SUBMISSION_DRAFT", errors)
-    forbid(submission, "Current evidence status is AWS-ready, not AWS-live verified", "SUBMISSION_DRAFT", errors)
+        require(submission, needle, "SUBMISSION_DRAFT", errors)
+    for needle in (
+        "canonical public Railway AWS-runtime cutover is pending",
+        "keeps the public MCP transport host on Railway",
+    ):
+        forbid(submission, needle, "SUBMISSION_DRAFT", errors)
 
+    # Video remains locked; only validate its existing safety/length constraints.
     for needle in (
         "## 0:00–0:20",
         "No terminal scrolling as the primary demo.",
@@ -129,19 +138,18 @@ def main() -> int:
     for needle in (
         "# Ripple — MASTER competition state",
         "$5,180",
-        "## AWS boundary — DIRECT LIVE VERIFIED / PUBLIC RUNTIME CUTOVER PENDING",
-        "AWS_DIRECT_LIVE_EVIDENCE=PASS",
+        "## AWS boundary — CANONICAL PUBLIC RUNTIME LIVE",
+        "AWS services are live and structurally verified",
+        AWS_MCP,
         "## Real-provider contract — VERIFIED",
         "## Submission lock",
         "STOP before video",
     ):
         require(master, needle, "MASTER", errors)
     for needle in (
-        "AWS-READY, NOT AWS-LIVE VERIFIED",
-        "# Ripple — MASTER v1.2",
-        "43/43 tests",
-        "DynamoDB/Lambda/DynamoDB/CloudWatch",
-        "Lambda deterministic boundary",
+        "PUBLIC RUNTIME CUTOVER PENDING",
+        "Railway remains the public MCP transport host",
+        "current public Railway service has not yet been claimed",
     ):
         forbid(master, needle, "MASTER", errors)
 
@@ -151,9 +159,29 @@ def main() -> int:
         "CLOUDWATCH_LOGS_LIVE=PASS",
         "DYNAMODB_RECEIPT_LIVE=PASS",
         "BEDROCK_LIVE=PASS",
-        "public Railway AWS-runtime cutover remains pending",
+        "canonical public runtime now runs on **AWS ECS Express Mode / Fargate**",
     ):
         require(aws_live, needle, "AWS_DIRECT_LIVE_EVIDENCE", errors)
+
+    for needle in (
+        "# AWS readiness — canonical structural runtime",
+        AWS_MCP,
+        "runtime mode: `aws-structural`",
+        "authoritative write count remains unchanged across that replay (`5 -> 5`)",
+    ):
+        require(aws_readiness, needle, "AWS_READINESS", errors)
+
+    for needle in (
+        "# Ripple — AWS runtime credentials and identity",
+        "does **not** use static AWS access keys",
+        "RippleEcsTaskRole",
+        "GitHub Actions uses short-lived OIDC federation",
+    ):
+        require(credentials, needle, "AWS_RUNTIME_CREDENTIALS", errors)
+
+    require(addon, AWS_MCP, "ADDON_PACKAGE", errors)
+    require(addon, AWS_BASE + "/assets/alexa/ripple-carousel-600x900.png", "ADDON_PACKAGE", errors)
+    forbid(addon, "ripple-v12-production.up.railway.app", "ADDON_PACKAGE", errors)
 
     for needle in (
         "# Open Source Mini Challenge — submission packet",
@@ -176,7 +204,9 @@ def main() -> int:
     print("Ripple submission surface gate: PASS")
     print("judge_hook: 5 commitments / $116 at risk / $42 repair / $74 net preserved")
     print("friction_entries: 5 complete")
-    print("aws_claim: direct structural live PASS / public Railway AWS-runtime cutover pending")
+    print("aws_claim: canonical AWS ECS runtime + Bedrock/DynamoDB/CloudWatch")
+    print("replay_claim: 5/5 deduplicated / authoritative writes unchanged / 0 new provider writes")
+    print("alexa_package_endpoint:", AWS_MCP)
     print("real_provider: bounded reversible external write/readback/replay/restore PASS")
     print("mini_challenges: AWS Builder + Open Source")
     return 0
