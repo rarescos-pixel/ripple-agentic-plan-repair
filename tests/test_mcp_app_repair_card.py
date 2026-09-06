@@ -166,7 +166,7 @@ def test_widget_is_display_only_and_cannot_cross_approval_boundary():
     assert "http://" not in html
 
 
-def test_tools_list_binds_only_preview_to_repair_card_app():
+def test_tools_list_binds_preview_and_execute_to_same_display_only_repair_card_app():
     reset()
 
     async def case():
@@ -176,10 +176,10 @@ def test_tools_list_binds_only_preview_to_repair_card_app():
             listed = await rpc(c, headers(svc, sid), 2, "tools/list")
             assert listed.status_code == 200
             tools = {tool["name"]: tool for tool in listed.json()["result"]["tools"]}
-            preview = tools["preview_repair_plan"]
-            assert preview["_meta"]["ui"]["resourceUri"] == REPAIR_CARD_RESOURCE_URI
-            assert preview["_meta"]["ui"]["visibility"] == ["model", "app"]
-            for name in {"record_change", "approve_repair_plan", "execute_repair_plan", "get_repair_status"}:
+            for name in {"preview_repair_plan", "execute_repair_plan"}:
+                assert tools[name]["_meta"]["ui"]["resourceUri"] == REPAIR_CARD_RESOURCE_URI
+                assert tools[name]["_meta"]["ui"]["visibility"] == ["model", "app"]
+            for name in {"record_change", "approve_repair_plan", "get_repair_status"}:
                 assert "_meta" not in tools[name]
 
     run(case())
