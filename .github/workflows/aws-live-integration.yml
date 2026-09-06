@@ -18,6 +18,8 @@ jobs:
     env:
       AWS_REGION: eu-central-1
       TABLE_NAME: ripple-live-evidence-state
+      LOG_GROUP: /ripple/live-evidence
+      LOG_STREAM: github-actions
     steps:
       - uses: actions/checkout@v4
 
@@ -141,21 +143,51 @@ jobs:
             echo 'status=FAILED_OTHER' >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Exercise CloudWatch if permitted by the delegated role
+      - name: Exercise the actual CloudWatch Logs trace path
         id: cloudwatch
         shell: bash
         run: |
           set -uo pipefail
-          if aws cloudwatch put-metric-data \
-            --namespace Ripple/LiveEvidence \
-            --metric-data MetricName=StructuralProof,Value=1,Unit=Count \
-            >/tmp/cw.out 2>/tmp/cw.err; then
-            echo 'CLOUDWATCH_LIVE=PASS'
-            echo 'status=PASS' >> "$GITHUB_OUTPUT"
-          else
-            echo 'CLOUDWATCH_LIVE=DENIED_BY_CURRENT_OIDC_ROLE'
+          PROOF_ID="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          if ! aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP" >/tmp/cw-groups.json 2>/tmp/cw.err; then
+            echo 'CLOUDWATCH_LOGS=DENIED_DESCRIBE'
             sed -E 's/[0-9]{12}/************/g' /tmp/cw.err | head -2
             echo 'status=DENIED' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if ! aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP" --query "logGroups[?logGroupName=='$LOG_GROUP'].logGroupName" --output text | grep -qx "$LOG_GROUP"; then
+            if ! aws logs create-log-group --log-group-name "$LOG_GROUP" >/tmp/cw-create-group.out 2>/tmp/cw.err; then
+              echo 'CLOUDWATCH_LOGS=DENIED_CREATE_GROUP'
+              sed -E 's/[0-9]{12}/************/g' /tmp/cw.err | head -2
+              echo 'status=DENIED' >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          aws logs put-retention-policy --log-group-name "$LOG_GROUP" --retention-in-days 1 >/dev/null 2>/tmp/cw-retention.err || true
+          if ! aws logs describe-log-streams --log-group-name "$LOG_GROUP" --log-stream-name-prefix "$LOG_STREAM" --query "logStreams[?logStreamName=='$LOG_STREAM'].logStreamName" --output text | grep -qx "$LOG_STREAM"; then
+            if ! aws logs create-log-stream --log-group-name "$LOG_GROUP" --log-stream-name "$LOG_STREAM" >/tmp/cw-create-stream.out 2>/tmp/cw.err; then
+              echo 'CLOUDWATCH_LOGS=DENIED_CREATE_STREAM'
+              sed -E 's/[0-9]{12}/************/g' /tmp/cw.err | head -2
+              echo 'status=DENIED' >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          TS="$(($(date +%s) * 1000))"
+          MESSAGE="{\"schema\":\"ripple.trace.v1\",\"event_type\":\"aws.live.proof\",\"correlation_id\":\"$PROOF_ID\",\"payload\":{\"redacted\":true}}"
+          if ! aws logs put-log-events --log-group-name "$LOG_GROUP" --log-stream-name "$LOG_STREAM" --log-events timestamp="$TS",message="$MESSAGE" >/tmp/cw-put.json 2>/tmp/cw.err; then
+            echo 'CLOUDWATCH_LOGS=DENIED_PUT'
+            sed -E 's/[0-9]{12}/************/g' /tmp/cw.err | head -2
+            echo 'status=DENIED' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          sleep 2
+          if aws logs filter-log-events --log-group-name "$LOG_GROUP" --log-stream-names "$LOG_STREAM" --filter-pattern "$PROOF_ID" --query 'events[0].message' --output text 2>/tmp/cw.err | grep -q "$PROOF_ID"; then
+            echo 'CLOUDWATCH_LOGS_LIVE=PASS'
+            echo 'status=PASS' >> "$GITHUB_OUTPUT"
+          else
+            echo 'CLOUDWATCH_LOGS=WRITE_NOT_READABLE_OR_FILTER_DENIED'
+            sed -E 's/[0-9]{12}/************/g' /tmp/cw.err | head -2
+            echo 'status=PARTIAL' >> "$GITHUB_OUTPUT"
           fi
 
       - name: Emit truthful AWS status

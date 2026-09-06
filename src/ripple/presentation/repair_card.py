@@ -33,6 +33,58 @@ def _impact_label(impact: Impact) -> str:
     return impact.affected_node_id.split(":", 1)[0].replace("_", " ").strip().title()
 
 
+def _optimization_evidence(plan: RepairPlan) -> list[dict[str, Any]]:
+    """Explain only economic choices that can be proven from the approved plan.
+
+    The planner may remove candidates because of hard user constraints before
+    economic ranking. The RepairPlan intentionally does not expose those
+    private policy details. To avoid inventing a reason, this presentation
+    helper emits evidence only when the selected action is also the strongest
+    net-value choice among every option visible in the immutable impact
+    snapshot. That makes each explanation mechanically checkable.
+    """
+    actions = {action.target_id: action for action in plan.actions}
+    evidence: list[dict[str, Any]] = []
+    for impact in plan.impacts:
+        selected = actions.get(impact.affected_node_id)
+        if selected is None or len(impact.options) < 2:
+            continue
+        selected_net = selected.avoidable_loss - selected.added_cost
+        alternatives = [
+            option for option in impact.options
+            if not (option.tool == selected.tool and option.operation == selected.operation and option.params == selected.params)
+        ]
+        if not alternatives:
+            continue
+        best_visible = max(
+            impact.options,
+            key=lambda option: (option.avoidable_loss - option.added_cost, -option.added_cost, option.reversible),
+        )
+        if not (
+            best_visible.tool == selected.tool
+            and best_visible.operation == selected.operation
+            and best_visible.params == selected.params
+        ):
+            # A hidden hard constraint may explain the selection. Do not guess.
+            continue
+        best_alternative = max(
+            alternatives,
+            key=lambda option: (option.avoidable_loss - option.added_cost, -option.added_cost, option.reversible),
+        )
+        alternative_net = best_alternative.avoidable_loss - best_alternative.added_cost
+        evidence.append({
+            "commitment_id": impact.affected_node_id,
+            "commitment": _impact_label(impact),
+            "selected_operation": selected.operation,
+            "selected_net_preserved": selected_net,
+            "best_alternative_operation": best_alternative.operation,
+            "best_alternative_net_preserved": alternative_net,
+            "net_advantage": selected_net - alternative_net,
+            "reason": "maximizes net direct cash preserved among visible safe candidates",
+        })
+    return evidence
+
+
 def build_repair_card(plan: RepairPlan, *, max_visible_impacts: int = 3) -> dict[str, Any]:
     """Build a low-density, voice-parity decision surface for Alexa+.
 
@@ -92,6 +144,7 @@ def build_repair_card(plan: RepairPlan, *, max_visible_impacts: int = 3) -> dict
             for impact in visible
         ],
         "remaining_impacts": remaining,
+        "optimization_evidence": _optimization_evidence(plan),
         "decision": {
             "label": decision_label,
             "voice_prompt": decision_prompt,
