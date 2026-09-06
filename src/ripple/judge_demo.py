@@ -7,16 +7,42 @@ from typing import Dict
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
 
+from ripple.golden import build_golden
+from ripple.orchestration.agent import GoldenChangeInterpreter, RippleAgent
+from ripple.orchestration.session import RippleSession
+from ripple.persistence import MemoryStateStore
 from ripple.webapp import DemoController, INDEX_HTML
 
 DEMO_COOKIE = "ripple_demo_sid"
 DEMO_TTL_SECONDS = 3600
 DEMO_MAX_SESSIONS = 250
 
-# The judge demo is deliberately isolated from the authenticated MCP session map.
-# It drives deterministic simulated provider adapters only; public MCP transport
-# proof remains a separate authenticated evidence path.
-_DEMO_SESSIONS: Dict[str, tuple[DemoController, float]] = {}
+
+class IsolatedJudgeDemoController(DemoController):
+    """Judge-only controller whose deterministic fixture state can never hit AWS.
+
+    The production runtime may later switch to DynamoDB. The public demo uses
+    fixed golden plan/action identifiers, so sharing the production durable store
+    would make independent browser sessions collide on approvals/idempotency keys.
+    This controller therefore forces a fresh MemoryStateStore per browser session.
+    """
+
+    def reset(self):
+        _, tools, planner, executor, _ = build_golden(store=MemoryStateStore())
+        self.tools = tools
+        self.agent = RippleAgent(GoldenChangeInterpreter(), planner)
+        self.session = RippleSession(self.agent, executor)
+        self.proposal = None
+        self.last_receipts = []
+        self.last_approval = None
+        return {"status": "reset"}
+
+
+# The judge demo is deliberately isolated from the authenticated MCP session map
+# and from the production durable state backend. It drives deterministic simulated
+# provider adapters only; public MCP transport proof remains a separate
+# authenticated evidence path.
+_DEMO_SESSIONS: Dict[str, tuple[IsolatedJudgeDemoController, float]] = {}
 
 
 def _cleanup_sessions() -> None:
@@ -31,7 +57,7 @@ def _cleanup_sessions() -> None:
         _DEMO_SESSIONS.pop(sid, None)
 
 
-def _controller_for(request: Request) -> tuple[str, DemoController, bool]:
+def _controller_for(request: Request) -> tuple[str, IsolatedJudgeDemoController, bool]:
     _cleanup_sessions()
     sid = request.cookies.get(DEMO_COOKIE, "")
     if sid and sid in _DEMO_SESSIONS:
@@ -39,7 +65,7 @@ def _controller_for(request: Request) -> tuple[str, DemoController, bool]:
         _DEMO_SESSIONS[sid] = (controller, time.time())
         return sid, controller, False
     sid = secrets.token_urlsafe(18)
-    controller = DemoController()
+    controller = IsolatedJudgeDemoController()
     _DEMO_SESSIONS[sid] = (controller, time.time())
     return sid, controller, True
 
