@@ -1,0 +1,86 @@
+{
+  "schema": "rpo-capability-ledger/v1",
+  "updated_at": "2026-09-06T09:55:00+03:00",
+  "policy": {
+    "default_route": [
+      "connector_or_api",
+      "programmatic_cloud_execution",
+      "reusable_browser_control",
+      "chatgpt_work_only_for_distinct_missing_capability",
+      "human_only_if_irreducible"
+    ],
+    "manual_pc_intervention": "DEFERRED_BY_DEFAULT",
+    "progress_definition": "verified_state_change_or_reusable_new_information"
+  },
+  "capabilities": [
+    {
+      "id": "github.read_write",
+      "status": "VERIFIED_WORKING",
+      "scope": "repository files, issues, workflows, commits",
+      "evidence": "GitHub connector writes and reads verified repeatedly"
+    },
+    {
+      "id": "github.actions.cloud_terminal",
+      "status": "VERIFIED_WORKING",
+      "scope": "ephemeral Linux execution, builds, tests, scripts, automation",
+      "evidence": "AWS bootstrap, cost guard and budget guard workflows executed successfully"
+    },
+    {
+      "id": "aws.oidc",
+      "status": "VERIFIED_WORKING",
+      "scope": "GitHub Actions to AWS without long-lived access keys",
+      "evidence": "independent OIDC smoke and sts:GetCallerIdentity PASS"
+    },
+    {
+      "id": "aws.cost_guard",
+      "status": "VERIFIED_WORKING",
+      "scope": "Cost Anomaly Detection and monthly AWS Budget guard",
+      "evidence": "anomaly threshold 5 USD and Ripple-Zero-Cost-Guard 5 USD verified"
+    },
+    {
+      "id": "railway.direct_plugin",
+      "status": "VERIFIED_WORKING",
+      "scope": "project/service status, logs, config and deploy operations exposed by connector",
+      "evidence": "ripple-agentic-plan-repair production project and service status read directly from chat"
+    },
+    {
+      "id": "opera.connector",
+      "status": "VERIFIED_WORKING",
+      "scope": "tabs, page reading, screenshots, navigation, optional tab close/history",
+      "evidence": "multiple authenticated AWS and browser inspections completed"
+    },
+    {
+      "id": "browser.bridge.v1",
+      "status": "VERIFIED_WORKING",
+      "scope": "navigate, reload, focus, clickText, clickSelector, fill, select, awsBootstrapHandoff",
+      "limitations": [
+        "PC and Opera must be running",
+        "single-command channel",
+        "public GitHub command transport is suitable only for sanitized non-secret payloads",
+        "not a general cloud browser"
+      ],
+      "evidence": "AWS bootstrap handoff and harmless command execution verified"
+    },
+    {
+      "id": "browser.cloud_persistent_pc_off",
+      "status": "UNAVAILABLE",
+      "scope": "authenticated arbitrary browser work while user PC is off",
+      "fallback": "ChatGPT Work"
+    },
+    {
+      "id": "local.filesystem_terminal",
+      "status": "DEFERRED",
+      "scope": "user PC filesystem and terminal",
+      "reason": "Remote Desktop Commander requires local setup and user explicitly does not want to stay at the computer",
+      "routing_rule": "use GitHub, Files/Library, Railway or cloud execution first"
+    }
+  ],
+  "invalidated_paths": [
+    "use Railway as persistent AWS browser",
+    "Browserbase as AWS critical path",
+    "Make as AWS/browser critical path",
+    "repeat aws login remote after OIDC is working",
+    "ask user to act as mouse or terminal when a programmatic route exists",
+    "install local desktop tooling unless a concrete task cannot be solved otherwise"
+  ]
+}
