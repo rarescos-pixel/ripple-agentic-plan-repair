@@ -40,5 +40,14 @@ if old_eof not in s:
     raise SystemExit('EOF diagnostic anchor not found')
 s = s.replace(old_eof, new_eof, 1)
 
+# Cost objective is zero. Add only the Cost Explorer permissions needed to read
+# current spend and tighten the existing anomaly subscription; no broad billing/IAM access.
+cost_anchor = '''            {\n                "Sid": "IdentityCheck",'''
+cost_stmt = '''            {\n                "Sid": "RippleCostGuard",\n                "Effect": "Allow",\n                "Action": [\n                    "ce:GetCostAndUsage",\n                    "ce:GetAnomalySubscriptions",\n                    "ce:UpdateAnomalySubscription"\n                ],\n                "Resource": "*",\n            },\n'''
+if '"Sid": "RippleCostGuard"' not in s:
+    if cost_anchor not in s:
+        raise SystemExit('IdentityCheck anchor not found for Cost Explorer permissions')
+    s = s.replace(cost_anchor, cost_stmt + cost_anchor, 1)
+
 path.write_text(s, encoding='utf-8')
-print('patched AWS bootstrap for immutable OIDC subject, verification envelope, and sanitized diagnostics')
+print('patched AWS bootstrap for immutable OIDC subject, verification envelope, sanitized diagnostics, and least-privilege cost guard access')
