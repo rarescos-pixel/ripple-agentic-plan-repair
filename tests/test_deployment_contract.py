@@ -48,7 +48,7 @@ def test_production_readiness_reports_non_aws_mode_before_cutover():
         for name in (
             "RIPPLE_STATE_BACKEND", "RIPPLE_CHANGE_INTERPRETER", "RIPPLE_TRACE_BACKEND",
             "RIPPLE_DYNAMODB_TABLE", "RIPPLE_BEDROCK_MODEL_ID", "RIPPLE_CLOUDWATCH_LOG_GROUP",
-            "RIPPLE_REQUIRE_AWS_RUNTIME",
+            "RIPPLE_REQUIRE_AWS_RUNTIME", "RAILWAY_GIT_COMMIT_SHA",
         ):
             os.environ.pop(name, None)
         async def case():
@@ -60,6 +60,28 @@ def test_production_readiness_reports_non_aws_mode_before_cutover():
                 assert body['runtime_mode']=='non-aws'
                 assert body['structural_aws_runtime'] is False
                 assert body['aws_components']==[]
+                assert 'source_revision' not in body
+        run(case())
+    finally:
+        os.environ.clear(); os.environ.update(old)
+
+
+def test_production_readiness_exposes_exact_non_secret_source_revision():
+    old=dict(os.environ)
+    try:
+        os.environ.update(production_env())
+        os.environ["RAILWAY_GIT_COMMIT_SHA"] = "a" * 40
+        for name in (
+            "RIPPLE_STATE_BACKEND", "RIPPLE_CHANGE_INTERPRETER", "RIPPLE_TRACE_BACKEND",
+            "RIPPLE_DYNAMODB_TABLE", "RIPPLE_BEDROCK_MODEL_ID", "RIPPLE_CLOUDWATCH_LOG_GROUP",
+            "RIPPLE_REQUIRE_AWS_RUNTIME",
+        ):
+            os.environ.pop(name, None)
+        async def case():
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as c:
+                r=await c.get('/readyz')
+                assert r.status_code==200
+                assert r.json()['source_revision']=="a" * 40
         run(case())
     finally:
         os.environ.clear(); os.environ.update(old)
