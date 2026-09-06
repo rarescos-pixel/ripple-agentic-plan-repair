@@ -1,126 +1,115 @@
 # Product Feedback — Amazon Developer Hackathon
 
-This document is written to match the required submission questions. It distinguishes **observed/runtime feedback** from **integration/setup feedback** and keeps direct live AWS evidence separate from the stronger claim that the canonical public Railway process has completed its AWS-backed cutover.
+This document answers the submission feedback questions and separates observed behavior from historical integration friction.
 
 ## Alexa+ self-hosted MCP path
 
 ### Which developer tools, APIs and SDKs did you use and for what?
 
-Ripple uses the Alexa+ **self-hosted MCP server** path with MCP `2025-11-25` Streamable HTTP as the agent surface. We implemented the protocol, OAuth discovery/authorization, tool schemas and a Repair Card MCP App resource. We also prepared the Alexa+ add-on package/media surfaces used by the onboarding/inspection flow.
-
-The public MCP server exposes five tools: record a changed fact, preview a repair plan, approve the exact repair, execute bounded actions and query repair status.
+Ripple uses the Alexa+ **self-hosted MCP server** path with MCP `2025-11-25` Streamable HTTP. We implemented OAuth discovery/authorization, tool schemas, stateful MCP sessions, five bounded tools, and a display-only Repair Card MCP App resource. The Alexa+ add-on package points at the canonical public AWS MCP endpoint.
 
 ### What worked well?
 
-- The self-hosted MCP path is a strong fit for agentic products that need their own deterministic policy and state rather than pushing all behavior into a prompt.
-- The minimum MCP version requirement is explicit and the Streamable HTTP transport maps cleanly to a normal HTTPS service.
-- MCP tool separation made Ripple's safety boundary easy to express: preview, approval and execution are distinct operations that can be tested independently.
-- The MCP App resource model lets a visual Repair Card complement voice without moving execution authority into the UI.
-- Once the interoperability details were pinned, the public service could be tested end to end from an independent remote container rather than only locally.
+- Self-hosted MCP is a strong fit when deterministic safety, money policy and idempotency must remain application-owned.
+- Tool separation makes preview, exact approval and execution independently testable.
+- The MCP App lets voice and screen share the same decision surface without giving the UI execution authority.
+- Once interoperability was pinned down, the public service could be tested end to end from an independent runner rather than only locally.
 
 ### What needs work?
 
-- A complete Alexa+ OAuth example should include the **refresh-token exchange**, not only initial authorization. Our strict implementation initially expected the resource binding to be repeated, while the Alexa-compatible refresh path omitted `resource`. A wrong explicit resource still needs rejection. One normative transcript would remove ambiguity.
-- The current Local Inspector guide documents MCP POSTs with `Accept: application/json`, while a strict Streamable HTTP implementation commonly validates the dual JSON + SSE Accept form. The sample also advertises an older client protocol version before the server negotiates its required `2025-11-25` version. That difference is easy to miss and can produce an HTTP 406 before tool discovery even when the server passes its normal MCP conformance suite. The docs should either align the example with the transport contract or explicitly say that Inspector intentionally uses JSON-only Accept and expects the server to tolerate it.
-- The visual integration path spans base MCP, Alexa+ guidance and the MCP Apps extension. A single canonical sample should show tool metadata → `ui://` resource → `resources/read` → MIME profile → host lifecycle in one place.
-- Add-on packaging would benefit from an official preflight validator that checks the manifest and resolves every public media/privacy/terms URL, verifies required image sizes/content types and catches missing packaged resources before onboarding.
-- Access/onboarding boundaries should be stated prominently: what can every hackathon participant run locally, what requires an enabled Alexa+ partner/developer surface, and what evidence is acceptable when an official client surface is unavailable.
+- A canonical Alexa+ OAuth example should include refresh-token exchange and explicitly document whether `resource` is omitted on refresh while a wrong explicit resource still fails closed.
+- Local Inspector examples should align their `Accept` headers and protocol-version examples with the Streamable HTTP contract, or explicitly document intended compatibility behavior.
+- One Alexa-oriented MCP App example should show tool metadata → `ui://` resource → `resources/read` → MIME profile → host lifecycle in one place.
+- Add-on packaging would benefit from an official preflight validator that resolves every endpoint/media/privacy/terms URL and validates required image sizes and content types.
 
 ### How was onboarding from zero to hello world?
 
-Getting a basic self-hosted MCP endpoint running was straightforward. The expensive part was moving from “MCP tool calls work” to an Alexa-ready product surface: OAuth refresh interoperability, Local Inspector request-shape compatibility, visual-resource binding, store/package assets, public media behavior and evidence that the deployed artifact actually contains what the manifest references.
-
-We solved that by building independent gates for protocol behavior, the documented Inspector request shape, OAuth refresh, MCP App safety and store media rather than treating a successful deployment status as proof.
+A basic MCP endpoint was straightforward. The expensive part was moving from “tool calls work” to a judge-ready Alexa surface: OAuth refresh interoperability, Inspector request shape, visual-resource binding, package assets, public media behavior and exact deployed-artifact evidence. Ripple addressed this with executable gates rather than treating deployment status as proof.
 
 ### Would you build with Alexa+ / this path again?
 
-**Yes.** The self-hosted MCP model is especially attractive for workflows where Alexa should orchestrate but must not own the application's money, safety or idempotency policy. It lets voice be the low-friction input while deterministic application code remains authoritative.
+**Yes.** Voice is the low-friction input, while deterministic application code remains authoritative for money, approval and idempotency.
 
 ---
 
-## MCP App / Alexa+ visual decision surface
+## MCP App / visual decision surface
 
 ### Which tools did you use and for what?
 
-Ripple uses an MCP App resource for the Repair Card. The card renders the consequence set, dollars at risk, repair cost, net value preserved, deterministic “Why this plan?” evidence and the execution receipt timeline. It is intentionally display-only and cannot invoke approval/execution.
+Ripple uses a display-only MCP App Repair Card to show the consequence set, dollars at risk, repair cost, net value preserved, “Why this plan?” evidence and execution receipts.
 
 ### What worked well?
 
-- The UI resource is transportable with the MCP tool instead of requiring a separate proprietary dashboard API.
-- Theme/context and resize hooks are enough for a compact decision card.
-- Keeping visual output separate from the tool's authority made it possible to enforce a strong static safety gate.
-- Binding both preview and execution results to the same display-only resource makes the approval boundary and post-execution receipts visually continuous without giving the UI tool authority.
+- The resource travels with MCP rather than requiring a separate dashboard API.
+- Preview and execution can bind to the same visual surface.
+- Static safety gates can prove the UI cannot approve or execute actions.
 
 ### What needs work?
 
-- The documentation should make the distinction between `structuredContent` and a renderable MCP App resource impossible to miss.
-- One official Alexa-oriented reference implementation covering the full lifecycle would reduce cross-document interpretation.
-- A local validator that renders the resource in the same constraints as the Alexa host would catch visual/packaging issues earlier.
-
-### Onboarding
-
-The conceptual model is good, but the first integration requires understanding several specifications at once. After the contract was clear, the implementation itself was small and stable.
+- The distinction between `structuredContent` and a renderable MCP App resource should be more prominent.
+- An official Alexa-oriented reference implementation and local renderer/validator would reduce integration ambiguity.
 
 ### Would you build with it again?
 
-**Yes.** For Ripple, the card materially improves the Alexa experience because the user can hear the recommendation, visually verify the exact money/scope before approval, then see authoritative receipts and replay safety after execution.
+**Yes.** For Ripple, the card materially improves the voice experience because the user can verify exact money/scope before approval and inspect authoritative receipts afterward.
 
 ---
 
-## AWS Builder — Bedrock, DynamoDB, CloudWatch, IAM and Budgets
+## AWS Builder — ECS Express Mode/Fargate, Bedrock, DynamoDB, CloudWatch, IAM and Budgets
 
 ### Current evidence status
 
-**Direct AWS structural evidence is live verified.** A completed GitHub OIDC evidence run exercised real Amazon Nova 2 Lite inference, DynamoDB receipt write/readback plus replay rejection, and CloudWatch Logs structured-event write plus readback. The aggregate marker is `AWS_DIRECT_LIVE_EVIDENCE=PASS`.
-
-The stronger claim that the canonical public Railway MCP process is already using those AWS backends for every request remains pending until the credential-safe Railway cutover and post-cutover exact-revision smoke pass. This distinction is deliberate.
+**AWS services are live and structurally verified, and the canonical public runtime now runs on AWS ECS Express Mode / Fargate.** Earlier direct evidence separately proved real Nova 2 Lite inference, DynamoDB conditional receipt semantics and CloudWatch write/readback. The canonical release path now goes further: it deploys one exact Git SHA as an immutable ECR image, requires ECS control-plane convergence and repeated public exact-SHA readiness, then runs authenticated AWS/MCP replay proof against that public endpoint.
 
 ### Which services are being used and for what?
 
-- **Amazon Bedrock / Nova 2 Lite:** normalize a natural-language changed fact into one constrained structured change event. Bedrock is not allowed to choose repairs or execute provider actions.
-- **Amazon DynamoDB:** durable proposal/approval state, idempotency records and authoritative receipts across process/session restarts.
-- **Amazon CloudWatch Logs:** bounded, redacted structured traces.
-- **IAM + GitHub OIDC:** least-privilege proof-run authority without committed static AWS credentials.
-- **AWS Budgets / anomaly controls:** cost guardrails for the hackathon project.
+- **Amazon ECS Express Mode / Fargate:** canonical public HTTPS MCP runtime.
+- **Amazon Bedrock / Nova 2 Lite:** normalize one natural-language changed fact into a constrained structured ChangeEvent; it never chooses the money-spending repair.
+- **Amazon DynamoDB:** durable exact proposal/approval state, idempotency records and authoritative receipts.
+- **Amazon CloudWatch Logs:** bounded redacted traces used for execution/recovery evidence.
+- **IAM task roles + GitHub OIDC:** runtime and deployment identity without static AWS credentials in Git or the container image.
+- **AWS Budgets / anomaly controls:** cost guardrails.
 
 ### What worked well during implementation and live verification?
 
-- DynamoDB's conditional-write semantics map naturally to authoritative idempotency receipts. The live proof confirmed that the first receipt wins, an exact replay is rejected by the conditional write, and the original authoritative receipt can be read back consistently.
-- Bedrock's constrained normalization boundary works well for Ripple's safety model: Nova 2 Lite handles language interpretation while deterministic code owns old state, money arithmetic, repair policy, approval and execution.
-- CloudWatch Logs can carry a small structured/redacted evidence event and provide an independent readback proof without logging the raw user utterance or credentials.
-- GitHub OIDC provides a clean temporary-credential path for CI evidence and avoids static AWS keys in the repository.
-- Keeping the AWS surface serverless/pay-per-use avoids adding Lambda/ECS/Fargate only for architecture-logo value.
+- DynamoDB conditional-write semantics map naturally to authoritative idempotency receipts.
+- Bedrock works well as a narrow language-normalization boundary while deterministic code owns old state, economic choice, approval and execution.
+- CloudWatch provides independently inspectable execution traces without raw-secret logging.
+- ECS task roles remove the static-credential problem that existed when the service was hosted outside AWS.
+- GitHub OIDC supports temporary deployment authority; the cutover workflow restores service-only infrastructure trust after task-definition registration.
+- ECS canary deployment and rollback behavior provided a useful fail-safe while we diagnosed an infrastructure-role identity issue.
 
 ### What needs work?
 
-- External-workload credential guidance is operationally heavy for small PaaS-hosted services. IAM Roles Anywhere is robust but introduces CA/trust-anchor/certificate lifecycle; not every PaaS exposes a workload OIDC token suitable for AWS STS.
-- A concise AWS guide for **external PaaS → Bedrock + DynamoDB + CloudWatch** should compare OIDC federation, Roles Anywhere and bounded temporary fallbacks, including rotation and teardown.
-- Bedrock model IDs vs geographic/application inference profiles are powerful but add conceptual overhead. A “choose a model for production invocation in region X” flow that outputs the correct profile form and explains when each ID is required would reduce setup errors.
+- ECS Express Mode documentation should make the lifecycle of its infrastructure role and any service-side credential binding more explicit. Recreating an apparently equivalent infrastructure role can behave differently from updating its trust policy in place because identity continuity matters.
+- A first-party “exact source revision → immutable ECR digest → ECS deployment → public endpoint” evidence recipe would help hackathon teams prove what is actually serving.
+- Bedrock model IDs versus geographic/application inference profiles remain conceptually expensive for first-time users.
+- Alexa+ + AWS examples would benefit from one end-to-end reference architecture for a self-hosted MCP service running directly on ECS/Fargate with OAuth and task roles.
 
-### Onboarding
+### How was onboarding?
 
-The AWS application code and live service calls were straightforward once identity was available. The largest design cost remains the credential boundary between a Railway-hosted public service and AWS. Ripple therefore treats credential lifecycle, rollback and teardown as first-class testable artifacts rather than manual notes.
+The application-side AWS calls were straightforward once identity was correct. The hardest part was deployment identity and proving that the exact source revision seen by judges was the one running publicly. Ripple therefore treats role identity, exact-SHA deployment, public readiness, replay semantics and cleanup as executable release checks.
 
 ### Would you build with these AWS services again?
 
-**Yes.** The live evidence supports the architectural fit: Bedrock for narrow language interpretation, DynamoDB for durable idempotent state, and CloudWatch for independently inspectable traces. For an external PaaS production runtime, I would still prefer short-lived workload federation over a long-lived access key whenever the host exposes a suitable identity primitive.
+**Yes.** ECS/Fargate plus task roles is a cleaner canonical runtime for this project than an external host with long-lived AWS credentials; Bedrock, DynamoDB and CloudWatch also fit Ripple's narrow interpretation, durable idempotency and evidence needs.
 
 ---
 
 ## Feature requests
 
-### 1. Alexa+ self-hosted MCP interoperability validator — **Important**
+### 1. Alexa+ self-hosted MCP interoperability validator — Important
 
-A CLI/Inspector mode that validates OAuth discovery, authorization + refresh behavior, MCP protocol version, JSON/SSE Accept compatibility, tool schemas, `ui://` resources, MCP App MIME/lifecycle, and public package assets in one run.
+A CLI/Inspector mode that validates OAuth discovery + refresh, MCP protocol version, JSON/SSE Accept compatibility, tool schemas, `ui://` resources, MCP App MIME/lifecycle and public package assets in one run.
 
-Why it matters: a service can be healthy at the HTTP/container level while still failing a specific Alexa onboarding contract.
+### 2. Exact-deployment evidence recipe for ECS — Important
 
-### 2. Official external-PaaS AWS workload identity recipes — **Important**
+A documented pattern that binds a Git source revision to an immutable ECR digest, task definition, ECS service revision and public readiness endpoint, including safe rollback and task-role verification.
 
-Reference implementations for common non-AWS runtimes showing the preferred short-lived credential path, fallback trade-offs and teardown.
+### 3. ECS Express infrastructure-role identity guidance — Important
 
-Why it matters: many hackathon projects keep an existing public host but want AWS to be a structural backend without embedding long-lived broad credentials.
+Document when role identity continuity matters and recommend in-place trust/policy changes over delete/recreate when the service may retain identity-bound infrastructure state.
 
 ## Linked friction evidence
 
-See [`FRICTION_LOG.md`](FRICTION_LOG.md) for step-by-step entries with expected vs actual behavior, severity, workaround and actionable suggestions. See [`AWS_DIRECT_LIVE_EVIDENCE.md`](AWS_DIRECT_LIVE_EVIDENCE.md) for the exact direct-live AWS proof and claim boundary.
+See [`FRICTION_LOG.md`](FRICTION_LOG.md) for step-by-step expected-vs-actual entries and [`AWS_DIRECT_LIVE_EVIDENCE.md`](AWS_DIRECT_LIVE_EVIDENCE.md) for the earlier independent direct AWS proof that preceded the canonical ECS runtime cutover.
