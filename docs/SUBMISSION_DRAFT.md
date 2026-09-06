@@ -23,14 +23,13 @@ The user says:
 
 > “Our flight home was cancelled. We’ll land tomorrow at six.”
 
-Ripple replies with the decision that matters:
+Ripple replies:
 
 > **5 commitments are affected. $116 is at risk. Ripple can repair the cascade for $42 and preserve $74. Approve $42 repair?**
 
 After approval, Ripple executes only the disclosed actions, returns five authoritative receipts and makes an exact replay produce zero duplicate provider writes.
 
 ## What Ripple does
-Ripple:
 
 1. normalizes one changed fact;
 2. propagates it through a dependency graph;
@@ -48,7 +47,7 @@ Disruptions are divided-attention moments when opening five apps is the wrong in
 
 Ripple uses Alexa+'s self-hosted MCP path as an agentic orchestration surface rather than as a Q&A wrapper. The Repair Card is a real MCP App resource, so screen and voice expose the same consequences, money and approval boundary.
 
-For the final demo, if an official Alexa+ client is unavailable, Ripple will use the rules-permitted **simulated Alexa+ experience backed by the real public MCP server**. This keeps the customer/agent conversation central while preserving a real runtime integration instead of a fake screenshot.
+If an official Alexa+ production client is unavailable for the final demo, Ripple will use the rules-permitted simulated Alexa+ experience backed by the real public MCP server. No actual Alexa+ production-client session is claimed unless it is actually exercised.
 
 ## Golden scenario
 
@@ -59,16 +58,17 @@ For the final demo, if an official Alexa+ client is unavailable, Ripple will use
 - 0 writes before approval
 - 0 writes during approval
 - 5 authoritative execution receipts
-- exact replay: 5/5 deduplicated, still only 5 unique writes
+- exact replay: **5/5 deduplicated**
+- fresh-session replay: authoritative unique-write count remains **5 → 5**, proving **0 new provider writes**
 
 These are deterministic scenario fixture values, not market claims.
 
 ## Generality proof
-The second scenario is Event Operations: a conference-time change affects AV delivery, catering, VIP transport, security staffing and a sponsor briefing.
+Event Operations models a conference-time change across AV delivery, catering, VIP transport, security staffing and a sponsor briefing:
 
 - $5,800 avoidable loss
 - $620 repair cost
-- $5,180 net cash preserved
+- **$5,180 net cash preserved**
 
 A cheaper repair option is intentionally included but rejected because it preserves less net value. This proves the engine is consequence/economic-repair logic rather than a flight-specific workflow.
 
@@ -77,69 +77,63 @@ A cheaper repair option is intentionally included but rejected because it preser
 - public self-hosted MCP endpoint using protocol `2025-11-25` over Streamable HTTP;
 - stateful sessions, protocol-version enforcement and Origin validation;
 - OAuth discovery, service credentials, authorization-code + PKCE S256 and refresh-token flow;
-- Alexa-compatible refresh behavior with an explicitly wrong resource still rejected;
+- Alexa-compatible refresh behavior with an explicitly wrong resource rejected;
 - five bounded MCP tools: record, preview, approve, execute and status;
 - deterministic dependency graph and money-aware repair selection;
 - exact-content approval binding to cost, scope and snapshot;
-- zero-write preview and zero-write approval phases;
+- zero-write preview and approval phases;
 - provider preflight, idempotency keys and authoritative receipts;
 - exact approved-plan recovery across MCP process/session restart with owner binding and duplicate suppression;
-- money-first Repair Card with voice/visual parity, deterministic “Why this plan?” evidence and post-execution receipt timeline;
-- display-only MCP App resource via `ui://` + `text/html;profile=mcp-app`;
+- money-first display-only MCP App Repair Card;
 - Alexa+ package assets, six icon sizes, 600×900 carousel, privacy and terms;
-- independent remote authenticated smoke from a separate Railway container: PASS;
-- remote flow: 0 preview writes, 0 approval writes, 5 receipts at execute, 5/5 deduplicated on replay;
-- one bounded real external provider proof through GitHub Issues: write PASS, readback PASS, replay dedup PASS, exact restore PASS, provider cost $0;
-- direct live AWS structural proof: GitHub OIDC PASS, real Nova 2 Lite inference PASS, DynamoDB receipt/replay PASS, CloudWatch Logs write+readback PASS;
-- independent remote store-media gate: PASS;
+- **one bounded real external provider proof** through GitHub Issues: write/readback/replay-dedup/restore PASS at provider cost $0;
 - deterministic release gate and adversarial/failure matrix: PASS;
-- judge-verifiable cost benchmark and bounded-spend architecture;
-- public CI covering core tests, MCP conformance, MCP App safety, Alexa package, CloudFormation, AWS evidence/lifecycle scripts and evidence drift.
+- live AWS structural services: Nova 2 Lite, DynamoDB and CloudWatch;
+- canonical public AWS runtime on ECS Express Mode / Fargate with task roles and exact-SHA release proof.
 
 ## Public runtime
 
-MCP endpoint: `https://ripple-v12-production.up.railway.app/mcp`
+Base: `https://ri-9fd0e66d62464ec4ae642ccf46e6864d.ecs.eu-central-1.on.aws`
 
-Judge evidence is linked from the repository README, including `ALEXA_REMOTE_EVIDENCE.md`, `REMOTE_SMOKE_REPORT.md`, `VALIDATION_REPORT.md`, `EVIDENCE_MATRIX.md`, `ADVERSARIAL_FAILURE_MATRIX.md`, `COST_BENCHMARK_2026-09-06.md`, `AWS_DIRECT_LIVE_EVIDENCE.md` and `RUBRIC_MAP.md`.
+MCP endpoint: `https://ri-9fd0e66d62464ec4ae642ccf46e6864d.ecs.eu-central-1.on.aws/mcp`
+
+The Alexa+ add-on package points to the same canonical endpoint.
 
 ## AWS Builder
-Ripple keeps the public MCP transport host on Railway and uses AWS where it is structural:
 
-- Amazon Bedrock / Nova 2 Lite — changed-fact normalization only;
-- Amazon DynamoDB — durable proposal/approval state, idempotency records and authoritative receipts;
-- Amazon CloudWatch Logs — redacted structured traces;
-- IAM + GitHub OIDC — bounded live-evidence authority without committed static credentials;
-- AWS Budgets / anomaly controls — project cost guardrails.
+**AWS services are live and structurally verified, and the canonical public runtime runs on AWS.**
 
-**Direct AWS structural evidence is live verified.** The completed evidence workflow performs real Nova 2 Lite inference, real DynamoDB receipt write/readback plus conditional replay rejection, and CloudWatch Logs structured-event write plus readback, ending with `AWS_DIRECT_LIVE_EVIDENCE=PASS`.
+- **Amazon ECS Express Mode / Fargate** — canonical public HTTPS MCP runtime;
+- **Amazon Bedrock / Nova 2 Lite** — changed-fact normalization only;
+- **Amazon DynamoDB** — durable proposal/approval state, idempotency records and authoritative receipts;
+- **Amazon CloudWatch Logs** — redacted structured traces;
+- **IAM task roles + GitHub OIDC** — runtime/deployment identity without committed static AWS credentials;
+- **AWS Budgets / anomaly controls** — cost guardrails.
 
-The stronger claim that the canonical public Railway process is already AWS-backed for every request remains gated by the credential-safe Railway cutover and a post-cutover exact-revision public smoke. Until that passes, the precise status is: **AWS services are live and structurally verified; the canonical public Railway AWS-runtime cutover is pending.**
+The exact-SHA release proof binds the Git commit to an immutable ECR digest, ECS task definition and repeated public `/readyz` source-revision checks. It then runs authenticated MCP/OAuth smoke, live Bedrock normalization and a fresh-session DynamoDB replay proof. `5/5 deduplicated` plus an unchanged authoritative write count (`5 → 5`) is the direct evidence for zero new provider writes on replay. CloudWatch traces and ECR digest readback close the proof.
 
 ## Open Source Mini Challenge
 
 Ripple is a **new MIT-licensed public project created during the hackathon submission window**.
 
-Required fields:
-
 - **Contribution URL:** `https://github.com/rarescos-pixel/ripple-agentic-plan-repair/pull/22`
 - **Project repository URL:** `https://github.com/rarescos-pixel/ripple-agentic-plan-repair`
 - **GitHub username:** `rarescos-pixel`
 
-What I did / how it works / why it matters is captured in `docs/OPEN_SOURCE_SUBMISSION.md`.
-
-The contribution is not a README-only change. The public project includes the complete MCP consequence-repair engine, exact-approval and replay-safety patterns, MCP App integration, OAuth interoperability, AWS infrastructure/lifecycle tooling, adversarial tests and reproducible remote probes. PR #22 is supplied as a representative concrete contribution because it turns a real Alexa Local Inspector interoperability mismatch into an integration test, bounded compatibility fix and reusable remote probe.
+See `docs/OPEN_SOURCE_SUBMISSION.md` for the required what/how/why packet.
 
 ## Trust and disclosure
-Real running software/evidence: MCP transport, OAuth/PKCE, dependency analysis, economic optimization, approval boundary, execution ledger, durable recovery, receipts, replay suppression, MCP App, Alexa package/media surfaces, one bounded real GitHub Issues provider, and direct live Bedrock/DynamoDB/CloudWatch evidence.
 
-Deterministic simulated integrations: airline, ride, reservation, delivery, pet-care and calendar provider adapters. Ripple does not claim real third-party bookings, payments or market prices. The example dollar values are deterministic fixtures.
+Real running software/evidence: AWS-hosted MCP transport, OAuth/PKCE, dependency analysis, economic optimization, approval boundary, durable recovery, receipts, replay suppression, MCP App, Alexa package/media surfaces, one bounded real GitHub Issues provider, and live Bedrock/DynamoDB/CloudWatch runtime behavior.
 
-No actual Alexa+ production-client session is claimed unless the official onboarding/inspection path is successfully exercised. The hackathon rules allow the simulated Alexa+ experience path, so official client access is not treated as a prerequisite.
+Deterministic simulated integrations: airline, ride, reservation, delivery, pet-care and calendar provider adapters. Ripple does not claim real third-party bookings, payments or market prices. Example dollar values are deterministic fixtures.
 
-The direct AWS proof is not represented as a completed Railway runtime cutover. That stronger claim will be made only after the canonical public service is configured to use the AWS backends and passes the post-cutover smoke on one exact source SHA.
+**No actual Alexa+ production-client session is claimed** unless the official onboarding/inspection path is actually exercised.
 
 ## Product feedback / friction
-The project includes real friction-log entries covering Alexa-compatible OAuth refresh behavior, MCP App rendering contracts, add-on package/media validation, least-privilege AWS credentials for an external PaaS runtime and Local Inspector request-shape interoperability. Each entry includes steps, expected vs actual behavior, severity, workaround and an actionable suggestion.
+
+The project includes real friction evidence covering Alexa-compatible OAuth refresh, MCP App rendering contracts, add-on media validation, Local Inspector request-shape interoperability, AWS identity boundaries and ECS infrastructure-role identity continuity.
 
 ## Open source
-Public GitHub repository, MIT licensed. The repository was created on **2026-09-04**, after the hackathon submission period opened on **2026-08-31**. The project and its tests/integration patterns were created during the hackathon window.
+
+Public GitHub repository, MIT licensed. Repository created on **2026-09-04**, inside the hackathon submission window that began on **2026-08-31**.
