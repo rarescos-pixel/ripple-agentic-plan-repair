@@ -21,8 +21,9 @@ from ripple.auth import (
     protected_resource_metadata, token, load_auth_config,
 )
 from ripple.golden import build_golden
-from ripple.orchestration.agent import RippleAgent
+from ripple.orchestration.agent import AgentResponse, RippleAgent
 from ripple.orchestration.session import RippleSession
+from ripple.policy.approval import ApprovalPolicy
 from ripple.presentation import build_repair_card
 from ripple.presentation.mcp_app import (
     REPAIR_CARD_RESOURCE_URI,
@@ -80,7 +81,16 @@ TOOLS = [
     _tool("approve_repair_plan", "Persist explicit user approval of the exact snapshot previously shown by the client. The client must only call this after human confirmation.",
           {"plan_id": {"type": "string"}, "plan_version": {"type": "integer"}, "snapshot_hash": {"type": "string"}, "max_total_cost": {"type": "number"}, "external_people_notified": {"type": "integer"}, "user_confirmed": {"type": "boolean", "const": True}},
           ["plan_id", "plan_version", "snapshot_hash", "max_total_cost", "external_people_notified", "user_confirmed"]),
-    _tool("execute_repair_plan", "Execute only a previously approved exact plan snapshot. Replay is idempotent and consults persisted authoritative receipts when a durable state backend is configured.", {}, [], destructive=True),
+    _tool(
+        "execute_repair_plan",
+        "Execute only a previously approved exact plan snapshot. If the MCP session was lost or restarted, supply both plan_id and snapshot_hash to recover the same persisted proposal and approval; authority is never expanded and replay remains idempotent.",
+        {
+            "plan_id": {"type": "string", "description": "Optional exact plan id for restart recovery; must be paired with snapshot_hash."},
+            "snapshot_hash": {"type": "string", "description": "Optional exact approved snapshot hash for restart recovery; must be paired with plan_id."},
+        },
+        [],
+        destructive=True,
+    ),
     _tool("get_repair_status", "Return current phase, receipts, unique external writes, and unresolved items.", {}, [], read_only=True),
 ]
 
@@ -106,6 +116,11 @@ class McpRippleSession:
     def _context() -> Dict[str, Any]:
         return {"old_arrival_at": "2026-09-10T21:00:00"}
 
+    def _owner_subject(self) -> str:
+        # Router-authenticated MCP calls always set user_subject first. The
+        # fallback exists only for direct isolated unit tests.
+        return self.user_subject or "local-test"
+
     def _trace(self, event_type: str, payload: Dict[str, Any]) -> None:
         correlation_id = (
             self.proposal.change.correlation_id
@@ -113,6 +128,44 @@ class McpRippleSession:
             else f"session:{int(self.created_at * 1000)}"
         )
         self.trace.emit(event_type, correlation_id=correlation_id, payload=payload)
+
+    def _authoritative_write_count(self) -> int:
+        if self.proposal is None:
+            return 0
+        store = self.session.executor.store
+        return sum(
+            1
+            for action in self.proposal.plan.actions
+            if (receipt := store.get_receipt(action.idempotency_key)) is not None
+            and receipt.status == "executed"
+        )
+
+    def _recover_approved(self, plan_id: str, snapshot_hash: str) -> None:
+        if not plan_id or not snapshot_hash:
+            raise ValueError("Both plan_id and snapshot_hash are required for restart recovery")
+        store = self.session.executor.store
+        persisted = store.get_proposal(plan_id, snapshot_hash)
+        if persisted is None or persisted.owner_subject != self._owner_subject():
+            # Deliberately do not reveal whether a different principal owns a
+            # matching plan/hash pair.
+            raise ValueError("Exact approved plan not found for this principal")
+        approval = store.get_approval(plan_id, snapshot_hash)
+        if approval is None:
+            raise ValueError("Exact approved plan has no persisted approval")
+        ApprovalPolicy.validate(persisted.plan, approval)
+        plan = persisted.plan
+        spoken = (
+            f"Recovered the exact approved plan with {len(plan.impacts)} downstream commitments. "
+            f"It preserves ${plan.net_direct_cash_preserved:.0f} net and will resume without duplicate writes."
+        )
+        self.proposal = AgentResponse(persisted.change, plan, spoken, requires_approval=True)
+        self.approval = approval
+        self.receipts = []
+        self._trace("plan.recovered", {
+            "plan_id": plan.id,
+            "snapshot_hash_prefix": snapshot_hash[:12],
+            "authoritative_writes_before_resume": self._authoritative_write_count(),
+        })
 
     def record_change(self, utterance: str) -> Dict[str, Any]:
         self.proposal = self.session.propose(utterance, self._context())
@@ -132,6 +185,10 @@ class McpRippleSession:
         if self.proposal is None:
             raise ValueError("record_change must be called first")
         p = self.proposal.plan
+        # Persist the exact proposal before approval. This is state bookkeeping,
+        # not a provider write; it gives a new process enough immutable context
+        # to recover only this content-addressed plan after a crash/restart.
+        self.session.executor.store.save_proposal(p, self.proposal.change, self._owner_subject())
         payload = {
             "phase": "proposal",
             "spoken_summary": self.proposal.spoken_summary,
@@ -190,16 +247,32 @@ class McpRippleSession:
             "writes": len(self.tools.execution_log),
         }
 
-    def execute(self) -> Dict[str, Any]:
+    def execute(self, recovery: Dict[str, Any] | None = None) -> Dict[str, Any]:
+        recovery = dict(recovery or {})
+        supplied_plan_id = recovery.get("plan_id")
+        supplied_hash = recovery.get("snapshot_hash")
+        if bool(supplied_plan_id) != bool(supplied_hash):
+            raise ValueError("plan_id and snapshot_hash must be supplied together")
+
+        recovered = False
         if self.proposal is None or self.approval is None:
-            raise ValueError("An exact approved plan is required before execution")
+            if not supplied_plan_id or not supplied_hash:
+                raise ValueError("An exact approved plan is required before execution; after restart supply plan_id and snapshot_hash")
+            self._recover_approved(str(supplied_plan_id), str(supplied_hash))
+            recovered = True
+        elif supplied_plan_id or supplied_hash:
+            if str(supplied_plan_id) != self.proposal.plan.id or str(supplied_hash) != self.proposal.plan.snapshot_hash():
+                raise ValueError("Recovery identifiers do not match the current exact approved plan")
+
         result = self.session.execute_with_approval(self.proposal, self.approval)
         self.receipts = result.receipts
+        authoritative_writes = self._authoritative_write_count()
         payload = {
             "phase": "executed", "plan_status": self.proposal.plan.status,
             "receipt_count": len(self.receipts),
             "deduplicated": sum(1 for r in self.receipts if r.status == "deduplicated"),
-            "unique_external_writes": len(self.tools.execution_log),
+            "unique_external_writes": authoritative_writes,
+            "recovered_after_restart": recovered,
             "receipts": [asdict(r) for r in self.receipts],
         }
         self._trace("plan.executed", {
@@ -209,7 +282,8 @@ class McpRippleSession:
             "executed": sum(1 for r in self.receipts if r.status == "executed"),
             "deduplicated": sum(1 for r in self.receipts if r.status == "deduplicated"),
             "failed": sum(1 for r in self.receipts if r.status == "failed"),
-            "unique_external_writes": len(self.tools.execution_log),
+            "unique_external_writes": authoritative_writes,
+            "recovered_after_restart": recovered,
         })
         return payload
 
@@ -218,7 +292,7 @@ class McpRippleSession:
             "phase": "executed" if self.receipts else "approved" if self.approval else "proposal" if self.proposal else "idle",
             "approved_snapshot_hash": self.approval.plan_snapshot_hash if self.approval else None,
             "receipt_count": len(self.receipts),
-            "unique_external_writes": len(self.tools.execution_log),
+            "unique_external_writes": self._authoritative_write_count(),
             "unresolved_items": list(self.proposal.plan.unresolved_items) if self.proposal else [],
         }
 
@@ -392,7 +466,7 @@ async def mcp_post(request: Request) -> Response:
             if name == "record_change": payload = sess.record_change(str(args["utterance"]))
             elif name == "preview_repair_plan": payload = sess.preview()
             elif name == "approve_repair_plan": payload = sess.approve(args)
-            elif name == "execute_repair_plan": payload = sess.execute()
+            elif name == "execute_repair_plan": payload = sess.execute(args)
             elif name == "get_repair_status": payload = sess.status()
             else: return JSONResponse(_rpc_error(req_id, -32602, f"Unknown tool: {name}"))
             return JSONResponse(_rpc_result(
