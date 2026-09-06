@@ -1,6 +1,6 @@
 # Product Feedback — Amazon Developer Hackathon
 
-This document is written to match the required submission questions. It distinguishes **observed/runtime feedback** from **integration/setup feedback** so that Ripple does not claim an Amazon service was exercised live before evidence exists.
+This document is written to match the required submission questions. It distinguishes **observed/runtime feedback** from **integration/setup feedback** and keeps direct live AWS evidence separate from the stronger claim that the canonical public Railway process has completed its AWS-backed cutover.
 
 ## Alexa+ self-hosted MCP path
 
@@ -42,13 +42,14 @@ We solved that by building independent gates for protocol behavior, the document
 
 ### Which tools did you use and for what?
 
-Ripple uses an MCP App resource for the Repair Card. The card renders the consequence set, dollars at risk, repair cost, net value preserved and the exact approval CTA. It is intentionally display-only and cannot invoke approval/execution.
+Ripple uses an MCP App resource for the Repair Card. The card renders the consequence set, dollars at risk, repair cost, net value preserved, deterministic “Why this plan?” evidence and the execution receipt timeline. It is intentionally display-only and cannot invoke approval/execution.
 
 ### What worked well?
 
 - The UI resource is transportable with the MCP tool instead of requiring a separate proprietary dashboard API.
 - Theme/context and resize hooks are enough for a compact decision card.
 - Keeping visual output separate from the tool's authority made it possible to enforce a strong static safety gate.
+- Binding both preview and execution results to the same display-only resource makes the approval boundary and post-execution receipts visually continuous without giving the UI tool authority.
 
 ### What needs work?
 
@@ -62,7 +63,7 @@ The conceptual model is good, but the first integration requires understanding s
 
 ### Would you build with it again?
 
-**Yes.** For Ripple, the card materially improves the Alexa experience because the user can hear the recommendation and visually verify the exact money/scope before approval.
+**Yes.** For Ripple, the card materially improves the Alexa experience because the user can hear the recommendation, visually verify the exact money/scope before approval, then see authoritative receipts and replay safety after execution.
 
 ---
 
@@ -70,23 +71,25 @@ The conceptual model is good, but the first integration requires understanding s
 
 ### Current evidence status
 
-The AWS integration is **implemented and AWS-ready, but not yet AWS-live verified**. The comments below therefore cover architecture/setup work that has actually been done. Runtime performance/reliability feedback will be added only after the live stack and Railway cutover are exercised. This distinction is deliberate.
+**Direct AWS structural evidence is live verified.** A completed GitHub OIDC evidence run exercised real Amazon Nova 2 Lite inference, DynamoDB receipt write/readback plus replay rejection, and CloudWatch Logs structured-event write plus readback. The aggregate marker is `AWS_DIRECT_LIVE_EVIDENCE=PASS`.
+
+The stronger claim that the canonical public Railway MCP process is already using those AWS backends for every request remains pending until the credential-safe Railway cutover and post-cutover exact-revision smoke pass. This distinction is deliberate.
 
 ### Which services are being used and for what?
 
-- **Amazon Bedrock:** normalize a natural-language changed fact into one constrained structured change event. Bedrock is not allowed to choose repairs or execute provider actions.
-- **Amazon DynamoDB:** persist approvals, idempotency records and authoritative receipts across process/session restarts.
-- **Amazon CloudWatch Logs:** store bounded, redacted structured traces.
-- **IAM:** least-privilege policy scoped to the Ripple table, trace stream and Bedrock inference profile.
-- **AWS Budgets:** cost guardrails for the hackathon project.
-- **CloudFormation:** reproducible deployment of the above resources.
+- **Amazon Bedrock / Nova 2 Lite:** normalize a natural-language changed fact into one constrained structured change event. Bedrock is not allowed to choose repairs or execute provider actions.
+- **Amazon DynamoDB:** durable proposal/approval state, idempotency records and authoritative receipts across process/session restarts.
+- **Amazon CloudWatch Logs:** bounded, redacted structured traces.
+- **IAM + GitHub OIDC:** least-privilege proof-run authority without committed static AWS credentials.
+- **AWS Budgets / anomaly controls:** cost guardrails for the hackathon project.
 
-### What worked well during implementation/setup?
+### What worked well during implementation and live verification?
 
-- DynamoDB's conditional-write semantics map naturally to authoritative idempotency receipts.
-- Bedrock's Converse/tool-use boundary can be constrained so the model only proposes structured normalization while deterministic code stays authoritative.
-- CloudFormation makes the AWS Builder claim auditable: the intended resources, retention, PITR, budget and policy are visible in code.
-- Resource-scoped IAM is a better story for an externally hosted MCP runtime than broad account credentials.
+- DynamoDB's conditional-write semantics map naturally to authoritative idempotency receipts. The live proof confirmed that the first receipt wins, an exact replay is rejected by the conditional write, and the original authoritative receipt can be read back consistently.
+- Bedrock's constrained normalization boundary works well for Ripple's safety model: Nova 2 Lite handles language interpretation while deterministic code owns old state, money arithmetic, repair policy, approval and execution.
+- CloudWatch Logs can carry a small structured/redacted evidence event and provide an independent readback proof without logging the raw user utterance or credentials.
+- GitHub OIDC provides a clean temporary-credential path for CI evidence and avoids static AWS keys in the repository.
+- Keeping the AWS surface serverless/pay-per-use avoids adding Lambda/ECS/Fargate only for architecture-logo value.
 
 ### What needs work?
 
@@ -96,11 +99,11 @@ The AWS integration is **implemented and AWS-ready, but not yet AWS-live verifie
 
 ### Onboarding
 
-The AWS application code and IaC were straightforward to make testable. The largest design cost was the credential boundary between a Railway-hosted public service and AWS. Ripple therefore treats credential lifecycle, rollback and teardown as first-class testable artifacts rather than manual notes.
+The AWS application code and live service calls were straightforward once identity was available. The largest design cost remains the credential boundary between a Railway-hosted public service and AWS. Ripple therefore treats credential lifecycle, rollback and teardown as first-class testable artifacts rather than manual notes.
 
 ### Would you build with these AWS services again?
 
-**Provisionally yes, pending the live gate.** The service boundaries fit the product well: Bedrock for narrow language interpretation, DynamoDB for durable idempotent state, and CloudWatch for evidence. The final answer in the Devpost submission will be based on the live deployment/run, not only the design-stage experience.
+**Yes.** The live evidence supports the architectural fit: Bedrock for narrow language interpretation, DynamoDB for durable idempotent state, and CloudWatch for independently inspectable traces. For an external PaaS production runtime, I would still prefer short-lived workload federation over a long-lived access key whenever the host exposes a suitable identity primitive.
 
 ---
 
@@ -120,4 +123,4 @@ Why it matters: many hackathon projects keep an existing public host but want AW
 
 ## Linked friction evidence
 
-See [`FRICTION_LOG.md`](FRICTION_LOG.md) for step-by-step entries with expected vs actual behavior, severity, workaround and actionable suggestions.
+See [`FRICTION_LOG.md`](FRICTION_LOG.md) for step-by-step entries with expected vs actual behavior, severity, workaround and actionable suggestions. See [`AWS_DIRECT_LIVE_EVIDENCE.md`](AWS_DIRECT_LIVE_EVIDENCE.md) for the exact direct-live AWS proof and claim boundary.

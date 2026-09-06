@@ -107,17 +107,19 @@ replay: 5 deduplicated / 5 unique writes
 
 ## AWS Builder architecture
 
-Ripple keeps Railway as the public MCP transport host. AWS is designed to be **structural rather than decorative**:
+Ripple keeps Railway as the public MCP transport host. AWS is structural where it improves correctness and evidence:
 
-- **Amazon Bedrock** — natural-language change normalization only;
-- **Amazon DynamoDB** — durable exact approvals, idempotency records and authoritative receipts;
-- **Amazon CloudWatch Logs** — redacted structured runtime traces;
-- **IAM** — resource-scoped runtime permissions;
-- **AWS Budgets** — project cost guardrails.
+- **Amazon Bedrock / Nova 2 Lite** — constrained changed-fact normalization only;
+- **Amazon DynamoDB** — durable exact proposals/approvals, idempotency records and authoritative receipts;
+- **Amazon CloudWatch Logs** — redacted structured traces;
+- **IAM / GitHub OIDC** — bounded proof-run authority without committed static credentials;
+- **AWS Budgets / anomaly controls** — project cost guardrails.
 
-The CloudFormation, runtime adapters, live benchmark harness, least-privilege policy, budget, credential-lifecycle scripts and cutover gates are implemented and CI-validated. **AWS is currently AWS-ready, not AWS-live verified.** Ripple will not claim live Bedrock/DynamoDB/CloudWatch use until the real stack is provisioned, exercised and the public Railway runtime passes the post-cutover smoke and restart/replay proof on one source SHA.
+Direct AWS structural evidence is now **live verified**: GitHub OIDC assume-role, DynamoDB live receipt write/readback and replay rejection, real Nova 2 Lite inference, and CloudWatch Logs structured-event write **plus readback** all pass in the same evidence workflow. See [`docs/AWS_DIRECT_LIVE_EVIDENCE.md`](docs/AWS_DIRECT_LIVE_EVIDENCE.md).
 
-See [`docs/AWS_READY_V15.md`](docs/AWS_READY_V15.md), [`docs/AWS_RUNTIME_CREDENTIALS.md`](docs/AWS_RUNTIME_CREDENTIALS.md) and [`docs/AWS_LIVE_ONE_TOUCH.md`](docs/AWS_LIVE_ONE_TOUCH.md).
+The stronger claim that the canonical public `ripple-v12` Railway process is already AWS-backed for every request remains intentionally gated. The public runtime has not yet completed a credential-safe cutover to `RIPPLE_STATE_BACKEND=dynamodb`, `RIPPLE_CHANGE_INTERPRETER=bedrock`, and `RIPPLE_TRACE_BACKEND=cloudwatch` on the final source SHA. Until that post-cutover exact-revision smoke passes, Ripple says precisely: **AWS services are live and structurally verified; the canonical public Railway AWS-runtime cutover is pending.**
+
+See [`docs/AWS_READINESS.md`](docs/AWS_READINESS.md), [`docs/AWS_RUNTIME_CREDENTIALS.md`](docs/AWS_RUNTIME_CREDENTIALS.md) and [`docs/AWS_DIRECT_LIVE_EVIDENCE.md`](docs/AWS_DIRECT_LIVE_EVIDENCE.md).
 
 ## Open Source mini challenge
 
@@ -127,22 +129,24 @@ See [`docs/OPEN_SOURCE_SUBMISSION.md`](docs/OPEN_SOURCE_SUBMISSION.md).
 
 ## What is real vs simulated
 
-Real running software:
+Real running software/evidence:
 
 - public HTTPS MCP transport;
 - OAuth and PKCE surfaces;
 - dependency analysis and economic optimization;
 - exact approval boundary;
-- execution ledger, receipts and duplicate-free replay;
+- execution ledger, durable proposal recovery, receipts and duplicate-free replay;
 - MCP App Repair Card and Alexa package/media surfaces;
-- independent remote smoke/evidence runners.
+- independent remote smoke/evidence runners;
+- one bounded real external provider integration using GitHub Issues, with verified write → readback → replay dedup → exact restore and zero provider cost;
+- direct live AWS evidence for Nova 2 Lite, DynamoDB and CloudWatch Logs.
 
-Deliberately simulated today:
+Deliberately simulated / not yet claimed:
 
-- airline, ride, reservation, delivery, pet-care and calendar provider adapters;
-- the example dollar amounts, which are deterministic scenario fixtures rather than market claims;
+- airline, ride, reservation, delivery, pet-care and calendar provider adapters remain deterministic fixtures;
+- the example dollar amounts are deterministic scenario fixtures rather than market claims;
 - an actual Alexa+ production-client session has not yet been claimed;
-- AWS live runtime is not claimed until the live gate passes.
+- the canonical public Railway process is not yet claimed to use the AWS backends for every request until credential-safe cutover and post-cutover smoke pass.
 
 This distinction is intentional: marketing copy does not count as evidence.
 
@@ -153,6 +157,9 @@ This distinction is intentional: marketing copy does not count as evidence.
 - [`docs/REMOTE_SMOKE_REPORT.md`](docs/REMOTE_SMOKE_REPORT.md) — independent public HTTPS execution/replay proof
 - [`docs/VALIDATION_REPORT.md`](docs/VALIDATION_REPORT.md) — deterministic release gate
 - [`docs/EVIDENCE_MATRIX.md`](docs/EVIDENCE_MATRIX.md) — claim-to-evidence mapping
+- [`docs/ADVERSARIAL_FAILURE_MATRIX.md`](docs/ADVERSARIAL_FAILURE_MATRIX.md) — failure-truth and recovery matrix
+- [`docs/COST_BENCHMARK_2026-09-06.md`](docs/COST_BENCHMARK_2026-09-06.md) — judge-verifiable cost benchmark
+- [`docs/AWS_DIRECT_LIVE_EVIDENCE.md`](docs/AWS_DIRECT_LIVE_EVIDENCE.md) — direct Bedrock/DynamoDB/CloudWatch live evidence and exact claim boundary
 - [`docs/RUBRIC_MAP.md`](docs/RUBRIC_MAP.md) — judging-criterion mapping
 - [`docs/FRICTION_LOG.md`](docs/FRICTION_LOG.md) — real developer friction and actionable Amazon feedback
 - [`docs/PRODUCT_FEEDBACK.md`](docs/PRODUCT_FEEDBACK.md) — required tool/API/SDK feedback

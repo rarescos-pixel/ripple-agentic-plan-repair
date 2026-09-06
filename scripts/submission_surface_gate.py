@@ -30,6 +30,7 @@ def main() -> int:
     rubric = read("docs/RUBRIC_MAP.md")
     master = read("docs/MASTER.md")
     open_source = read("docs/OPEN_SOURCE_SUBMISSION.md")
+    aws_live = read("docs/AWS_DIRECT_LIVE_EVIDENCE.md")
 
     for needle in (
         "Tell Alexa one thing that changed. Ripple fixes what breaks downstream.",
@@ -39,13 +40,16 @@ def main() -> int:
         "$74 net cash preserved",
         "MCP 2025-11-25",
         "MCP App",
-        "AWS-ready, not AWS-live verified",
+        "AWS services are live and structurally verified",
+        "canonical public Railway AWS-runtime cutover is pending",
         "What is real vs simulated",
+        "one bounded real external provider integration",
         "docs/FRICTION_LOG.md",
     ):
         require(readme, needle, "README", errors)
 
     for needle in (
+        "AWS-ready, not AWS-live verified",
         "**v1.2 — Alexa+ remote MCP milestone**",
         "43/43 tests PASS",
         "6/6 adversarial scenarios PASS",
@@ -77,14 +81,19 @@ def main() -> int:
         "What needs work?",
         "How was onboarding from zero to hello world?",
         "Would you build with Alexa+ / this path again?",
-        "AWS-ready, but not yet AWS-live verified",
+        "Direct AWS structural evidence is live verified",
+        "canonical public Railway MCP process",
+        "AWS_DIRECT_LIVE_EVIDENCE=PASS",
     ):
         require(feedback, needle, "PRODUCT_FEEDBACK", errors)
+    forbid(feedback, "implemented and AWS-ready, but not yet AWS-live verified", "PRODUCT_FEEDBACK", errors)
 
     for needle in (
         "$5,180 net cash preserved",
         "5/5 deduplicated",
-        "AWS-ready, not AWS-live verified",
+        "REAL_PROVIDER",
+        "AWS services are live and structurally verified",
+        "canonical public Railway AWS-runtime cutover is pending",
         "No actual Alexa+ production-client session is claimed",
         "**Primary Track:** Alexa+",
         "**Mini Challenge:** AWS Builder",
@@ -92,7 +101,13 @@ def main() -> int:
         "## Open Source Mini Challenge",
         "https://github.com/rarescos-pixel/ripple-agentic-plan-repair/pull/22",
     ):
-        require(submission, needle, "SUBMISSION_DRAFT", errors)
+        # REAL_PROVIDER is represented as prose in the draft; accept the exact
+        # live-provider contract phrase below instead of a workflow-only marker.
+        if needle == "REAL_PROVIDER":
+            require(submission, "one bounded real external provider proof", "SUBMISSION_DRAFT", errors)
+        else:
+            require(submission, needle, "SUBMISSION_DRAFT", errors)
+    forbid(submission, "Current evidence status is AWS-ready, not AWS-live verified", "SUBMISSION_DRAFT", errors)
 
     for needle in (
         "## 0:00–0:20",
@@ -114,17 +129,31 @@ def main() -> int:
     for needle in (
         "# Ripple — MASTER competition state",
         "$5,180",
-        "AWS-READY, NOT AWS-LIVE VERIFIED",
+        "## AWS boundary — DIRECT LIVE VERIFIED / PUBLIC RUNTIME CUTOVER PENDING",
+        "AWS_DIRECT_LIVE_EVIDENCE=PASS",
+        "## Real-provider contract — VERIFIED",
         "## Submission lock",
+        "STOP before video",
     ):
         require(master, needle, "MASTER", errors)
     for needle in (
+        "AWS-READY, NOT AWS-LIVE VERIFIED",
         "# Ripple — MASTER v1.2",
         "43/43 tests",
         "DynamoDB/Lambda/DynamoDB/CloudWatch",
         "Lambda deterministic boundary",
     ):
         forbid(master, needle, "MASTER", errors)
+
+    for needle in (
+        "# Ripple — AWS direct live evidence",
+        "AWS_DIRECT_LIVE_EVIDENCE=PASS",
+        "CLOUDWATCH_LOGS_LIVE=PASS",
+        "DYNAMODB_RECEIPT_LIVE=PASS",
+        "BEDROCK_LIVE=PASS",
+        "public Railway AWS-runtime cutover remains pending",
+    ):
+        require(aws_live, needle, "AWS_DIRECT_LIVE_EVIDENCE", errors)
 
     for needle in (
         "# Open Source Mini Challenge — submission packet",
@@ -147,7 +176,8 @@ def main() -> int:
     print("Ripple submission surface gate: PASS")
     print("judge_hook: 5 commitments / $116 at risk / $42 repair / $74 net preserved")
     print("friction_entries: 5 complete")
-    print("aws_claim: AWS-ready / not AWS-live until live gate")
+    print("aws_claim: direct structural live PASS / public Railway AWS-runtime cutover pending")
+    print("real_provider: bounded reversible external write/readback/replay/restore PASS")
     print("mini_challenges: AWS Builder + Open Source")
     return 0
 
