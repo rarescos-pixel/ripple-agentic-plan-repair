@@ -1,0 +1,89 @@
+name: AWS Budget Guard
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - poc/free-work-replacement
+    paths:
+      - '.github/workflows/aws-budget-guard.yml'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  budget:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS credentials from GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::873363353521:role/RippleGitHubOidcRole
+          aws-region: eu-central-1
+          role-session-name: ripple-budget-guard
+          retry-max-attempts: 2
+
+      - name: Create or update 5 USD monthly AWS budget
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACCOUNT="$(aws sts get-caller-identity --query Account --output text)"
+          NAME='Ripple-Zero-Cost-Guard'
+          cat > /tmp/budget.json <<'JSON'
+          {
+            "BudgetName": "Ripple-Zero-Cost-Guard",
+            "BudgetLimit": {"Amount": "5", "Unit": "USD"},
+            "TimeUnit": "MONTHLY",
+            "BudgetType": "COST"
+          }
+          JSON
+
+          if aws budgets describe-budget \
+            --account-id "$ACCOUNT" \
+            --budget-name "$NAME" \
+            --region us-east-1 \
+            >/tmp/existing.json 2>/tmp/describe.err; then
+            aws budgets update-budget \
+              --account-id "$ACCOUNT" \
+              --new-budget file:///tmp/budget.json \
+              --region us-east-1
+            echo 'BUDGET_ACTION=UPDATED'
+          else
+            if grep -q 'NotFoundException' /tmp/describe.err; then
+              aws budgets create-budget \
+                --account-id "$ACCOUNT" \
+                --budget file:///tmp/budget.json \
+                --region us-east-1
+              echo 'BUDGET_ACTION=CREATED'
+            else
+              cat /tmp/describe.err >&2
+              exit 1
+            fi
+          fi
+
+          aws budgets describe-budget \
+            --account-id "$ACCOUNT" \
+            --budget-name "$NAME" \
+            --region us-east-1 \
+            >/tmp/verify-budget.json
+
+          python - <<'PY'
+          import json
+          d=json.load(open('/tmp/verify-budget.json'))
+          b=d.get('Budget') or {}
+          lim=b.get('BudgetLimit') or {}
+          name=b.get('BudgetName')
+          amount=str(lim.get('Amount'))
+          unit=str(lim.get('Unit'))
+          unit_time=b.get('TimeUnit')
+          budget_type=b.get('BudgetType')
+          print('BUDGET_NAME=' + str(name))
+          print('BUDGET_LIMIT=' + amount)
+          print('BUDGET_UNIT=' + unit)
+          print('BUDGET_TIME_UNIT=' + str(unit_time))
+          print('BUDGET_TYPE=' + str(budget_type))
+          if name != 'Ripple-Zero-Cost-Guard' or amount != '5' or unit != 'USD' or unit_time != 'MONTHLY' or budget_type != 'COST':
+              raise SystemExit('AWS budget verification failed')
+          print('BUDGET_GUARD=PASS')
+          PY
