@@ -190,12 +190,23 @@ jobs:
             echo 'status=DENIED_OR_INVALID' >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          sleep 2
-          if aws logs filter-log-events --log-group-name "$LOG_GROUP" --log-stream-names "$LOG_STREAM" --filter-pattern "$PROOF_ID" --query 'events[0].message' --output text 2>/tmp/cw.err | grep -q "$PROOF_ID"; then
+          FOUND=0
+          for attempt in 1 2 3 4 5; do
+            if aws logs get-log-events --log-group-name "$LOG_GROUP" --log-stream-name "$LOG_STREAM" --start-from-head --limit 10000 --query 'events[].message' --output text >/tmp/cw-read.txt 2>/tmp/cw.err; then
+              if grep -Fq "$PROOF_ID" /tmp/cw-read.txt; then
+                FOUND=1
+                break
+              fi
+            else
+              break
+            fi
+            sleep 2
+          done
+          if [ "$FOUND" -eq 1 ]; then
             echo 'CLOUDWATCH_LOGS_LIVE=PASS'
             echo 'status=PASS' >> "$GITHUB_OUTPUT"
           else
-            echo 'CLOUDWATCH_LOGS=WRITE_NOT_READABLE_OR_FILTER_DENIED'
+            echo 'CLOUDWATCH_LOGS=WRITE_NOT_READABLE_OR_GET_DENIED'
             sed -E 's/[0-9]{12}/************/g' /tmp/cw.err | head -2
             echo 'status=PARTIAL' >> "$GITHUB_OUTPUT"
           fi
