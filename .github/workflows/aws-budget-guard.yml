@@ -70,6 +70,7 @@ jobs:
 
           python - <<'PY'
           import json
+          from decimal import Decimal
           d=json.load(open('/tmp/verify-budget.json'))
           b=d.get('Budget') or {}
           lim=b.get('BudgetLimit') or {}
@@ -83,7 +84,7 @@ jobs:
           print('BUDGET_UNIT=' + unit)
           print('BUDGET_TIME_UNIT=' + str(unit_time))
           print('BUDGET_TYPE=' + str(budget_type))
-          if name != 'Ripple-Zero-Cost-Guard' or amount != '5' or unit != 'USD' or unit_time != 'MONTHLY' or budget_type != 'COST':
+          if name != 'Ripple-Zero-Cost-Guard' or Decimal(amount) != Decimal('5') or unit != 'USD' or unit_time != 'MONTHLY' or budget_type != 'COST':
               raise SystemExit('AWS budget verification failed')
           print('BUDGET_GUARD=PASS')
           PY
