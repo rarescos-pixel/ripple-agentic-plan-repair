@@ -1,0 +1,315 @@
+name: AWS canonical final proof v2
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/aws-canonical-final-proof-v2.yml']
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: ripple-aws-canonical-final-proof-v2
+  cancel-in-progress: false
+
+jobs:
+  deploy-and-prove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      AWS_REGION: eu-central-1
+      AWS_ACCOUNT_ID: '873363353521'
+      ECR_REPOSITORY: ripple-canonical-runtime
+      SERVICE_NAME: ripple-canonical
+      CLUSTER_NAME: default
+      INFRA_ROLE: RippleEcsInfrastructureRole
+      EXECUTION_ROLE: RippleEcsTaskExecutionRole
+      TASK_ROLE: RippleEcsTaskRole
+      TRACE_LOG_GROUP: /ripple/canonical/runtime
+      TRACE_LOG_STREAM: runtime
+      SERVICE_SECRET_PARAM: /ripple/canonical/service-client-secret
+      DEMO_PASSWORD_PARAM: /ripple/canonical/demo-user-password
+      GITHUB_OIDC_SUB: repo:rarescos-pixel@321760901/ripple-agentic-plan-repair@1356792571:ref:refs/heads/main
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assume bootstrap role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::873363353521:role/RippleGitHubOidcRole
+          aws-region: eu-central-1
+          role-session-name: ripple-final-v2-bootstrap
+          retry-max-attempts: 2
+
+      - name: Resolve canonical endpoint
+        id: target
+        shell: bash
+        run: |
+          set -euo pipefail
+          SERVICE_ARN="arn:aws:ecs:${AWS_REGION}:${AWS_ACCOUNT_ID}:service/${CLUSTER_NAME}/${SERVICE_NAME}"
+          aws ecs describe-express-gateway-service --service-arn "$SERVICE_ARN" >/tmp/service.json
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          service=json.load(open('/tmp/service.json'))['service']
+          endpoints=[p['endpoint'].rstrip('/') for c in service.get('activeConfigurations',[]) for p in c.get('ingressPaths',[]) if p.get('accessType')=='PUBLIC' and p.get('endpoint')]
+          assert endpoints, service
+          base=endpoints[0]
+          if not base.startswith('http'):
+              base='https://'+base
+          print('base_url='+base)
+          print('service_arn='+service['serviceArn'])
+          PY
+          echo 'V2_ENDPOINT=PASS'
+
+      - name: Build and push immutable exact-SHA image
+        id: image
+        shell: bash
+        run: |
+          set -euo pipefail
+          REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+          IMAGE="$REGISTRY/$ECR_REPOSITORY:$GITHUB_SHA"
+          aws ecr get-login-password | docker login --username AWS --password-stdin "$REGISTRY"
+          docker build --pull -t "$IMAGE" .
+          docker push "$IMAGE"
+          DIGEST="$(aws ecr describe-images --repository-name "$ECR_REPOSITORY" --image-ids imageTag="$GITHUB_SHA" --query 'imageDetails[0].imageDigest' --output text)"
+          test -n "$DIGEST" && test "$DIGEST" != None
+          echo "image_ref=$REGISTRY/$ECR_REPOSITORY@$DIGEST" >> "$GITHUB_OUTPUT"
+          echo "image_digest=$DIGEST" >> "$GITHUB_OUTPUT"
+          echo 'V2_EXACT_SHA_ECR=PASS'
+
+      - name: Add temporary registrar trust in-place
+        id: trust
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROLE_ID="$(aws iam get-role --role-name "$INFRA_ROLE" --query 'Role.RoleId' --output text)"
+          test -n "$ROLE_ID" && test "$ROLE_ID" != None
+          echo "role_id=$ROLE_ID" >> "$GITHUB_OUTPUT"
+          EXEC_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:role/${EXECUTION_ROLE}"
+          TASK_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:role/${TASK_ROLE}"
+          cat >/tmp/dual-trust.json <<JSON
+          {"Version":"2012-10-17","Statement":[
+            {"Sid":"AllowECSExpressInfrastructure","Effect":"Allow","Principal":{"Service":"ecs.amazonaws.com"},"Action":"sts:AssumeRole"},
+            {"Sid":"AllowTemporaryGitHubRegistrar","Effect":"Allow","Principal":{"Federated":"arn:aws:iam::${AWS_ACCOUNT_ID}:oidc-provider/token.actions.githubusercontent.com"},"Action":"sts:AssumeRoleWithWebIdentity","Condition":{"StringEquals":{"token.actions.githubusercontent.com:aud":"sts.amazonaws.com"},"StringLike":{"token.actions.githubusercontent.com:sub":"${GITHUB_OIDC_SUB}"}}}
+          ]}
+          JSON
+          aws iam update-assume-role-policy --role-name "$INFRA_ROLE" --policy-document file:///tmp/dual-trust.json
+          cat >/tmp/registrar-policy.json <<JSON
+          {"Version":"2012-10-17","Statement":[
+            {"Effect":"Allow","Action":["ecs:RegisterTaskDefinition","ecs:DescribeTaskDefinition"],"Resource":"*"},
+            {"Effect":"Allow","Action":"iam:PassRole","Resource":["$EXEC_ARN","$TASK_ARN"]}
+          ]}
+          JSON
+          aws iam put-role-policy --role-name "$INFRA_ROLE" --policy-name RippleTaskDefinitionRegistrarTemporary --policy-document file:///tmp/registrar-policy.json
+          sleep 60
+          echo 'V2_TEMP_REGISTRAR=PASS'
+
+      - name: Assume registrar
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::873363353521:role/RippleEcsInfrastructureRole
+          aws-region: eu-central-1
+          role-session-name: ripple-final-v2-registrar
+          retry-max-attempts: 12
+
+      - name: Register exact-SHA task definition
+        id: taskdef
+        env:
+          BASE_URL: ${{ steps.target.outputs.base_url }}
+          IMAGE_REF: ${{ steps.image.outputs.image_ref }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXEC_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:role/${EXECUTION_ROLE}"
+          TASK_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:role/${TASK_ROLE}"
+          SECRET_ARN="arn:aws:ssm:${AWS_REGION}:${AWS_ACCOUNT_ID}:parameter/ripple/canonical/service-client-secret"
+          PASSWORD_ARN="arn:aws:ssm:${AWS_REGION}:${AWS_ACCOUNT_ID}:parameter/ripple/canonical/demo-user-password"
+          IMAGE_REF="$IMAGE_REF" BASE_URL="$BASE_URL" EXEC_ARN="$EXEC_ARN" TASK_ARN="$TASK_ARN" SECRET_ARN="$SECRET_ARN" PASSWORD_ARN="$PASSWORD_ARN" python - <<'PY'
+          import json, os
+          td={
+            'family':'ripple-canonical-custom',
+            'networkMode':'awsvpc',
+            'requiresCompatibilities':['FARGATE'],
+            'cpu':'256','memory':'512',
+            'executionRoleArn':os.environ['EXEC_ARN'],
+            'taskRoleArn':os.environ['TASK_ARN'],
+            'containerDefinitions':[{
+              'name':'Main','image':os.environ['IMAGE_REF'],'essential':True,
+              'portMappings':[{'containerPort':8000,'protocol':'tcp','name':'http','appProtocol':'http'}],
+              'environment':[
+                {'name':'PORT','value':'8000'},
+                {'name':'AWS_REGION','value':'eu-central-1'},
+                {'name':'RIPPLE_ENV','value':'production'},
+                {'name':'RIPPLE_PUBLIC_BASE_URL','value':os.environ['BASE_URL']},
+                {'name':'RIPPLE_ALLOWED_ORIGINS','value':os.environ['BASE_URL']},
+                {'name':'RIPPLE_SERVICE_CLIENT_ID','value':'ripple-service'},
+                {'name':'RIPPLE_USER_CLIENT_ID','value':'ripple-user'},
+                {'name':'RIPPLE_USER_REDIRECT_URIS','value':os.environ['BASE_URL']+'/oauth/callback'},
+                {'name':'RIPPLE_STATE_BACKEND','value':'dynamodb'},
+                {'name':'RIPPLE_DYNAMODB_TABLE','value':'ripple-canonical-state'},
+                {'name':'RIPPLE_CHANGE_INTERPRETER','value':'bedrock'},
+                {'name':'RIPPLE_BEDROCK_MODEL_ID','value':'eu.amazon.nova-2-lite-v1:0'},
+                {'name':'RIPPLE_TRACE_BACKEND','value':'cloudwatch'},
+                {'name':'RIPPLE_CLOUDWATCH_LOG_GROUP','value':'/ripple/canonical/runtime'},
+                {'name':'RIPPLE_CLOUDWATCH_LOG_STREAM','value':'runtime'},
+                {'name':'RIPPLE_REQUIRE_AWS_RUNTIME','value':'true'},
+                {'name':'RIPPLE_RELEASE_SHA','value':os.environ['GITHUB_SHA']},
+                {'name':'RAILWAY_GIT_COMMIT_SHA','value':os.environ['GITHUB_SHA']}
+              ],
+              'secrets':[
+                {'name':'RIPPLE_SERVICE_CLIENT_SECRET','valueFrom':os.environ['SECRET_ARN']},
+                {'name':'RIPPLE_DEMO_USER_PASSWORD','valueFrom':os.environ['PASSWORD_ARN']}
+              ],
+              'logConfiguration':{
+                'logDriver':'awslogs',
+                'options':{
+                  'awslogs-group':'/ecs/ripple-canonical',
+                  'awslogs-region':'eu-central-1',
+                  'awslogs-stream-prefix':'ecs'
+                }
+              }
+            }]
+          }
+          json.dump(td, open('/tmp/taskdef.json','w'))
+          PY
+          TD_ARN="$(aws ecs register-task-definition --cli-input-json file:///tmp/taskdef.json --query 'taskDefinition.taskDefinitionArn' --output text)"
+          test -n "$TD_ARN" && test "$TD_ARN" != None
+          echo "task_definition_arn=$TD_ARN" >> "$GITHUB_OUTPUT"
+          echo 'V2_TASKDEF=PASS'
+
+      - name: Restore bootstrap identity
+        if: always()
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::873363353521:role/RippleGitHubOidcRole
+          aws-region: eu-central-1
+          role-session-name: ripple-final-v2-update
+          retry-max-attempts: 2
+
+      - name: Restore service-only trust and preserve RoleId
+        if: always()
+        env:
+          ORIGINAL_ROLE_ID: ${{ steps.trust.outputs.role_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws iam delete-role-policy --role-name "$INFRA_ROLE" --policy-name RippleTaskDefinitionRegistrarTemporary >/dev/null 2>&1 || true
+          cat >/tmp/service-trust.json <<'JSON'
+          {"Version":"2012-10-17","Statement":[{"Sid":"AllowECSExpressInfrastructure","Effect":"Allow","Principal":{"Service":"ecs.amazonaws.com"},"Action":"sts:AssumeRole"}]}
+          JSON
+          aws iam update-assume-role-policy --role-name "$INFRA_ROLE" --policy-document file:///tmp/service-trust.json
+          CURRENT_ROLE_ID="$(aws iam get-role --role-name "$INFRA_ROLE" --query 'Role.RoleId' --output text)"
+          test "$CURRENT_ROLE_ID" = "$ORIGINAL_ROLE_ID"
+          sleep 60
+          echo 'V2_INFRA_ROLE_ID_PRESERVED=PASS'
+
+      - name: Update ECS Express
+        env:
+          SERVICE_ARN: ${{ steps.target.outputs.service_arn }}
+          TD_ARN: ${{ steps.taskdef.outputs.task_definition_arn }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws ecs update-express-gateway-service --service-arn "$SERVICE_ARN" --task-definition-arn "$TD_ARN" --health-check-path /healthz >/tmp/update.json
+          echo 'V2_ECS_UPDATE=PASS'
+
+      - name: Wait for control-plane convergence
+        env:
+          SERVICE_ARN: ${{ steps.target.outputs.service_arn }}
+          TD_ARN: ${{ steps.taskdef.outputs.task_definition_arn }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 90); do
+            aws ecs describe-express-gateway-service --service-arn "$SERVICE_ARN" >/tmp/service-now.json
+            if TD_ARN="$TD_ARN" python - <<'PY'
+          import json, os
+          configs=json.load(open('/tmp/service-now.json'))['service'].get('activeConfigurations',[])
+          ok=len(configs)==1 and configs[0].get('taskDefinitionArn')==os.environ['TD_ARN']
+          raise SystemExit(0 if ok else 1)
+          PY
+            then
+              echo "V2_CONTROL_PLANE_CONVERGED_ATTEMPT=$i"
+              exit 0
+            fi
+            sleep 10
+          done
+          exit 1
+
+      - name: Require stable public exact-SHA readiness
+        env:
+          BASE_URL: ${{ steps.target.outputs.base_url }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          STREAK=0
+          for i in $(seq 1 120); do
+            if curl -fsS --max-time 10 "$BASE_URL/readyz" >/tmp/ready.json 2>/dev/null && BASE_URL="$BASE_URL" python - <<'PY'
+          import json, os
+          d=json.load(open('/tmp/ready.json'))
+          ok=(
+            d.get('status')=='ready'
+            and d.get('runtime_mode')=='aws-structural'
+            and d.get('structural_aws_runtime') is True
+            and d.get('aws_components')==['dynamodb','bedrock','cloudwatch']
+            and d.get('source_revision')==os.environ['GITHUB_SHA'].lower()
+            and d.get('resource')==os.environ['BASE_URL'].rstrip('/')+'/mcp'
+          )
+          raise SystemExit(0 if ok else 1)
+          PY
+            then
+              STREAK=$((STREAK+1))
+              echo "v2_exact_streak=$STREAK attempt=$i"
+              [ "$STREAK" -ge 6 ] && break
+            else
+              STREAK=0
+            fi
+            sleep 5
+          done
+          test "$STREAK" -ge 6
+          cat /tmp/ready.json
+          echo 'V2_PUBLIC_EXACT_SHA=PASS'
+
+      - name: Run structural AWS and authenticated MCP smoke
+        env:
+          BASE_URL: ${{ steps.target.outputs.base_url }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -q -r requirements.txt
+          SERVICE_SECRET="$(aws ssm get-parameter --name "$SERVICE_SECRET_PARAM" --with-decryption --query 'Parameter.Value' --output text)"
+          DEMO_PASSWORD="$(aws ssm get-parameter --name "$DEMO_PASSWORD_PARAM" --with-decryption --query 'Parameter.Value' --output text)"
+          echo "::add-mask::$SERVICE_SECRET"
+          echo "::add-mask::$DEMO_PASSWORD"
+          COMMON="RIPPLE_SMOKE_BASE_URL=$BASE_URL RIPPLE_SERVICE_CLIENT_ID=ripple-service RIPPLE_SERVICE_CLIENT_SECRET=$SERVICE_SECRET RIPPLE_USER_CLIENT_ID=ripple-user RIPPLE_USER_REDIRECT_URI=$BASE_URL/oauth/callback RIPPLE_DEMO_USER_PASSWORD=$DEMO_PASSWORD"
+          env $COMMON RIPPLE_EXPECTED_SOURCE_SHA="$GITHUB_SHA" python scripts/aws_runtime_smoke.py
+          env $COMMON python scripts/mcp_smoke.py
+          echo 'V2_AWS_AND_MCP_SMOKE=PASS'
+
+      - name: Verify durable CloudWatch trace and exact ECR digest
+        env:
+          EXPECTED_DIGEST: ${{ steps.image.outputs.image_digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACTUAL_DIGEST="$(aws ecr describe-images --repository-name "$ECR_REPOSITORY" --image-ids imageTag="$GITHUB_SHA" --query 'imageDetails[0].imageDigest' --output text)"
+          test "$ACTUAL_DIGEST" = "$EXPECTED_DIGEST"
+          FOUND=0
+          for i in 1 2 3 4 5; do
+            aws logs get-log-events --log-group-name "$TRACE_LOG_GROUP" --log-stream-name "$TRACE_LOG_STREAM" --start-from-head --limit 10000 --query 'events[].message' --output text >/tmp/traces.txt
+            grep -q 'plan.executed' /tmp/traces.txt && grep -q 'change.recorded' /tmp/traces.txt && { FOUND=1; break; }
+            sleep 2
+          done
+          test "$FOUND" -eq 1
+          echo 'V2_CLOUDWATCH_TRACE=PASS'
+          echo 'V2_ECR_DIGEST=PASS'
+          echo "V2_CANONICAL_SHA=$GITHUB_SHA"
+
+      - name: Remove temporary bootstrap cutover policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws iam delete-role-policy --role-name RippleGitHubOidcRole --policy-name RippleCanonicalRuntimeCutoverPolicy
+          echo 'V2_TEMPORARY_CUTOVER_POLICY_REMOVED=PASS'
