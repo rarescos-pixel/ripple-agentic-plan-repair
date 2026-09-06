@@ -40,7 +40,9 @@ jobs:
       - name: Regenerate executable evidence
         run: |
           PYTHONPATH=src python -m ripple.evaluation.matrix
+          PYTHONPATH=src python -m ripple.evaluation.adversarial
+          PYTHONPATH=src python -m ripple.evaluation.cost_benchmark
           PYTHONPATH=src python -m ripple.evaluation.release_gate
           PYTHONPATH=src python -m ripple.evaluation.aws_gate
       - name: Verify generated evidence is committed
-        run: git diff --exit-code -- docs/EVIDENCE_MATRIX.md docs/VALIDATION_REPORT.md docs/AWS_READY_REPORT.md
+        run: git diff --exit-code -- docs/EVIDENCE_MATRIX.md docs/ADVERSARIAL_FAILURE_MATRIX.md docs/COST_BENCHMARK_2026-09-06.md docs/VALIDATION_REPORT.md docs/AWS_READY_REPORT.md
