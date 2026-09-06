@@ -4,6 +4,7 @@ from starlette.responses import JSONResponse, Response
 
 from ripple.auth import load_auth_config
 from ripple.aws.profile import validate_runtime_profile
+from ripple.judge_demo import handle_judge_demo
 from ripple.mcp_server import app as mcp_app
 from ripple.presentation.alexa_assets import load_carousel_png
 
@@ -12,6 +13,11 @@ CAROUSEL_PATH = "/assets/alexa/ripple-carousel-600x900.png"
 
 class RippleASGI:
     async def __call__(self, scope, receive, send) -> None:
+        demo_response = await handle_judge_demo(scope, receive)
+        if demo_response is not None:
+            await demo_response(scope, receive, send)
+            return
+
         if scope.get("type") == "http" and scope.get("path") == "/readyz":
             try:
                 auth = load_auth_config()
