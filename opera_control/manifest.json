@@ -3,6 +3,7 @@
   "name": "Ripple Browser Control Helper",
   "version": "0.1.0",
   "description": "Scoped browser control for Ripple bootstrap. No cookie, password, credential, or arbitrary-eval access.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1aWcaOCMQXaay7VmN6yHwvz+wh5Jp3lbM6NJYrE4FPV9EG/geGWRGcp6YRVXy3LCVi8zehbG+zoD4u2Y8P0w14rLN5iSWtA0S1pMzIVJhkNeca8SF8p19FVVbe+HrsO/QTz8h/RYW0p6XpIq3z0pD1ek5uOH7RGTxcBBCUrTa9Rf2SAtUSTcRefsfn4Icuo5vM1sXMUJyrBL78J7K5WPed+RV1xWX42rRf9XTRBrURtfM+XMrI+hLGK0Z1FZaIwJt/Alu7bq837tT0+KxFt5Zf0YyVw9NuNIWKk2ATjSyycURbC/hZSvg0DyfQRxrGMuf2iDcOp8xVC1CdGKSgMMtwIDAQAB",
   "permissions": ["tabs", "scripting"],
   "host_permissions": [
     "https://*.signin.aws.amazon.com/*",
@@ -16,6 +17,5 @@
   "action": {
     "default_title": "Ripple Browser Control"
   },
-  "web_accessible_resources": [],
   "options_page": "control.html"
 }
