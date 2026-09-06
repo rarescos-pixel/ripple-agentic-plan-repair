@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from starlette.responses import JSONResponse, Response
 
 from ripple.auth import load_auth_config
@@ -9,6 +11,13 @@ from ripple.mcp_server import app as mcp_app
 from ripple.presentation.alexa_assets import load_carousel_png
 
 CAROUSEL_PATH = "/assets/alexa/ripple-carousel-600x900.png"
+
+
+def _public_source_revision() -> str | None:
+    sha = os.getenv("RAILWAY_GIT_COMMIT_SHA", "").strip().lower()
+    if len(sha) == 40 and all(ch in "0123456789abcdef" for ch in sha):
+        return sha
+    return None
 
 
 class RippleASGI:
@@ -23,16 +32,18 @@ class RippleASGI:
                 auth = load_auth_config()
                 profile = validate_runtime_profile()
                 structural_aws = profile.full_aws_runtime
-                response = JSONResponse(
-                    {
-                        "status": "ready",
-                        "resource": auth.resource,
-                        "environment": auth.environment,
-                        "runtime_mode": "aws-structural" if structural_aws else "non-aws",
-                        "structural_aws_runtime": structural_aws,
-                        "aws_components": ["dynamodb", "bedrock", "cloudwatch"] if structural_aws else [],
-                    }
-                )
+                payload = {
+                    "status": "ready",
+                    "resource": auth.resource,
+                    "environment": auth.environment,
+                    "runtime_mode": "aws-structural" if structural_aws else "non-aws",
+                    "structural_aws_runtime": structural_aws,
+                    "aws_components": ["dynamodb", "bedrock", "cloudwatch"] if structural_aws else [],
+                }
+                source_revision = _public_source_revision()
+                if source_revision:
+                    payload["source_revision"] = source_revision
+                response = JSONResponse(payload)
             except Exception as exc:
                 response = JSONResponse(
                     {"status": "not_ready", "error": str(exc)},
