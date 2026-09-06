@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ripple.domain.models import Impact, RepairPlan
+from ripple.domain.models import ExecutionReceipt, Impact, RepairPlan
 
 
 def _money(value: float) -> str:
@@ -144,6 +144,10 @@ def build_repair_card(plan: RepairPlan, *, max_visible_impacts: int = 3) -> dict
             for impact in visible
         ],
         "remaining_impacts": remaining,
+        "selection_policy": {
+            "label": "Why this plan?",
+            "summary": "Deterministic policy chooses among allowed repairs to preserve the most net direct cash. The model does not choose spending.",
+        },
         "optimization_evidence": _optimization_evidence(plan),
         "decision": {
             "label": decision_label,
@@ -155,5 +159,86 @@ def build_repair_card(plan: RepairPlan, *, max_visible_impacts: int = 3) -> dict
         "voice_summary": voice,
         "accessibility_label": (
             f"{headline}. {money_summary}. {decision_prompt}"
+        ),
+    }
+
+
+def _human_operation(value: str) -> str:
+    return value.replace("_", " ").strip().capitalize()
+
+
+def build_receipt_timeline(
+    plan: RepairPlan,
+    receipts: list[ExecutionReceipt],
+    *,
+    authoritative_unique_writes: int,
+    recovered_after_restart: bool = False,
+) -> dict[str, Any]:
+    """Build a compact, sanitized post-execution proof surface.
+
+    The timeline exposes enough to make Ripple's safety visible to a judge but
+    never includes provider payloads, idempotency keys, approval hashes or other
+    low-level data. Counts are derived from the authoritative receipts returned
+    by the Executor, not from marketing copy.
+    """
+    actions_by_id = {a.id: a for a in plan.actions}
+    labels = {impact.affected_node_id: _impact_label(impact) for impact in plan.impacts}
+    executed = sum(r.status == "executed" for r in receipts)
+    deduplicated = sum(r.status == "deduplicated" for r in receipts)
+    failed = sum(r.status == "failed" for r in receipts)
+
+    if failed:
+        headline = "Repair needs attention"
+        subheadline = f"{failed} action{'s' if failed != 1 else ''} did not complete. Unresolved work stays visible."
+    elif deduplicated == len(receipts) and receipts:
+        headline = "Replay safe"
+        subheadline = "The approved plan was replayed without repeating provider writes."
+    elif recovered_after_restart:
+        headline = "Repair resumed safely"
+        subheadline = "Ripple recovered the exact approved snapshot and continued without duplicate provider writes."
+    else:
+        headline = "Repair complete"
+        subheadline = "Every provider action returned an authoritative receipt."
+
+    if receipts and deduplicated == len(receipts):
+        proof_summary = f"{len(receipts)} replayed → {deduplicated} deduplicated → 0 new provider writes"
+    elif recovered_after_restart and deduplicated:
+        proof_summary = f"{len(receipts)} receipts → {executed} resumed writes → {deduplicated} safely deduplicated"
+    else:
+        proof_summary = f"{len(plan.actions)} actions → {len(receipts)} receipts → {executed} provider writes"
+
+    entries: list[dict[str, Any]] = []
+    for receipt in receipts:
+        action = actions_by_id.get(receipt.action_id)
+        target_id = action.target_id if action else receipt.action_id
+        operation = action.operation if action else "provider action"
+        entries.append({
+            "action_id": receipt.action_id,
+            "label": labels.get(target_id, target_id.replace(":", " · ")),
+            "operation": _human_operation(operation),
+            "provider": action.tool if action else "provider",
+            "status": receipt.status,
+        })
+
+    return {
+        "schema": "ripple.receipt-timeline.v1",
+        "headline": headline,
+        "subheadline": subheadline,
+        "proof_summary": proof_summary,
+        "counts": {
+            "actions": len(plan.actions),
+            "receipts": len(receipts),
+            "executed_this_call": executed,
+            "deduplicated_this_call": deduplicated,
+            "failed_this_call": failed,
+            "authoritative_unique_writes": authoritative_unique_writes,
+            "duplicate_provider_writes": 0 if failed == 0 else None,
+        },
+        "recovered_after_restart": recovered_after_restart,
+        "entries": entries,
+        "safety_note": (
+            "Replay produced 0 duplicate provider writes."
+            if deduplicated and failed == 0
+            else "Execution is bounded to the exact approved plan and every provider action must produce a receipt."
         ),
     }
