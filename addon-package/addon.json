@@ -28,36 +28,18 @@
         "mediaAssets": {
           "icons": {
             "light": [
-              {
-                "size": "72x72",
-                "uri": "https://raw.githubusercontent.com/rarescos-pixel/ripple-agentic-plan-repair/main/assets/alexa/ripple-icon-72x72.png"
-              },
-              {
-                "size": "64x64",
-                "uri": "https://raw.githubusercontent.com/rarescos-pixel/ripple-agentic-plan-repair/main/assets/alexa/ripple-icon-64x64.png"
-              },
-              {
-                "size": "88x88",
-                "uri": "https://raw.githubusercontent.com/rarescos-pixel/ripple-agentic-plan-repair/main/assets/alexa/ripple-icon-88x88.png"
-              },
-              {
-                "size": "126x126",
-                "uri": "https://raw.githubusercontent.com/rarescos-pixel/ripple-agentic-plan-repair/main/assets/alexa/ripple-icon-126x126.png"
-              },
-              {
-                "size": "180x180",
-                "uri": "https://raw.githubusercontent.com/rarescos-pixel/ripple-agentic-plan-repair/main/assets/alexa/ripple-icon-180x180.png"
-              },
-              {
-                "size": "241x241",
-                "uri": "https://raw.githubusercontent.com/rarescos-pixel/ripple-agentic-plan-repair/main/assets/alexa/ripple-icon-241x241.png"
-              }
+              {"size": "72x72", "uri": "https://raw.githubusercontent.com/rarescos-pixel/ripple-agentic-plan-repair/main/assets/alexa/ripple-icon-72x72.png"},
+              {"size": "64x64", "uri": "https://raw.githubusercontent.com/rarescos-pixel/ripple-agentic-plan-repair/main/assets/alexa/ripple-icon-64x64.png"},
+              {"size": "88x88", "uri": "https://raw.githubusercontent.com/rarescos-pixel/ripple-agentic-plan-repair/main/assets/alexa/ripple-icon-88x88.png"},
+              {"size": "126x126", "uri": "https://raw.githubusercontent.com/rarescos-pixel/ripple-agentic-plan-repair/main/assets/alexa/ripple-icon-126x126.png"},
+              {"size": "180x180", "uri": "https://raw.githubusercontent.com/rarescos-pixel/ripple-agentic-plan-repair/main/assets/alexa/ripple-icon-180x180.png"},
+              {"size": "241x241", "uri": "https://raw.githubusercontent.com/rarescos-pixel/ripple-agentic-plan-repair/main/assets/alexa/ripple-icon-241x241.png"}
             ],
             "dark": []
           },
           "carouselImages": [
             {
-              "uri": "https://ripple-v12-production.up.railway.app/assets/alexa/ripple-carousel-600x900.png",
+              "uri": "https://ri-9fd0e66d62464ec4ae642ccf46e6864d.ecs.eu-central-1.on.aws/assets/alexa/ripple-carousel-600x900.png",
               "altText": "Ripple Repair Card showing five affected commitments, $116 at risk, $42 repair cost, $74 net preserved, and an exact approval prompt.",
               "size": "600x900"
             }
@@ -74,7 +56,7 @@
         "endpoints": {
           "default": {
             "type": "HTTPS",
-            "uri": "https://ripple-v12-production.up.railway.app/mcp"
+            "uri": "https://ri-9fd0e66d62464ec4ae642ccf46e6864d.ecs.eu-central-1.on.aws/mcp"
           }
         }
       }
