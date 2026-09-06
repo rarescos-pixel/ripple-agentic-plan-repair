@@ -1,4 +1,4 @@
-name: AWS live integration evidence
+name: AWS live evidence probe (non-blocking)
 
 on:
   workflow_dispatch:
@@ -91,7 +91,8 @@ jobs:
           echo 'DYNAMODB_RECEIPT_LIVE=PASS'
           echo 'AWS_REPLAY_DEDUP=PASS'
 
-      - name: Resolve and invoke Amazon Nova on Bedrock
+      - name: Probe Amazon Nova on Bedrock without fabricating success
+        id: bedrock
         shell: bash
         run: |
           set -euo pipefail
@@ -107,9 +108,11 @@ jobs:
           raise SystemExit('No EU Amazon Nova Lite inference profile available')
           PY
           )"
+          echo "BEDROCK_MODEL=$MODEL_ID"
           cat >/tmp/bedrock-request.json <<'JSON'
           {"messages":[{"role":"user","content":[{"text":"Normalize this changed fact in one short phrase only: Our flight home was cancelled and we will land tomorrow at 18:00."}]}],"inferenceConfig":{"maxTokens":32,"temperature":0}}
           JSON
+          set +e
           aws bedrock-runtime invoke-model \
             --model-id "$MODEL_ID" \
             --content-type application/json \
@@ -117,17 +120,29 @@ jobs:
             --cli-binary-format raw-in-base64-out \
             --body fileb:///tmp/bedrock-request.json \
             /tmp/bedrock-response.json \
-            >/tmp/bedrock-meta.json
-          python - <<'PY'
+            >/tmp/bedrock-meta.json 2>/tmp/bedrock.err
+          RC=$?
+          set -e
+          if [ "$RC" -eq 0 ]; then
+            python - <<'PY'
           import json
           body=json.load(open('/tmp/bedrock-response.json'))
           text=((body.get('output') or {}).get('message') or {}).get('content') or []
           assert text and str(text[0].get('text') or '').strip(), body
-          print('BEDROCK_LIVE=PASS')
           PY
-          echo "BEDROCK_MODEL=$MODEL_ID"
+            echo 'BEDROCK_LIVE=PASS'
+            echo 'status=PASS' >> "$GITHUB_OUTPUT"
+          elif grep -qi 'account is currently being verified' /tmp/bedrock.err; then
+            echo 'BEDROCK_LIVE=BLOCKED_ACCOUNT_VERIFICATION'
+            echo 'status=BLOCKED_ACCOUNT_VERIFICATION' >> "$GITHUB_OUTPUT"
+          else
+            echo 'BEDROCK_LIVE=FAILED_OTHER'
+            sed -E 's/[0-9]{12}/************/g' /tmp/bedrock.err | head -3
+            echo 'status=FAILED_OTHER' >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Exercise CloudWatch if permitted by the delegated role
+        id: cloudwatch
         shell: bash
         run: |
           set -uo pipefail
@@ -136,8 +151,22 @@ jobs:
             --metric-data MetricName=StructuralProof,Value=1,Unit=Count \
             >/tmp/cw.out 2>/tmp/cw.err; then
             echo 'CLOUDWATCH_LIVE=PASS'
+            echo 'status=PASS' >> "$GITHUB_OUTPUT"
           else
             echo 'CLOUDWATCH_LIVE=DENIED_BY_CURRENT_OIDC_ROLE'
             sed -E 's/[0-9]{12}/************/g' /tmp/cw.err | head -2
+            echo 'status=DENIED' >> "$GITHUB_OUTPUT"
           fi
-          echo 'AWS_DIRECT_LIVE_EVIDENCE=PASS'
+
+      - name: Emit truthful AWS status
+        shell: bash
+        run: |
+          echo 'AWS_DYNAMODB_STRUCTURAL_EVIDENCE=PASS'
+          echo 'AWS_DYNAMODB_REPLAY_DEDUP=PASS'
+          echo 'AWS_BEDROCK_STATUS=${{ steps.bedrock.outputs.status }}'
+          echo 'AWS_CLOUDWATCH_STATUS=${{ steps.cloudwatch.outputs.status }}'
+          if [ '${{ steps.bedrock.outputs.status }}' = 'PASS' ] && [ '${{ steps.cloudwatch.outputs.status }}' = 'PASS' ]; then
+            echo 'AWS_DIRECT_LIVE_EVIDENCE=PASS'
+          else
+            echo 'AWS_DIRECT_LIVE_EVIDENCE=PARTIAL'
+          fi
