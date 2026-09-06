@@ -1,69 +1,64 @@
-# Ripple — AWS credentials for the external Railway runtime
+# Ripple — AWS runtime credentials and identity
 
-## Decision
+## Current decision
 
-Ripple keeps Railway as the public MCP host. The AWS runtime components are structural: DynamoDB stores approvals and authoritative receipts, Bedrock normalizes only the changed fact, and CloudWatch stores redacted structured traces.
+The canonical public Ripple runtime now runs on **AWS ECS Express Mode / Fargate**. It does **not** use static AWS access keys in the application container.
 
-The preferred AWS pattern for a workload outside AWS is temporary credentials. AWS documents IAM Roles Anywhere for non-AWS servers, containers, and applications, but that requires an X.509 certificate authority, a trust anchor, workload certificates/private keys, and the Roles Anywhere credential helper. See:
+Runtime AWS access is provided by IAM roles:
 
-- https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_common-scenarios_non-aws.html
-- https://docs.aws.amazon.com/rolesanywhere/latest/userguide/introduction.html
+- `RippleEcsTaskExecutionRole` — image pull, logs and SSM-backed startup secrets required by ECS;
+- `RippleEcsTaskRole` — the application runtime policy for DynamoDB, Bedrock and CloudWatch;
+- `RippleEcsInfrastructureRole` — ECS Express infrastructure operations.
 
-For this short-lived hackathon runtime, Railway currently provides no service workload OIDC/JWT that can be exchanged directly with AWS STS. Adding a CA/PKI solely for Ripple would add infrastructure, operating cost, certificate lifecycle, and another failure mode without improving the judged product behavior.
+GitHub Actions uses short-lived OIDC federation into `RippleGitHubOidcRole` for bounded deployment/proof operations. The final cutover flow temporarily extends only the minimum role-management permissions needed to register an exact-SHA task definition, then restores service-only infrastructure trust and removes the temporary bootstrap policy after a successful proof.
 
-Therefore the temporary deployment compromise is a **dedicated IAM user with no console login and exactly one active access key**, attached only to the CloudFormation-created `RuntimePolicy`. The policy itself is resource-scoped to the Ripple DynamoDB table, CloudWatch stream, and Bedrock Application Inference Profile.
+No AWS access key or secret access key is committed to Git, stored in the container image, printed to CI logs, or required by the canonical application runtime.
 
-This is deliberately not described as the ideal long-term AWS architecture. If Railway exposes workload identity later, or if Ripple becomes a persistent production service, migrate to short-lived federated credentials / IAM Roles Anywhere and revoke the IAM user key.
+## Application secrets
 
-## Secret-handling and idempotency invariant
+The OAuth service-client secret and demo-user password are stored as AWS Systems Manager Parameter Store `SecureString` values under:
 
-`scripts/aws_railway_runtime_principal.sh` runs only after `aws_live_verify.py` succeeds. It:
+- `/ripple/canonical/service-client-secret`
+- `/ripple/canonical/demo-user-password`
 
-1. creates/reuses `ripple-railway-runtime`;
-2. removes stale attached policies and attaches only the current stack output `RuntimePolicyArn`;
-3. refuses any state with more than one active key;
-4. if one active key already exists, reuses it only when the local `0600` private bundle exists and contains the matching access-key ID;
-5. reconciles only the non-secret stack/runtime fields in that existing bundle, preserving the secret locally;
-6. if no active key exists, creates exactly one and writes the complete AWS runtime configuration to `~/.ripple/railway-aws.env` with mode `0600`;
-7. never prints the secret key or credential bundle and never exports the one-time secret JSON to a child-process environment;
-8. revokes a newly created key if bundle creation fails.
+The task definition references those parameter ARNs; values are injected at task startup and are not embedded in repository files or the ECR image.
 
-An active key with a missing or mismatched bundle is an explicit stop condition: the script will not rotate credentials implicitly because AWS cannot reveal an existing secret access key a second time.
+## Required runtime configuration
 
-The bundle is a private transfer artifact. It must go directly from the authenticated AWS environment into Railway private variables. It must never enter Git, CI logs, screenshots, email, issue text, Devpost, or ChatGPT.
+The canonical task definition sets:
 
-## Required private Railway variables
-
-The bundle contains exactly the values needed by the canonical service:
-
-- `AWS_ACCESS_KEY_ID`
-- `AWS_SECRET_ACCESS_KEY`
-- `AWS_REGION`
+- `AWS_REGION=eu-central-1`
+- `RIPPLE_ENV=production`
 - `RIPPLE_STATE_BACKEND=dynamodb`
-- `RIPPLE_DYNAMODB_TABLE=...`
+- `RIPPLE_DYNAMODB_TABLE=ripple-canonical-state`
 - `RIPPLE_CHANGE_INTERPRETER=bedrock`
-- `RIPPLE_BEDROCK_MODEL_ID=...`
+- `RIPPLE_BEDROCK_MODEL_ID=eu.amazon.nova-2-lite-v1:0`
 - `RIPPLE_TRACE_BACKEND=cloudwatch`
-- `RIPPLE_CLOUDWATCH_LOG_GROUP=...`
+- `RIPPLE_CLOUDWATCH_LOG_GROUP=/ripple/canonical/runtime`
 - `RIPPLE_CLOUDWATCH_LOG_STREAM=runtime`
 - `RIPPLE_REQUIRE_AWS_RUNTIME=true`
+- the exact release SHA exposed by `/readyz` for release verification.
 
-No AWS credential belongs in the repository.
+Production validation fails closed if only part of the DynamoDB + Bedrock + CloudWatch structural runtime is configured.
 
-## Cutover proof
+## Exact-SHA cutover proof
 
-After those variables are applied atomically to `ripple-v12`:
+A release is canonical only after all of these pass against the public AWS endpoint:
 
-1. `/readyz` must report `runtime_mode=aws-structural`, `structural_aws_runtime=true`, and the three component names without resource identifiers;
-2. `scripts/aws_runtime_smoke.py` must pass against the public MCP endpoint;
-3. the first session must execute five writes;
-4. a fresh MCP session must resolve the same canonical change and plan snapshot but produce `5/5 deduplicated` with `0 provider writes`;
-5. Bedrock trace correlation IDs must differ between invocations while the semantic change ID remains stable.
+1. ECS converges to the exact registered task definition and immutable ECR digest;
+2. `/readyz` repeatedly reports `runtime_mode=aws-structural`, the three required components and the exact Git SHA;
+3. authenticated OAuth + MCP 2025-11-25 smoke passes;
+4. Bedrock normalization is live;
+5. the exact plan produces five authoritative receipts;
+6. a fresh MCP session resolves the same semantic change and exact snapshot;
+7. replay is `5/5 deduplicated` and the authoritative unique-write count remains unchanged (`5 -> 5`), proving **0 new provider writes**;
+8. CloudWatch contains the execution trace;
+9. the ECR digest is re-read and matches the deployed digest.
 
-Only after those checks may the project claim a live structural AWS runtime.
+## Historical Railway path
 
-## Cleanup
+An earlier design considered keeping Railway as the public MCP host and provisioning a dedicated IAM user or IAM Roles Anywhere for access to AWS backends. That path is now superseded. It is retained only in repository history as an audit trail of the credential-safety decision that led to moving the canonical runtime into AWS instead of introducing long-lived static workload credentials.
 
-`scripts/aws_teardown.sh` revokes and deletes all access keys for the dedicated runtime user first, detaches every policy from that dedicated user, deletes the IAM user, and removes the local credential bundle. That credential cleanup is intentionally independent of CloudFormation stack existence, so it still works after a failed or partial stack operation. If the stack remains, the script then deletes it.
+## Security invariant
 
-Keep the principal only for the period in which the live judging endpoint needs AWS. Rotate immediately if the key is ever suspected to have been exposed.
+The deployment path must never solve an infrastructure problem by widening permanent runtime authority. Temporary bootstrap permissions are acceptable only when bounded, auditable, removed after proof, and never inherited by the application task role.
