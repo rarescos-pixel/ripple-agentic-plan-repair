@@ -1,0 +1,39 @@
+name: AWS OIDC Smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - poc/free-work-replacement
+    paths:
+      - '.github/workflows/aws-oidc-smoke.yml'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS credentials from GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::873363353521:role/RippleGitHubOidcRole
+          aws-region: eu-central-1
+          role-session-name: ripple-oidc-smoke
+
+      - name: Verify assumed identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACCOUNT="$(aws sts get-caller-identity --query Account --output text)"
+          ARN="$(aws sts get-caller-identity --query Arn --output text)"
+          test "$ACCOUNT" = "873363353521"
+          case "$ARN" in
+            arn:aws:sts::873363353521:assumed-role/RippleGitHubOidcRole/*) ;;
+            *) echo "Unexpected assumed identity" >&2; exit 1 ;;
+          esac
+          echo "OIDC_SMOKE=PASS"
+          echo "ACCOUNT=$ACCOUNT"
+          echo "ROLE=RippleGitHubOidcRole"
