@@ -1,7 +1,7 @@
 {
-  "id": "idle-after-cost-guard-20260906T0616Z",
-  "issuedAt": "2026-09-06T06:16:00Z",
-  "expiresAt": "2099-01-01T00:00:00Z",
+  "id": "capability-probe-20260906T0732Z",
+  "issuedAt": "2026-09-06T07:32:00Z",
+  "expiresAt": "2026-09-06T07:47:00Z",
   "action": "noop",
   "target": {},
   "args": {}
