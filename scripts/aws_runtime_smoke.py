@@ -19,7 +19,7 @@ from mcp_smoke import (
     PROTOCOL,
     call,
     service_token,
-    user_token,
+    user_tokens,
 )
 
 
@@ -109,7 +109,7 @@ def main() -> None:
             )
 
         service_access = service_token(client)
-        user_access = user_token(client)
+        user_access, _ = user_tokens(client)
 
         first_sid, first_change, first_preview, first_execute, first_replay = execute_cycle(
             client, service_access, user_access, 100
