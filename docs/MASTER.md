@@ -3,7 +3,7 @@
 ## Competition targets — LOCKED
 
 - **Primary Track:** Alexa+
-- **Mini Challenge:** AWS Builder, only after structural AWS LIVE evidence passes
+- **Mini Challenge:** AWS Builder — direct structural AWS LIVE evidence is now verified; the stronger public Railway AWS-runtime cutover remains pending
 - **Mini Challenge:** Open Source, using the new MIT-licensed Ripple repository created during the hackathon window
 
 Entering Open Source adds no product feature and does not alter the Alexa+ architecture. Required fields/evidence are frozen in `docs/OPEN_SOURCE_SUBMISSION.md`.
@@ -42,8 +42,9 @@ The LLM may normalize language. It may not choose the money-spending repair, byp
 12. Intermediate fact nodes are traversed without invented actions.
 13. Unaffected commitments are not repaired.
 14. Repair selection maximizes **avoidable loss − repair cost** with deterministic tie-breakers.
+15. Exact approved proposals can be recovered across MCP process/session restart only by the same owner subject and exact snapshot.
 
-Deterministic release/adversarial gate: **PASS**. Canonical generated evidence: `docs/VALIDATION_REPORT.md` and `docs/EVIDENCE_MATRIX.md`.
+Deterministic release/adversarial gate: **PASS**. Canonical generated evidence: `docs/VALIDATION_REPORT.md`, `docs/EVIDENCE_MATRIX.md` and `docs/ADVERSARIAL_FAILURE_MATRIX.md`.
 
 ## Generality contract — VERIFIED
 
@@ -57,6 +58,20 @@ Event Operations scenario:
 - **$5,180** net direct cash preserved;
 - cheaper-but-lower-value alternative intentionally rejected.
 
+## Real-provider contract — VERIFIED
+
+At least one external provider path is real rather than simulated. The bounded GitHub Issues adapter is repository/issue allowlisted, reversible, zero-cost and runs through Ripple's existing exact approval + Executor + receipt boundary.
+
+Live proof:
+
+- external write: PASS;
+- provider readback: PASS;
+- exact replay deduplicated: PASS;
+- exact restore through a second bounded approved plan: PASS;
+- provider cost: $0.
+
+This proves Ripple's execution contract against a real external API without pretending that airline/ride/reservation providers are already production integrations.
+
 ## Public Alexa+ / MCP — VERIFIED SOFTWARE-SIDE
 
 - Base: `https://ripple-v12-production.up.railway.app`
@@ -65,9 +80,10 @@ Event Operations scenario:
 - OAuth discovery + client credentials + authorization-code/PKCE S256 + refresh flow.
 - Alexa-compatible refresh can omit `resource`; explicitly wrong resource remains rejected.
 - Five tools: `record_change`, `preview_repair_plan`, `approve_repair_plan`, `execute_repair_plan`, `get_repair_status`.
-- Independent remote MCP runner: PASS.
+- Independent remote MCP runner: PASS on previously deployed verified revisions.
 - Remote semantics: 5 impacts → 0 preview writes → 0 approval writes → 5 receipts / 5 unique writes → replay 5/5 deduplicated.
 - Money-first Repair Card is a real display-only MCP App resource.
+- Repair Card exposes deterministic “Why this plan?” evidence and execution receipt timeline without gaining approval/tool authority.
 - Alexa+ package/media remote gate: PASS for 600×900 carousel, six icon dimensions, privacy/terms and canonical MCP endpoint.
 - The documented Alexa Local Inspector JSON-only `Accept` request shape is regression-tested.
 
@@ -86,34 +102,49 @@ Therefore:
 - use the phrase **repair the cascade without opening five apps/sites** to make the transactional value obvious;
 - official Local Inspector/on-device evidence is bonus evidence if accessible, not a prerequisite;
 - do not add a second approval path to the MCP App;
-- monitor Alexa+/SDK/API updates during the hackathon, but adopt only changes with concrete score gain and low regression risk;
-- request the official $150 AWS promotional credits if not already requested.
+- monitor Alexa+/SDK/API updates during the hackathon, but adopt only changes with concrete score gain and low regression risk.
 
-## AWS boundary — AWS-READY, NOT AWS-LIVE VERIFIED
+## AWS boundary — DIRECT LIVE VERIFIED / PUBLIC RUNTIME CUTOVER PENDING
 
-Railway remains the public MCP host. No ECS/Fargate migration is allowed without a concrete economic/technical reason.
+Railway remains the public MCP transport host. No ECS/Fargate/Lambda migration is allowed without a concrete economic/technical reason.
 
-Structural AWS roles:
+Locked structural AWS roles:
 
-- **Amazon Bedrock** — constrained changed-fact normalization only;
-- **Amazon DynamoDB** — durable approval/idempotency/authoritative receipts;
+- **Amazon Bedrock / Nova 2 Lite** — constrained changed-fact normalization only;
+- **Amazon DynamoDB** — durable proposal/approval/idempotency/authoritative receipts;
 - **Amazon CloudWatch Logs** — redacted structured traces;
-- **IAM** — least-privilege runtime policy;
-- **AWS Budgets** — cost guardrails;
-- **CloudFormation** — reproducible stack.
+- **IAM + GitHub OIDC** — bounded direct-evidence authority without committed static keys;
+- **AWS Budgets / anomaly controls** — cost guardrails.
 
-Implemented and CI-validated:
+### VERIFIED direct AWS evidence
 
-- IaC and cfn-lint;
-- live Nova Lite vs Nova 2 Lite benchmark harness with quality-first selection;
-- live resource verifier;
-- Railway runtime switches and fail-closed structural-AWS requirement;
-- external-runtime least-privilege credential lifecycle, idempotent reuse and resilient teardown;
-- post-cutover AWS runtime smoke/restart/replay assertions.
+A completed AWS evidence workflow has proven:
 
-Do not claim AWS LIVE until one real source SHA proves Bedrock + DynamoDB + CloudWatch + Budget/IAM and the public Railway service passes fresh-session replay with zero duplicate provider writes.
+- GitHub OIDC assume-role: PASS;
+- DynamoDB live receipt write/readback: PASS;
+- DynamoDB replay conditional-write rejection: PASS;
+- real Nova 2 Lite inference: PASS;
+- CloudWatch Logs structured event write + readback: PASS;
+- aggregate `AWS_DIRECT_LIVE_EVIDENCE=PASS`.
 
-Do **not** add AgentCore, Strands or Kiro only to make the AWS Builder diagram larger. Finish the existing structural multi-service AWS path first.
+Evidence: `docs/AWS_DIRECT_LIVE_EVIDENCE.md`.
+
+### Stronger claim still pending
+
+Do **not** yet say that the canonical public `ripple-v12` process is AWS-backed for every request. That requires the credential-safe Railway cutover to DynamoDB/Bedrock/CloudWatch and an exact-revision post-cutover public smoke/restart/replay proof.
+
+Canonical wording until then:
+
+> **AWS services are live and structurally verified; the canonical public Railway AWS-runtime cutover is pending.**
+
+Do **not** add AgentCore, Strands, Kiro, Lambda, ECS or Fargate only to make the AWS Builder diagram larger.
+
+## Cost / failure proof — VERIFIED
+
+- Judge-verifiable deterministic cost benchmark exists in `docs/COST_BENCHMARK_2026-09-06.md`.
+- Failure-truth matrix exists in `docs/ADVERSARIAL_FAILURE_MATRIX.md`.
+- Architecture remains pay-per-use on AWS with no always-on AWS compute added for logo value.
+- Economic decision policy remains deterministic and separate from infrastructure cost claims.
 
 ## Open Source boundary — ELIGIBLE / SUBMISSION-READY
 
@@ -130,11 +161,12 @@ No separate feature work is required merely to qualify. Any further open-source 
 
 ## Current limitations — explicit
 
-- airline, ride, reservation, delivery, pet-care and calendar provider adapters are deterministic simulators;
+- airline, ride, reservation, delivery, pet-care and calendar provider adapters remain deterministic simulators;
+- one bounded GitHub Issues external-provider path is real and independently live-proven;
 - example dollar values are deterministic scenario fixtures, not market statistics;
 - no actual Alexa+ production-client session is claimed unless official onboarding/inspection is exercised;
 - official Alexa+ production-client access is **not** a submission prerequisite; the simulated Alexa+ path is explicitly permitted;
-- the current public Railway service has not yet been claimed as structurally AWS-backed;
+- the current public Railway service has not yet been claimed as AWS-backed for every request;
 - the embedded OAuth server is a hackathon/demo identity surface, not a production identity provider.
 
 ## Submission lock
@@ -147,14 +179,15 @@ The implied product promise is: **repair the cascade without opening five apps/s
 
 Do not lead with protocol details, dependency graphs, hashes, logs or AWS diagrams.
 
-Required submission-close sequence after Sep 3 session intelligence:
+Required submission-close sequence:
 
-1. judge-facing simulated Alexa+ conversation + Repair Card polish, backed by the real public MCP;
-2. request/confirm the official $150 AWS promotional credits if not already done;
-3. AWS LIVE evidence and Railway structural cutover;
-4. friction log / product feedback final coherence and evidence freeze;
+1. keep core / exact-approval / recovery / real-provider / adversarial / cost evidence green;
+2. complete credential-safe AWS-backed Railway cutover only if it can be done without weakening the canonical endpoint;
+3. exact final Railway source SHA → independent public MCP smoke → fresh-session replay proof;
+4. friction log / product feedback / README / submission evidence coherence and freeze;
 5. official Alexa+ Inspector/onboarding **if accessible**, as bonus evidence rather than a blocker;
 6. monitor official Alexa+/Devpost updates until submission freeze;
-7. final judge-first video under 3 minutes;
-8. Devpost submission and adversarial final audit;
-9. technical freeze through judging.
+7. **STOP before video and work on video only with Rareș explicitly present**;
+8. final judge-first video under 3 minutes;
+9. Devpost submission and adversarial final audit;
+10. technical freeze through judging.
