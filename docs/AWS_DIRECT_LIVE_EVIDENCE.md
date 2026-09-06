@@ -1,8 +1,6 @@
 # Ripple — AWS direct live evidence
 
-Status: **PASS for direct AWS structural evidence; public Railway AWS-runtime cutover remains pending.**
-
-This document records what has actually been exercised against AWS and keeps that claim separate from the stronger claim that the canonical public Railway MCP process is already using AWS for every request.
+Status: **PASS for the independent direct AWS structural proof.** This report is historical evidence from the phase before the canonical public runtime moved to AWS ECS Express Mode / Fargate.
 
 ## Verified live AWS proof
 
@@ -13,7 +11,7 @@ GitHub Actions workflow: `AWS live evidence probe (non-blocking)`
 - source SHA exercised: `fc6d38dfc4ebe57aa6fe2623ba86618b5ea85c4f`
 - region: `eu-central-1`
 
-Observed markers from the completed job:
+Observed markers:
 
 ```text
 AWS_OIDC=PASS
@@ -30,24 +28,23 @@ AWS_CLOUDWATCH_STATUS=PASS
 AWS_DIRECT_LIVE_EVIDENCE=PASS
 ```
 
-The CloudWatch proof is write **and readback**, not only a successful API call. The DynamoDB proof writes one receipt conditionally, verifies the replay is rejected by the conditional write, and reads the authoritative receipt back consistently. Bedrock performs a real Nova 2 Lite inference with a bounded normalization request.
+The CloudWatch proof was write **and readback**, not only a successful API call. The DynamoDB proof conditionally wrote one receipt, verified replay rejection and read the authoritative receipt back. Bedrock performed a real Nova 2 Lite inference with a bounded normalization request.
 
 ## Trust boundary
 
-AWS access for these proof runs uses GitHub OIDC to assume the dedicated `RippleGitHubOidcRole`. No static AWS access key is committed to the repository or printed by the proof.
+AWS access for this proof used GitHub OIDC to assume `RippleGitHubOidcRole`. No static AWS access key was committed to the repository or printed by the proof.
 
-## Claim boundary
+## What this report proves
 
-What this evidence supports:
+- Amazon Bedrock / Nova 2 Lite was live and callable by Ripple's controlled AWS path;
+- DynamoDB state/idempotency semantics were exercised live;
+- CloudWatch structured trace write/readback was exercised live;
+- AWS was structural project infrastructure before the public compute migration.
 
-- Amazon Bedrock / Nova 2 Lite is live and callable by Ripple's controlled AWS path;
-- DynamoDB live state/idempotency semantics are exercised;
-- CloudWatch Logs live trace write/readback is exercised;
-- AWS is structural project infrastructure rather than a diagram-only claim.
+## Current architecture supersedes the old boundary
 
-What this evidence does **not** yet support:
+At the time this report was first generated, Railway was still the public MCP host and the AWS-backed public-runtime cutover was pending. That boundary is now obsolete.
 
-- that the canonical `ripple-v12` Railway process is currently configured with `RIPPLE_STATE_BACKEND=dynamodb`, `RIPPLE_CHANGE_INTERPRETER=bedrock`, and `RIPPLE_TRACE_BACKEND=cloudwatch` for every public request;
-- that the latest final submission SHA has already been deployed to Railway and passed a post-cutover AWS-backed public smoke.
+The canonical public runtime now runs on **AWS ECS Express Mode / Fargate** and uses DynamoDB + Bedrock + CloudWatch in the serving process. The current stronger proof is defined in `docs/AWS_READINESS.md` and the exact-SHA canonical release workflow: immutable ECR digest → ECS convergence → repeated public exact-SHA `/readyz` → authenticated MCP/AWS smoke → fresh-session replay with authoritative write count unchanged (`5 → 5`) → CloudWatch trace readback → digest verification.
 
-Those stronger claims remain gated by the credential-safe Railway cutover and exact-revision public smoke. This separation is deliberate: evidence must remain stronger than marketing copy.
+This file is intentionally retained because the earlier direct proof is independent historical evidence, not because it defines the current claim boundary.
