@@ -171,7 +171,8 @@ jobs:
           PY
           (cd /tmp && zip -q live-evidence.zip lambda_function.py)
 
-          ROLE_ARN="$(aws iam get-role --role-name RippleLambdaExecutionRole --query 'Role.Arn' --output text)"
+          ACCOUNT="$(aws sts get-caller-identity --query Account --output text)"
+          ROLE_ARN="arn:aws:iam::$ACCOUNT:role/RippleLambdaExecutionRole"
           if aws lambda get-function --function-name "$FUNCTION_NAME" >/dev/null 2>&1; then
             aws lambda update-function-code --function-name "$FUNCTION_NAME" --zip-file fileb:///tmp/live-evidence.zip >/dev/null
             aws lambda wait function-updated --function-name "$FUNCTION_NAME"
