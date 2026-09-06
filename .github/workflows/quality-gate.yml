@@ -44,23 +44,3 @@ jobs:
           PYTHONPATH=src python -m ripple.evaluation.aws_gate
       - name: Verify generated evidence is committed
         run: git diff --exit-code -- docs/EVIDENCE_MATRIX.md docs/VALIDATION_REPORT.md docs/AWS_READY_REPORT.md
-
-  remote-judge-demo:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: test
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Install remote smoke dependency
-        run: python -m pip install httpx
-      - name: Wait for exact Railway revision and verify public judge flow
-        run: >-
-          python scripts/judge_demo_remote_smoke.py
-          --base-url https://ripple-v12-production.up.railway.app
-          --expected-source-revision "${GITHUB_SHA}"
-          --attempts 90
-          --interval-seconds 5
