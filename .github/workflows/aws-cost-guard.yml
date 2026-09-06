@@ -31,15 +31,16 @@ jobs:
           START="$(date -u +%Y-%m-01)"
           END="$(date -u -d '+1 day' +%Y-%m-%d)"
           set +e
-          ERR="$(aws ce get-cost-and-usage \
+          aws ce get-cost-and-usage \
             --region us-east-1 \
             --time-period Start="$START",End="$END" \
             --granularity MONTHLY \
             --metrics UnblendedCost \
-            > /tmp/cost.json 2>&1)"
+            > /tmp/cost.json 2> /tmp/cost.err
           RC=$?
           set -e
           if [ "$RC" -ne 0 ]; then
+            ERR="$(cat /tmp/cost.err)"
             if printf '%s' "$ERR" | grep -q 'DataUnavailableException'; then
               echo 'AWS_MTD_COST=DATA_NOT_INGESTED_YET'
               echo 'AWS_MTD_UNIT=USD'
