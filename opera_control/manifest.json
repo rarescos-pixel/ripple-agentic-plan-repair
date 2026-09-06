@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Ripple Browser Control Helper",
+  "version": "0.1.0",
+  "description": "Scoped browser control for Ripple bootstrap. No cookie, password, credential, or arbitrary-eval access.",
+  "permissions": ["tabs", "scripting"],
+  "host_permissions": [
+    "https://*.signin.aws.amazon.com/*",
+    "https://*.console.aws.amazon.com/*",
+    "https://*.trycloudflare.com/*",
+    "https://railway.com/*",
+    "https://*.railway.app/*",
+    "https://github.com/*",
+    "https://example.com/*"
+  ],
+  "action": {
+    "default_title": "Ripple Browser Control"
+  },
+  "web_accessible_resources": [],
+  "options_page": "control.html"
+}
