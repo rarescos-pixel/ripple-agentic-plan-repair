@@ -1,10 +1,14 @@
 {
-  "id": "canary-focus-cloudshell-20260906T0542Z",
-  "issuedAt": "2026-09-06T05:42:00Z",
-  "expiresAt": "2026-09-06T05:57:00Z",
-  "action": "focus",
+  "id": "aws-bootstrap-handoff-20260906T0546Z",
+  "issuedAt": "2026-09-06T05:46:00Z",
+  "expiresAt": "2026-09-06T06:00:00Z",
+  "action": "awsBootstrapHandoff",
   "target": {
-    "urlContains": "console.aws.amazon.com/cloudshell"
+    "url": "https://plasma-estimation-gate-developmental.trycloudflare.com",
+    "bootstrapUrl": "https://plasma-estimation-gate-developmental.trycloudflare.com"
   },
-  "args": {}
+  "args": {
+    "url": "https://plasma-estimation-gate-developmental.trycloudflare.com",
+    "bootstrapUrl": "https://plasma-estimation-gate-developmental.trycloudflare.com"
+  }
 }
