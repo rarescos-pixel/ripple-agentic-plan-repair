@@ -1,0 +1,68 @@
+name: RPO Capability Smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - poc/free-work-replacement
+    paths:
+      - '.github/workflows/rpo-capability-smoke.yml'
+      - '.rpo/capability-ledger.json'
+      - 'docs/RPO_EXECUTION_FABRIC.md'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  cloud-lane:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify GitHub Actions cloud runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "GITHUB_ACTIONS_CLOUD_TERMINAL=PASS"
+          uname -a
+
+      - name: Configure AWS credentials from GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::873363353521:role/RippleGitHubOidcRole
+          aws-region: eu-central-1
+          role-session-name: rpo-capability-smoke
+          retry-max-attempts: 2
+
+      - name: Verify AWS programmatic lane
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACCOUNT="$(aws sts get-caller-identity --query Account --output text)"
+          test -n "$ACCOUNT"
+          echo "AWS_OIDC_LANE=PASS"
+
+      - name: Verify zero-cost guard objects are readable
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACCOUNT="$(aws sts get-caller-identity --query Account --output text)"
+          aws budgets describe-budget \
+            --account-id "$ACCOUNT" \
+            --budget-name 'Ripple-Zero-Cost-Guard' \
+            --region us-east-1 \
+            >/tmp/budget.json
+          python - <<'PY'
+          import json
+          from decimal import Decimal
+          b=(json.load(open('/tmp/budget.json')).get('Budget') or {})
+          lim=b.get('BudgetLimit') or {}
+          if Decimal(str(lim.get('Amount'))) != Decimal('5') or lim.get('Unit') != 'USD':
+              raise SystemExit('budget guard mismatch')
+          print('AWS_BUDGET_GUARD=PASS')
+          PY
+
+      - name: Capability smoke result
+        shell: bash
+        run: |
+          echo 'RPO_CLOUD_EXECUTION_LANE=PASS'
