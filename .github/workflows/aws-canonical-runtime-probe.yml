@@ -1,0 +1,103 @@
+name: AWS canonical runtime path probe
+
+on:
+  push:
+    branches: [audit/aws-canonical-runtime-path]
+    paths:
+      - '.github/workflows/aws-canonical-runtime-probe.yml'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials from GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::873363353521:role/RippleGitHubOidcRole
+          aws-region: eu-central-1
+          role-session-name: ripple-runtime-path-probe
+          retry-max-attempts: 2
+
+      - name: Verify OIDC identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARN="$(aws sts get-caller-identity --query Arn --output text)"
+          case "$ARN" in
+            arn:aws:sts::*:assumed-role/RippleGitHubOidcRole/*) ;;
+            *) echo 'Unexpected AWS identity' >&2; exit 1 ;;
+          esac
+          echo 'AWS_OIDC_BRANCH_PROBE=PASS'
+
+      - name: Probe read-only ECS ECR IAM capabilities
+        shell: bash
+        run: |
+          set -uo pipefail
+          probe() {
+            local label="$1"; shift
+            if "$@" >/tmp/probe.out 2>/tmp/probe.err; then
+              echo "$label=PASS"
+            else
+              rc=$?
+              echo "$label=DENIED_OR_UNAVAILABLE"
+              sed -E 's/[0-9]{12}/************/g' /tmp/probe.err | head -2
+              return $rc
+            fi
+          }
+          probe ECS_LIST_CLUSTERS aws ecs list-clusters || true
+          probe ECR_DESCRIBE_REPOSITORIES aws ecr describe-repositories || true
+          probe IAM_GET_OIDC_ROLE aws iam get-role --role-name RippleGitHubOidcRole || true
+          probe IAM_GET_EXECUTION_ROLE aws iam get-role --role-name ecsTaskExecutionRole || true
+          probe IAM_GET_EXPRESS_INFRA_ROLE aws iam get-role --role-name ecsInfrastructureRoleForExpressServices || true
+          probe CFN_VALIDATE_TEMPLATE aws cloudformation validate-template --template-body file://infra/ripple-aws.json || true
+
+      - name: Probe policy simulation for safe deploy prerequisites
+        shell: bash
+        run: |
+          set -uo pipefail
+          ROLE_ARN='arn:aws:iam::873363353521:role/RippleGitHubOidcRole'
+          ACTIONS=(
+            ecs:CreateExpressGatewayService
+            ecs:UpdateExpressGatewayService
+            ecs:DescribeExpressGatewayService
+            ecs:DeleteExpressGatewayService
+            ecr:CreateRepository
+            ecr:GetAuthorizationToken
+            ecr:BatchCheckLayerAvailability
+            ecr:InitiateLayerUpload
+            ecr:UploadLayerPart
+            ecr:CompleteLayerUpload
+            ecr:PutImage
+            iam:CreateRole
+            iam:PutRolePolicy
+            iam:AttachRolePolicy
+            iam:PassRole
+            cloudformation:CreateStack
+            cloudformation:UpdateStack
+            cloudformation:DescribeStacks
+          )
+          if aws iam simulate-principal-policy \
+              --policy-source-arn "$ROLE_ARN" \
+              --action-names "${ACTIONS[@]}" \
+              --query 'EvaluationResults[].{Action:EvalActionName,Decision:EvalDecision}' \
+              --output table >/tmp/sim.out 2>/tmp/sim.err; then
+            cat /tmp/sim.out
+            echo 'IAM_SIMULATE_DEPLOY=PASS'
+          else
+            echo 'IAM_SIMULATE_DEPLOY=DENIED_OR_UNAVAILABLE'
+            sed -E 's/[0-9]{12}/************/g' /tmp/sim.err | head -3
+          fi
+
+      - name: Emit decision boundary
+        shell: bash
+        run: |
+          echo 'PROBE_MUTATIONS=0'
+          echo 'CANONICAL_RUNTIME_PROBE=COMPLETE'
