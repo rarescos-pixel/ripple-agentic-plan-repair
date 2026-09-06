@@ -4,12 +4,15 @@ from ripple.tools.simulated import ToolRegistry
 from ripple.engine.dependency import DependencyEngine
 from ripple.orchestration.planner import Planner
 from ripple.orchestration.executor import Executor
+from ripple.persistence import StateStore
 
 
-def build_golden():
+def build_golden(*, store: StateStore | None = None):
     # Validate deployment composition before constructing a state backend. In
     # production this prevents a partially-enabled AWS profile from creating an
-    # executor/client before the runtime can fail closed.
+    # executor/client before the runtime can fail closed. Tests and the public
+    # judge simulation may inject an explicit isolated store so their deterministic
+    # fixture state can never collide with the production durable backend.
     validate_runtime_profile()
     nodes = {
         "flight:return": PlanNode("flight:return", NodeKind.FACT, "Return flight"),
@@ -30,7 +33,7 @@ def build_golden():
     tools = ToolRegistry()
     engine = DependencyEngine(nodes, edges, tools)
     planner = Planner(nodes, engine)
-    executor = Executor(tools)
+    executor = Executor(tools, store=store)
     return nodes, tools, planner, executor, change
 
 

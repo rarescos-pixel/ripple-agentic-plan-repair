@@ -1,6 +1,8 @@
 from starlette.testclient import TestClient
 
 from ripple.asgi import app
+from ripple.judge_demo import IsolatedJudgeDemoController
+from ripple.persistence import MemoryStateStore
 
 
 GOLDEN_UTTERANCE = "Our flight home was cancelled. We'll land tomorrow at 18:00."
@@ -64,6 +66,14 @@ def test_public_judge_demo_browser_sessions_do_not_share_approval_state():
         second_replay = second.post("/demo/api/replay", json={})
         assert second_replay.status_code == 400
         assert "No active proposal" in second_replay.json()["error"]
+
+
+def test_public_judge_demo_forces_memory_state_even_when_production_runtime_can_change():
+    first = IsolatedJudgeDemoController()
+    second = IsolatedJudgeDemoController()
+    assert isinstance(first.session.executor.store, MemoryStateStore)
+    assert isinstance(second.session.executor.store, MemoryStateStore)
+    assert first.session.executor.store is not second.session.executor.store
 
 
 def test_public_judge_demo_rejects_empty_change():
