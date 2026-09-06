@@ -1,7 +1,7 @@
 {
-  "id": "railway-login-github-20260906T0847Z",
-  "issuedAt": "2026-09-06T08:47:00Z",
-  "expiresAt": "2026-09-06T09:02:00Z",
+  "id": "railway-login-github-20260906T1155Z",
+  "issuedAt": "2026-09-06T11:55:00Z",
+  "expiresAt": "2026-09-06T12:10:00Z",
   "action": "clickText",
   "target": {
     "urlContains": "railway.com/dashboard"
