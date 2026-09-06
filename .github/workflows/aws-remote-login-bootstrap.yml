@@ -101,10 +101,127 @@ jobs:
             exit 1
           fi
 
-          ACCOUNT=$(aws sts get-caller-identity --profile ripple-bootstrap --region eu-central-1 --query Account --output text)
-          ROLE_ARN="arn:aws:iam::${ACCOUNT}:role/RippleGitHubOidcRole"
-          echo "OIDC_READY=true"
-          echo "GITHUB_ROLE_ARN=$ROLE_ARN"
-          echo "✅ GitHub OIDC ready for Ripple." >> "$GITHUB_STEP_SUMMARY"
-          echo "Role: $ROLE_ARN" >> "$GITHUB_STEP_SUMMARY"
-          gh issue comment 31 --repo "$GITHUB_REPOSITORY" --body "OIDC_READY=true\nGITHUB_ROLE_ARN=$ROLE_ARN"
+          echo "OIDC_BOOTSTRAP=PASS"
+          echo "✅ AWS authenticated and base OIDC bootstrap completed." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Bind OIDC role to canonical Ripple AWS live operations
+        shell: bash
+        env:
+          AWS_REGION: eu-central-1
+        run: |
+          set -euo pipefail
+          PROFILE=ripple-bootstrap
+          ACCOUNT="$(aws sts get-caller-identity --profile "$PROFILE" --region "$AWS_REGION" --query Account --output text)"
+          ROLE=RippleGitHubOidcRole
+          POLICY_NAME=RippleGitHubDeployPolicy
+
+          python - "$ACCOUNT" > /tmp/ripple-live-policy.json <<'PY'
+          import json, sys
+          account = sys.argv[1]
+          region = "eu-central-1"
+          policy = {
+              "Version": "2012-10-17",
+              "Statement": [
+                  {
+                      "Sid": "Identity",
+                      "Effect": "Allow",
+                      "Action": ["sts:GetCallerIdentity"],
+                      "Resource": "*",
+                  },
+                  {
+                      "Sid": "RippleCloudFormation",
+                      "Effect": "Allow",
+                      "Action": [
+                          "cloudformation:ValidateTemplate",
+                          "cloudformation:CreateStack",
+                          "cloudformation:UpdateStack",
+                          "cloudformation:DescribeStacks",
+                          "cloudformation:DescribeStackEvents",
+                          "cloudformation:CreateChangeSet",
+                          "cloudformation:DescribeChangeSet",
+                          "cloudformation:ExecuteChangeSet",
+                          "cloudformation:DeleteChangeSet",
+                          "cloudformation:GetTemplate",
+                          "cloudformation:GetTemplateSummary",
+                          "cloudformation:ListStackResources"
+                      ],
+                      "Resource": "*",
+                  },
+                  {
+                      "Sid": "RippleDynamo",
+                      "Effect": "Allow",
+                      "Action": [
+                          "dynamodb:CreateTable", "dynamodb:DescribeTable", "dynamodb:DeleteTable",
+                          "dynamodb:UpdateTable", "dynamodb:DescribeContinuousBackups", "dynamodb:UpdateContinuousBackups",
+                          "dynamodb:TagResource", "dynamodb:UntagResource", "dynamodb:ListTagsOfResource",
+                          "dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem",
+                          "dynamodb:Query", "dynamodb:Scan"
+                      ],
+                      "Resource": [
+                          f"arn:aws:dynamodb:{region}:{account}:table/ripple-*",
+                          f"arn:aws:dynamodb:{region}:{account}:table/ripple-*/index/*"
+                      ],
+                  },
+                  {
+                      "Sid": "RippleLogs",
+                      "Effect": "Allow",
+                      "Action": [
+                          "logs:CreateLogGroup", "logs:DeleteLogGroup", "logs:DescribeLogGroups",
+                          "logs:PutRetentionPolicy", "logs:DeleteRetentionPolicy",
+                          "logs:CreateLogStream", "logs:DeleteLogStream", "logs:DescribeLogStreams",
+                          "logs:PutLogEvents", "logs:GetLogEvents", "logs:FilterLogEvents",
+                          "logs:TagResource", "logs:UntagResource", "logs:ListTagsForResource"
+                      ],
+                      "Resource": "*",
+                  },
+                  {
+                      "Sid": "RippleBedrock",
+                      "Effect": "Allow",
+                      "Action": [
+                          "bedrock:ListFoundationModels", "bedrock:GetFoundationModel", "bedrock:InvokeModel",
+                          "bedrock:CreateApplicationInferenceProfile", "bedrock:GetInferenceProfile",
+                          "bedrock:DeleteApplicationInferenceProfile", "bedrock:ListInferenceProfiles",
+                          "bedrock:TagResource", "bedrock:UntagResource", "bedrock:ListTagsForResource"
+                      ],
+                      "Resource": "*",
+                  },
+                  {
+                      "Sid": "RippleBudget",
+                      "Effect": "Allow",
+                      "Action": ["budgets:ViewBudget", "budgets:CreateBudget", "budgets:ModifyBudget", "budgets:DeleteBudget"],
+                      "Resource": "*",
+                  },
+                  {
+                      "Sid": "RippleManagedPolicy",
+                      "Effect": "Allow",
+                      "Action": [
+                          "iam:CreatePolicy", "iam:GetPolicy", "iam:GetPolicyVersion", "iam:ListPolicyVersions",
+                          "iam:CreatePolicyVersion", "iam:DeletePolicyVersion", "iam:DeletePolicy",
+                          "iam:ListEntitiesForPolicy", "iam:TagPolicy", "iam:UntagPolicy"
+                      ],
+                      "Resource": f"arn:aws:iam::{account}:policy/ripple-*",
+                  },
+                  {
+                      "Sid": "RippleRailwayRuntimeUser",
+                      "Effect": "Allow",
+                      "Action": [
+                          "iam:GetUser", "iam:CreateUser", "iam:DeleteUser", "iam:TagUser", "iam:UntagUser",
+                          "iam:ListAttachedUserPolicies", "iam:AttachUserPolicy", "iam:DetachUserPolicy",
+                          "iam:ListAccessKeys", "iam:CreateAccessKey", "iam:UpdateAccessKey", "iam:DeleteAccessKey"
+                      ],
+                      "Resource": f"arn:aws:iam::{account}:user/ripple-railway-runtime",
+                  },
+              ],
+          }
+          json.dump(policy, sys.stdout, separators=(",", ":"))
+          PY
+
+          aws iam put-role-policy \
+            --profile "$PROFILE" \
+            --region "$AWS_REGION" \
+            --role-name "$ROLE" \
+            --policy-name "$POLICY_NAME" \
+            --policy-document file:///tmp/ripple-live-policy.json
+          rm -f /tmp/ripple-live-policy.json
+          echo "CANONICAL_AWS_ROLE_BINDING=PASS"
+          echo "✅ OIDC role updated for canonical Ripple AWS live gate." >> "$GITHUB_STEP_SUMMARY"
