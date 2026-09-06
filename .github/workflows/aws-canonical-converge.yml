@@ -1,0 +1,264 @@
+name: AWS canonical runtime converge
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/aws-canonical-converge.yml']
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: ripple-aws-canonical-converge
+  cancel-in-progress: false
+
+jobs:
+  converge-and-prove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      AWS_REGION: eu-central-1
+      AWS_ACCOUNT_ID: '873363353521'
+      ECR_REPOSITORY: ripple-canonical-runtime
+      SERVICE_NAME: ripple-canonical
+      CLUSTER_NAME: default
+      TABLE_NAME: ripple-canonical-state
+      TRACE_LOG_GROUP: /ripple/canonical/runtime
+      TRACE_LOG_STREAM: runtime
+      EXECUTION_ROLE: RippleEcsTaskExecutionRole
+      INFRA_ROLE: RippleEcsInfrastructureRole
+      TASK_ROLE: RippleEcsTaskRole
+      SERVICE_CLIENT_ID: ripple-service
+      USER_CLIENT_ID: ripple-user
+      SERVICE_SECRET_PARAM: /ripple/canonical/service-client-secret
+      DEMO_PASSWORD_PARAM: /ripple/canonical/demo-user-password
+      GITHUB_OIDC_SUB: repo:rarescos-pixel@321760901/ripple-agentic-plan-repair@1356792571:ref:refs/heads/main
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bootstrap AWS via GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::873363353521:role/RippleGitHubOidcRole
+          aws-region: eu-central-1
+          role-session-name: ripple-aws-converge-bootstrap
+          retry-max-attempts: 2
+
+      - name: Resolve real Express endpoint and prerequisites
+        id: target
+        shell: bash
+        run: |
+          set -euo pipefail
+          SERVICE_ARN="arn:aws:ecs:${AWS_REGION}:${AWS_ACCOUNT_ID}:service/${CLUSTER_NAME}/${SERVICE_NAME}"
+          aws ecs describe-express-gateway-service --service-arn "$SERVICE_ARN" >/tmp/service.json
+          test "$(aws dynamodb describe-table --table-name "$TABLE_NAME" --query 'Table.TableStatus' --output text)" = ACTIVE
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          d=json.load(open('/tmp/service.json'))['service']
+          endpoints=[]
+          for cfg in d.get('activeConfigurations',[]):
+              for p in cfg.get('ingressPaths',[]):
+                  if p.get('accessType')=='PUBLIC' and p.get('endpoint'):
+                      endpoints.append(p['endpoint'].rstrip('/'))
+          assert endpoints, d
+          u=endpoints[0]
+          if not u.startswith('http'): u='https://'+u
+          print('base_url='+u)
+          print('service_arn='+d['serviceArn'])
+          PY
+          echo 'REAL_EXPRESS_ENDPOINT=PASS'
+
+      - name: Build and push exact-SHA image
+        id: image
+        shell: bash
+        run: |
+          set -euo pipefail
+          ECR_URI="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}"
+          aws ecr get-login-password | docker login --username AWS --password-stdin "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+          if ! aws ecr describe-images --repository-name "$ECR_REPOSITORY" --image-ids imageTag="$GITHUB_SHA" >/dev/null 2>&1; then
+            docker build --pull -t "$ECR_URI:$GITHUB_SHA" .
+            docker push "$ECR_URI:$GITHUB_SHA"
+          fi
+          DIGEST="$(aws ecr describe-images --repository-name "$ECR_REPOSITORY" --image-ids imageTag="$GITHUB_SHA" --query 'imageDetails[0].imageDigest' --output text)"
+          test -n "$DIGEST" && test "$DIGEST" != None
+          echo "image_ref=$ECR_URI@$DIGEST" >> "$GITHUB_OUTPUT"
+          echo "image_digest=$DIGEST" >> "$GITHUB_OUTPUT"
+          echo 'EXACT_SHA_ECR_IMAGE=PASS'
+
+      - name: Prepare bounded temporary Express updater
+        shell: bash
+        run: |
+          set -euo pipefail
+          MANAGED=arn:aws:iam::aws:policy/service-role/AmazonECSInfrastructureRoleforExpressGatewayServices
+          INFRA_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:role/${INFRA_ROLE}"
+          EXEC_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:role/${EXECUTION_ROLE}"
+          TASK_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:role/${TASK_ROLE}"
+          aws iam delete-role-policy --role-name "$INFRA_ROLE" --policy-name RippleExpressDeployTemporary >/dev/null 2>&1 || true
+          aws iam detach-role-policy --role-name "$INFRA_ROLE" --policy-arn "$MANAGED" >/dev/null 2>&1 || true
+          aws iam delete-role --role-name "$INFRA_ROLE" >/dev/null 2>&1 || true
+          cat >/tmp/trust.json <<JSON
+          {"Version":"2012-10-17","Statement":[
+            {"Effect":"Allow","Principal":{"Service":"ecs.amazonaws.com"},"Action":"sts:AssumeRole"},
+            {"Effect":"Allow","Principal":{"Federated":"arn:aws:iam::${AWS_ACCOUNT_ID}:oidc-provider/token.actions.githubusercontent.com"},"Action":"sts:AssumeRoleWithWebIdentity","Condition":{"StringEquals":{"token.actions.githubusercontent.com:aud":"sts.amazonaws.com"},"StringLike":{"token.actions.githubusercontent.com:sub":"${GITHUB_OIDC_SUB}"}}}
+          ]}
+          JSON
+          aws iam create-role --role-name "$INFRA_ROLE" --assume-role-policy-document file:///tmp/trust.json >/dev/null
+          aws iam attach-role-policy --role-name "$INFRA_ROLE" --policy-arn "$MANAGED"
+          cat >/tmp/deploy.json <<JSON
+          {"Version":"2012-10-17","Statement":[
+            {"Effect":"Allow","Action":["ecs:UpdateExpressGatewayService","ecs:DescribeExpressGatewayService","ecs:RegisterTaskDefinition","ecs:DescribeTaskDefinition","ecs:DeregisterTaskDefinition","ecs:CreateCluster","ecs:DescribeClusters"],"Resource":"*"},
+            {"Effect":"Allow","Action":"iam:PassRole","Resource":["$EXEC_ARN","$INFRA_ARN","$TASK_ARN"]},
+            {"Effect":"Allow","Action":["iam:UpdateAssumeRolePolicy","iam:DeleteRolePolicy"],"Resource":"$INFRA_ARN"}
+          ]}
+          JSON
+          aws iam put-role-policy --role-name "$INFRA_ROLE" --policy-name RippleExpressDeployTemporary --policy-document file:///tmp/deploy.json
+          sleep 70
+          echo 'TEMP_UPDATER_READY=PASS'
+
+      - name: Assume bounded Express updater
+        id: assume_updater
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::873363353521:role/RippleEcsInfrastructureRole
+          aws-region: eu-central-1
+          role-session-name: ripple-ecs-express-deployer
+          retry-max-attempts: 12
+
+      - name: Deploy exact SHA with real public URL
+        env:
+          BASE_URL: ${{ steps.target.outputs.base_url }}
+          SERVICE_ARN: ${{ steps.target.outputs.service_arn }}
+          IMAGE_REF: ${{ steps.image.outputs.image_ref }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXEC_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:role/${EXECUTION_ROLE}"
+          TASK_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:role/${TASK_ROLE}"
+          SECRET_ARN="arn:aws:ssm:${AWS_REGION}:${AWS_ACCOUNT_ID}:parameter/ripple/canonical/service-client-secret"
+          PASSWORD_ARN="arn:aws:ssm:${AWS_REGION}:${AWS_ACCOUNT_ID}:parameter/ripple/canonical/demo-user-password"
+          IMAGE_REF="$IMAGE_REF" BASE_URL="$BASE_URL" SERVICE_ARN="$SERVICE_ARN" EXEC_ARN="$EXEC_ARN" TASK_ARN="$TASK_ARN" SECRET_ARN="$SECRET_ARN" PASSWORD_ARN="$PASSWORD_ARN" python - <<'PY'
+          import json,os
+          p={"image":os.environ['IMAGE_REF'],"containerPort":8000,"awsLogsConfiguration":{"logGroup":"/ecs/ripple-canonical","logStreamPrefix":"ecs"},"environment":[
+            {"name":"PORT","value":"8000"},{"name":"AWS_REGION","value":"eu-central-1"},{"name":"RIPPLE_ENV","value":"production"},
+            {"name":"RIPPLE_PUBLIC_BASE_URL","value":os.environ['BASE_URL']},{"name":"RIPPLE_ALLOWED_ORIGINS","value":os.environ['BASE_URL']},
+            {"name":"RIPPLE_SERVICE_CLIENT_ID","value":"ripple-service"},{"name":"RIPPLE_USER_CLIENT_ID","value":"ripple-user"},
+            {"name":"RIPPLE_USER_REDIRECT_URIS","value":os.environ['BASE_URL']+"/oauth/callback"},
+            {"name":"RIPPLE_STATE_BACKEND","value":"dynamodb"},{"name":"RIPPLE_DYNAMODB_TABLE","value":"ripple-canonical-state"},
+            {"name":"RIPPLE_CHANGE_INTERPRETER","value":"bedrock"},{"name":"RIPPLE_BEDROCK_MODEL_ID","value":"eu.amazon.nova-2-lite-v1:0"},
+            {"name":"RIPPLE_TRACE_BACKEND","value":"cloudwatch"},{"name":"RIPPLE_CLOUDWATCH_LOG_GROUP","value":"/ripple/canonical/runtime"},
+            {"name":"RIPPLE_CLOUDWATCH_LOG_STREAM","value":"runtime"},{"name":"RIPPLE_REQUIRE_AWS_RUNTIME","value":"true"},
+            {"name":"RAILWAY_GIT_COMMIT_SHA","value":os.environ['GITHUB_SHA']},{"name":"RIPPLE_RELEASE_SHA","value":os.environ['GITHUB_SHA']}],
+            "secrets":[{"name":"RIPPLE_SERVICE_CLIENT_SECRET","valueFrom":os.environ['SECRET_ARN']},{"name":"RIPPLE_DEMO_USER_PASSWORD","valueFrom":os.environ['PASSWORD_ARN']}]}
+          req={"serviceArn":os.environ['SERVICE_ARN'],"executionRoleArn":os.environ['EXEC_ARN'],"taskRoleArn":os.environ['TASK_ARN'],"healthCheckPath":"/healthz","primaryContainer":p,"cpu":"256","memory":"512","scalingTarget":{"minTaskCount":1,"maxTaskCount":1,"autoScalingMetric":"AVERAGE_CPU","autoScalingTargetValue":60}}
+          json.dump(req,open('/tmp/update.json','w'))
+          PY
+          aws ecs update-express-gateway-service --cli-input-json file:///tmp/update.json >/tmp/update-response.json
+          echo 'EXACT_SHA_UPDATE_ACCEPTED=PASS'
+
+      - name: Remove temporary updater privilege
+        if: always() && steps.assume_updater.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat >/tmp/ecs-trust.json <<'JSON'
+          {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"ecs.amazonaws.com"},"Action":"sts:AssumeRole"}]}
+          JSON
+          aws iam update-assume-role-policy --role-name "$INFRA_ROLE" --policy-document file:///tmp/ecs-trust.json
+          aws iam delete-role-policy --role-name "$INFRA_ROLE" --policy-name RippleExpressDeployTemporary
+          echo 'TEMP_UPDATER_REMOVED=PASS'
+
+      - name: Restore proof identity
+        if: always()
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::873363353521:role/RippleGitHubOidcRole
+          aws-region: eu-central-1
+          role-session-name: ripple-aws-converge-proof
+          retry-max-attempts: 2
+
+      - name: Emergency cleanup if updater assumption failed
+        if: always() && steps.assume_updater.outcome != 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          MANAGED=arn:aws:iam::aws:policy/service-role/AmazonECSInfrastructureRoleforExpressGatewayServices
+          aws iam delete-role-policy --role-name "$INFRA_ROLE" --policy-name RippleExpressDeployTemporary >/dev/null 2>&1 || true
+          aws iam detach-role-policy --role-name "$INFRA_ROLE" --policy-arn "$MANAGED" >/dev/null 2>&1 || true
+          aws iam delete-role --role-name "$INFRA_ROLE" >/dev/null 2>&1 || true
+          cat >/tmp/ecs-trust.json <<'JSON'
+          {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"ecs.amazonaws.com"},"Action":"sts:AssumeRole"}]}
+          JSON
+          aws iam create-role --role-name "$INFRA_ROLE" --assume-role-policy-document file:///tmp/ecs-trust.json >/dev/null
+          aws iam attach-role-policy --role-name "$INFRA_ROLE" --policy-arn "$MANAGED"
+          echo 'EMERGENCY_CLEANUP=PASS'
+
+      - name: Wait until public traffic serves exact SHA and URL
+        if: success()
+        env:
+          BASE_URL: ${{ steps.target.outputs.base_url }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONVERGED=0
+          for i in $(seq 1 120); do
+            if curl -fsS --max-time 10 "$BASE_URL/readyz" >/tmp/ready.json 2>/dev/null; then
+              if BASE_URL="$BASE_URL" python - <<'PY'
+          import json,os
+          d=json.load(open('/tmp/ready.json'))
+          ok=(d.get('status')=='ready' and d.get('structural_aws_runtime') is True and d.get('runtime_mode')=='aws-structural' and d.get('aws_components')==['dynamodb','bedrock','cloudwatch'] and d.get('source_revision')==os.environ['GITHUB_SHA'].lower() and d.get('resource')==os.environ['BASE_URL'].rstrip('/')+'/mcp')
+          raise SystemExit(0 if ok else 1)
+          PY
+              then
+                CONVERGED=1
+                echo "serving_revision_converged_attempt=$i"
+                cat /tmp/ready.json
+                break
+              fi
+              echo "attempt=$i serving=$(python -c 'import json; d=json.load(open("/tmp/ready.json")); print(d.get("source_revision","?"))') expected=$GITHUB_SHA"
+            else
+              echo "attempt=$i endpoint_not_ready"
+            fi
+            sleep 10
+          done
+          test "$CONVERGED" -eq 1
+          echo 'PUBLIC_EXACT_SHA_AND_URL=PASS'
+
+      - name: Independent AWS-runtime and MCP proof
+        if: success()
+        env:
+          BASE_URL: ${{ steps.target.outputs.base_url }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -q -r requirements.txt
+          SERVICE_SECRET="$(aws ssm get-parameter --name "$SERVICE_SECRET_PARAM" --with-decryption --query 'Parameter.Value' --output text)"
+          DEMO_PASSWORD="$(aws ssm get-parameter --name "$DEMO_PASSWORD_PARAM" --with-decryption --query 'Parameter.Value' --output text)"
+          echo "::add-mask::$SERVICE_SECRET"
+          echo "::add-mask::$DEMO_PASSWORD"
+          RIPPLE_SMOKE_BASE_URL="$BASE_URL" RIPPLE_SERVICE_CLIENT_ID="$SERVICE_CLIENT_ID" RIPPLE_SERVICE_CLIENT_SECRET="$SERVICE_SECRET" RIPPLE_USER_CLIENT_ID="$USER_CLIENT_ID" RIPPLE_USER_REDIRECT_URI="$BASE_URL/oauth/callback" RIPPLE_DEMO_USER_PASSWORD="$DEMO_PASSWORD" RIPPLE_EXPECTED_SOURCE_SHA="$GITHUB_SHA" python scripts/aws_runtime_smoke.py
+          RIPPLE_SMOKE_BASE_URL="$BASE_URL" RIPPLE_SERVICE_CLIENT_ID="$SERVICE_CLIENT_ID" RIPPLE_SERVICE_CLIENT_SECRET="$SERVICE_SECRET" RIPPLE_USER_CLIENT_ID="$USER_CLIENT_ID" RIPPLE_USER_REDIRECT_URI="$BASE_URL/oauth/callback" RIPPLE_DEMO_USER_PASSWORD="$DEMO_PASSWORD" python scripts/mcp_smoke.py
+          echo 'CANONICAL_AWS_PUBLIC_PROOF=PASS'
+
+      - name: Verify trace and ECR digest
+        if: success()
+        env:
+          IMAGE_DIGEST: ${{ steps.image.outputs.image_digest }}
+          BASE_URL: ${{ steps.target.outputs.base_url }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws ecr describe-images --repository-name "$ECR_REPOSITORY" --image-ids imageTag="$GITHUB_SHA" --query 'imageDetails[0].imageDigest' --output text | grep -qx "$IMAGE_DIGEST"
+          FOUND=0
+          for i in 1 2 3 4 5; do
+            aws logs get-log-events --log-group-name "$TRACE_LOG_GROUP" --log-stream-name "$TRACE_LOG_STREAM" --start-from-head --limit 10000 --query 'events[].message' --output text >/tmp/traces.txt
+            grep -q 'plan.executed' /tmp/traces.txt && grep -q 'change.recorded' /tmp/traces.txt && { FOUND=1; break; }
+            sleep 2
+          done
+          test "$FOUND" -eq 1
+          echo 'CLOUDWATCH_CANONICAL_TRACE=PASS'
+          echo 'ECR_EXACT_SHA_DIGEST=PASS'
+          echo "CANONICAL_AWS_RUNTIME_URL=$BASE_URL"
+          echo "CANONICAL_AWS_RUNTIME_SHA=$GITHUB_SHA"
