@@ -60,6 +60,7 @@
         "iam:DetachRolePolicy",
         "iam:ListRolePolicies",
         "iam:ListAttachedRolePolicies",
+        "iam:UpdateAssumeRolePolicy",
         "iam:TagRole"
       ],
       "Resource": [
