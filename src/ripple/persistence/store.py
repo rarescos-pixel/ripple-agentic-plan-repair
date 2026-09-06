@@ -65,12 +65,15 @@ def _receipt_from(payload: dict[str, Any]) -> ExecutionReceipt:
 
 
 def _option_from(payload: dict[str, Any]) -> RepairOption:
+    # Preserve the exact JSON numeric representation used by snapshot_hash().
+    # Converting 0 -> 0.0 changes canonical JSON bytes and would make a valid
+    # persisted proposal look like content drift after a restart.
     return RepairOption(
         tool=str(payload["tool"]),
         operation=str(payload["operation"]),
         params=dict(payload.get("params") or {}),
-        added_cost=float(payload.get("added_cost", 0)),
-        avoidable_loss=float(payload.get("avoidable_loss", 0)),
+        added_cost=payload.get("added_cost", 0),
+        avoidable_loss=payload.get("avoidable_loss", 0),
         reversible=bool(payload.get("reversible", True)),
         external_side_effect=bool(payload.get("external_side_effect", True)),
     )
@@ -82,7 +85,7 @@ def _impact_from(payload: dict[str, Any]) -> Impact:
         dependency_path=[str(x) for x in payload.get("dependency_path") or []],
         reason=str(payload["reason"]),
         status=ImpactStatus(str(payload["status"])),
-        direct_cash_at_risk=float(payload.get("direct_cash_at_risk", 0)),
+        direct_cash_at_risk=payload.get("direct_cash_at_risk", 0),
         urgency=int(payload.get("urgency", 0)),
         options=[_option_from(x) for x in payload.get("options") or []],
     )
@@ -97,8 +100,8 @@ def _action_from(payload: dict[str, Any]) -> RepairAction:
         params=dict(payload.get("params") or {}),
         reversible=bool(payload.get("reversible", True)),
         external_side_effect=bool(payload.get("external_side_effect", True)),
-        added_cost=float(payload.get("added_cost", 0)),
-        avoidable_loss=float(payload.get("avoidable_loss", 0)),
+        added_cost=payload.get("added_cost", 0),
+        avoidable_loss=payload.get("avoidable_loss", 0),
         idempotency_key=str(payload["idempotency_key"]),
         approval_level=str(payload.get("approval_level", "explicit_plan")),
         status=ActionStatus(str(payload.get("status", ActionStatus.PROPOSED.value))),
@@ -112,8 +115,8 @@ def _plan_from(payload: dict[str, Any]) -> RepairPlan:
         source_change_event_id=str(payload["source_change_event_id"]),
         impacts=[_impact_from(x) for x in payload.get("impacts") or []],
         actions=[_action_from(x) for x in payload.get("actions") or []],
-        total_added_cost=float(payload.get("total_added_cost", 0)),
-        total_avoidable_loss=float(payload.get("total_avoidable_loss", 0)),
+        total_added_cost=payload.get("total_added_cost", 0),
+        total_avoidable_loss=payload.get("total_avoidable_loss", 0),
         external_people_notified=int(payload.get("external_people_notified", 0)),
         unresolved_items=[str(x) for x in payload.get("unresolved_items") or []],
         status=str(payload.get("status", "proposed")),
@@ -128,7 +131,7 @@ def _change_from(payload: dict[str, Any]) -> ChangeEvent:
         old_value=payload.get("old_value"),
         new_value=payload.get("new_value"),
         source=str(payload.get("source", "voice")),
-        confidence=float(payload.get("confidence", 1.0)),
+        confidence=payload.get("confidence", 1.0),
         correlation_id=str(payload.get("correlation_id", "golden")),
     )
 
