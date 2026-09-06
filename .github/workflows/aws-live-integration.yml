@@ -172,12 +172,22 @@ jobs:
               exit 0
             fi
           fi
-          TS="$(($(date +%s) * 1000))"
-          MESSAGE="{\"schema\":\"ripple.trace.v1\",\"event_type\":\"aws.live.proof\",\"correlation_id\":\"$PROOF_ID\",\"payload\":{\"redacted\":true}}"
-          if ! aws logs put-log-events --log-group-name "$LOG_GROUP" --log-stream-name "$LOG_STREAM" --log-events timestamp="$TS",message="$MESSAGE" >/tmp/cw-put.json 2>/tmp/cw.err; then
-            echo 'CLOUDWATCH_LOGS=DENIED_PUT'
+          PROOF_ID="$PROOF_ID" python - <<'PY'
+          import json, os, time
+          proof_id = os.environ['PROOF_ID']
+          message = json.dumps({
+              'schema': 'ripple.trace.v1',
+              'event_type': 'aws.live.proof',
+              'correlation_id': proof_id,
+              'payload': {'redacted': True},
+          }, sort_keys=True, separators=(',', ':'))
+          with open('/tmp/cw-events.json', 'w', encoding='utf-8') as handle:
+              json.dump([{'timestamp': int(time.time() * 1000), 'message': message}], handle)
+          PY
+          if ! aws logs put-log-events --log-group-name "$LOG_GROUP" --log-stream-name "$LOG_STREAM" --log-events file:///tmp/cw-events.json >/tmp/cw-put.json 2>/tmp/cw.err; then
+            echo 'CLOUDWATCH_LOGS=DENIED_PUT_OR_INVALID_PAYLOAD'
             sed -E 's/[0-9]{12}/************/g' /tmp/cw.err | head -2
-            echo 'status=DENIED' >> "$GITHUB_OUTPUT"
+            echo 'status=DENIED_OR_INVALID' >> "$GITHUB_OUTPUT"
             exit 0
           fi
           sleep 2
