@@ -44,7 +44,7 @@ One changed arrival time produces five downstream impacts:
 | Authoritative execution receipts | **5** |
 | Exact-plan replay | **5/5 deduplicated** |
 
-The public authenticated MCP flow has been exercised from a separate Railway container over HTTPS. See [`docs/REMOTE_SMOKE_REPORT.md`](docs/REMOTE_SMOKE_REPORT.md) and [`docs/ALEXA_REMOTE_EVIDENCE.md`](docs/ALEXA_REMOTE_EVIDENCE.md).
+The canonical public runtime is now AWS-hosted and the release proof requires the public endpoint to serve the exact Git SHA before smoke evidence is accepted.
 
 ## A second scenario proves the engine is not travel-specific
 
@@ -77,11 +77,12 @@ The deterministic release gate is **PASS** and includes golden, failure, drift, 
 
 ## Alexa+ / MCP implementation
 
-Public runtime:
+Canonical public runtime:
 
-- HTTPS: `https://ripple-v12-production.up.railway.app`
-- MCP: `https://ripple-v12-production.up.railway.app/mcp`
+- HTTPS: `https://ri-9fd0e66d62464ec4ae642ccf46e6864d.ecs.eu-central-1.on.aws`
+- MCP: `https://ri-9fd0e66d62464ec4ae642ccf46e6864d.ecs.eu-central-1.on.aws/mcp`
 - base protocol: **MCP 2025-11-25**, Streamable HTTP
+- runtime mode: **aws-structural**
 
 Implemented surfaces include:
 
@@ -94,30 +95,40 @@ Implemented surfaces include:
 - Alexa+ add-on package assets, six required icon sizes, 600×900 carousel, privacy and terms surfaces;
 - independent remote gates for authenticated execution, replay and store-media packaging.
 
-Observed public smoke contract:
+Observed MCP contract:
 
 ```text
 Ripple authenticated MCP smoke: PASS
 protocol: 2025-11-25
 preview: 5 impacts / 0 writes
 approval writes: 0
-execute: 5 receipts / 5 unique writes
-replay: 5 deduplicated / 5 unique writes
+execute: 5 receipts / 5 authoritative unique writes
+replay: 5/5 deduplicated / authoritative writes unchanged
 ```
 
 ## AWS Builder architecture
 
-Ripple keeps Railway as the public MCP transport host. AWS is structural where it improves correctness and evidence:
+AWS is the canonical runtime, not merely a sidecar integration:
 
+- **Amazon ECS Express Mode / Fargate** — public HTTPS MCP service;
 - **Amazon Bedrock / Nova 2 Lite** — constrained changed-fact normalization only;
 - **Amazon DynamoDB** — durable exact proposals/approvals, idempotency records and authoritative receipts;
 - **Amazon CloudWatch Logs** — redacted structured traces;
-- **IAM / GitHub OIDC** — bounded proof-run authority without committed static credentials;
+- **IAM task roles + GitHub OIDC** — runtime and deployment authority without committed static AWS credentials;
 - **AWS Budgets / anomaly controls** — project cost guardrails.
 
-Direct AWS structural evidence is now **live verified**: GitHub OIDC assume-role, DynamoDB live receipt write/readback and replay rejection, real Nova 2 Lite inference, and CloudWatch Logs structured-event write **plus readback** all pass in the same evidence workflow. See [`docs/AWS_DIRECT_LIVE_EVIDENCE.md`](docs/AWS_DIRECT_LIVE_EVIDENCE.md).
+The application task role is narrower than the temporary deployment role. Final release automation restores the ECS infrastructure role to service-only trust and removes the temporary bootstrap cutover policy after the canonical proof succeeds.
 
-The stronger claim that the canonical public `ripple-v12` Railway process is already AWS-backed for every request remains intentionally gated. The public runtime has not yet completed a credential-safe cutover to `RIPPLE_STATE_BACKEND=dynamodb`, `RIPPLE_CHANGE_INTERPRETER=bedrock`, and `RIPPLE_TRACE_BACKEND=cloudwatch` on the final source SHA. Until that post-cutover exact-revision smoke passes, Ripple says precisely: **AWS services are live and structurally verified; the canonical public Railway AWS-runtime cutover is pending.**
+The exact-SHA release boundary requires:
+
+1. immutable ECR image digest for the Git SHA;
+2. ECS convergence to that task definition;
+3. repeated public `/readyz` exact-SHA matches;
+4. authenticated MCP + OAuth smoke;
+5. live Bedrock normalization;
+6. durable DynamoDB replay with `5/5 deduplicated` and authoritative write count unchanged (`5 → 5`), proving **0 new provider writes** in the fresh-session replay;
+7. CloudWatch execution traces;
+8. digest readback matching the deployed image.
 
 See [`docs/AWS_READINESS.md`](docs/AWS_READINESS.md), [`docs/AWS_RUNTIME_CREDENTIALS.md`](docs/AWS_RUNTIME_CREDENTIALS.md) and [`docs/AWS_DIRECT_LIVE_EVIDENCE.md`](docs/AWS_DIRECT_LIVE_EVIDENCE.md).
 
@@ -131,35 +142,36 @@ See [`docs/OPEN_SOURCE_SUBMISSION.md`](docs/OPEN_SOURCE_SUBMISSION.md).
 
 Real running software/evidence:
 
-- public HTTPS MCP transport;
+- canonical public HTTPS MCP runtime on AWS ECS Express Mode / Fargate;
 - OAuth and PKCE surfaces;
 - dependency analysis and economic optimization;
 - exact approval boundary;
-- execution ledger, durable proposal recovery, receipts and duplicate-free replay;
+- DynamoDB-backed durable proposal recovery, receipts and duplicate-free replay;
+- Bedrock changed-fact normalization;
+- CloudWatch structured execution traces;
 - MCP App Repair Card and Alexa package/media surfaces;
 - independent remote smoke/evidence runners;
-- one bounded real external provider integration using GitHub Issues, with verified write → readback → replay dedup → exact restore and zero provider cost;
-- direct live AWS evidence for Nova 2 Lite, DynamoDB and CloudWatch Logs.
+- one bounded real external provider integration using GitHub Issues, with verified write → readback → replay dedup → exact restore and zero provider cost.
 
-Deliberately simulated / not yet claimed:
+Deliberately simulated / not claimed:
 
 - airline, ride, reservation, delivery, pet-care and calendar provider adapters remain deterministic fixtures;
 - the example dollar amounts are deterministic scenario fixtures rather than market claims;
-- an actual Alexa+ production-client session has not yet been claimed;
-- the canonical public Railway process is not yet claimed to use the AWS backends for every request until credential-safe cutover and post-cutover smoke pass.
+- an actual Alexa+ production-client session has not yet been claimed.
 
-This distinction is intentional: marketing copy does not count as evidence.
+Historical Railway smoke reports remain in the repository as audit evidence from the earlier hosting phase, but Railway no longer defines the canonical architecture.
 
 ## Judge evidence map
 
-- [`docs/ALEXA_REMOTE_EVIDENCE.md`](docs/ALEXA_REMOTE_EVIDENCE.md) — remote Alexa-compatible OAuth, MCP and store-media evidence
+- [`docs/AWS_READINESS.md`](docs/AWS_READINESS.md) — canonical AWS runtime architecture and exact-SHA proof boundary
+- [`docs/AWS_DIRECT_LIVE_EVIDENCE.md`](docs/AWS_DIRECT_LIVE_EVIDENCE.md) — direct Bedrock/DynamoDB/CloudWatch live evidence
+- [`docs/ALEXA_REMOTE_EVIDENCE.md`](docs/ALEXA_REMOTE_EVIDENCE.md) — Alexa-compatible OAuth, MCP and store-media evidence
 - [`docs/MCP_APP_EVIDENCE.md`](docs/MCP_APP_EVIDENCE.md) — Repair Card MCP App contract
-- [`docs/REMOTE_SMOKE_REPORT.md`](docs/REMOTE_SMOKE_REPORT.md) — independent public HTTPS execution/replay proof
+- [`docs/REMOTE_SMOKE_REPORT.md`](docs/REMOTE_SMOKE_REPORT.md) — earlier independent public HTTPS execution/replay proof
 - [`docs/VALIDATION_REPORT.md`](docs/VALIDATION_REPORT.md) — deterministic release gate
 - [`docs/EVIDENCE_MATRIX.md`](docs/EVIDENCE_MATRIX.md) — claim-to-evidence mapping
 - [`docs/ADVERSARIAL_FAILURE_MATRIX.md`](docs/ADVERSARIAL_FAILURE_MATRIX.md) — failure-truth and recovery matrix
 - [`docs/COST_BENCHMARK_2026-09-06.md`](docs/COST_BENCHMARK_2026-09-06.md) — judge-verifiable cost benchmark
-- [`docs/AWS_DIRECT_LIVE_EVIDENCE.md`](docs/AWS_DIRECT_LIVE_EVIDENCE.md) — direct Bedrock/DynamoDB/CloudWatch live evidence and exact claim boundary
 - [`docs/RUBRIC_MAP.md`](docs/RUBRIC_MAP.md) — judging-criterion mapping
 - [`docs/FRICTION_LOG.md`](docs/FRICTION_LOG.md) — real developer friction and actionable Amazon feedback
 - [`docs/PRODUCT_FEEDBACK.md`](docs/PRODUCT_FEEDBACK.md) — required tool/API/SDK feedback
