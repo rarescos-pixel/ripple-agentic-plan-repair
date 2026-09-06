@@ -65,7 +65,7 @@ def validate_runtime_profile() -> RuntimeProfile:
 
     Local development remains composable so individual adapters can be tested
     without AWS. `RIPPLE_REQUIRE_AWS_RUNTIME=true` is the explicit deployment
-    lock used by the canonical Railway service after the live AWS stack exists.
+    lock used by the canonical AWS ECS runtime.
     """
     profile = current_runtime_profile()
 
