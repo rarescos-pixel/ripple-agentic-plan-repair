@@ -30,13 +30,26 @@ jobs:
           set -euo pipefail
           START="$(date -u +%Y-%m-01)"
           END="$(date -u -d '+1 day' +%Y-%m-%d)"
-          aws ce get-cost-and-usage \
+          set +e
+          ERR="$(aws ce get-cost-and-usage \
             --region us-east-1 \
             --time-period Start="$START",End="$END" \
             --granularity MONTHLY \
             --metrics UnblendedCost \
-            > /tmp/cost.json
-          python - <<'PY'
+            > /tmp/cost.json 2>&1)"
+          RC=$?
+          set -e
+          if [ "$RC" -ne 0 ]; then
+            if printf '%s' "$ERR" | grep -q 'DataUnavailableException'; then
+              echo 'AWS_MTD_COST=DATA_NOT_INGESTED_YET'
+              echo 'AWS_MTD_UNIT=USD'
+              echo 'AWS_MTD_NOTE=Cost Explorer was just enabled; AWS has not ingested billing data yet.'
+            else
+              printf '%s\n' "$ERR" >&2
+              exit "$RC"
+            fi
+          else
+            python - <<'PY'
           import json
           d=json.load(open('/tmp/cost.json'))
           r=d.get('ResultsByTime') or []
@@ -45,6 +58,7 @@ jobs:
           print('AWS_MTD_UNIT=' + str(m.get('Unit','USD')))
           print('AWS_MTD_ESTIMATED=' + str((r[0].get('Estimated') if r else 'UNKNOWN')))
           PY
+          fi
 
       - name: Set Cost Anomaly Detection threshold to 5 USD
         shell: bash
@@ -78,7 +92,7 @@ jobs:
 
           aws ce get-anomaly-subscriptions --region us-east-1 --max-results 100 > /tmp/verify.json
           ARN="$ARN" python - <<'PY'
-          import json, os, sys
+          import json, os
           arn=os.environ['ARN']
           d=json.load(open('/tmp/verify.json'))
           s=next((x for x in (d.get('AnomalySubscriptions') or []) if x.get('SubscriptionArn')==arn), None)
