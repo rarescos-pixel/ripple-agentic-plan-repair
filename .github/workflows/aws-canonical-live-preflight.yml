@@ -1,0 +1,64 @@
+name: AWS Canonical Live Preflight
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - poc/free-work-replacement
+    paths:
+      - '.github/workflows/aws-canonical-live-preflight.yml'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      AWS_REGION: eu-central-1
+      CANONICAL_SHA: 70458722829fbec9475f5a4d41ead0835d0a43c1
+      STACK_NAME: ripple-demo
+      BUDGET_EMAIL: ${{ secrets.RIPPLE_BUDGET_EMAIL }}
+    steps:
+      - name: Checkout canonical source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CANONICAL_SHA }}
+          fetch-depth: 1
+
+      - name: Configure AWS credentials from GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.RIPPLE_AWS_OIDC_ROLE_ARN || vars.RIPPLE_AWS_OIDC_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: ripple-canonical-preflight
+          retry-max-attempts: 2
+
+      - name: Verify canonical source and AWS prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$CANONICAL_SHA"
+          aws sts get-caller-identity >/dev/null
+          aws cloudformation validate-template --region "$AWS_REGION" --template-body file://infra/ripple-aws.json >/dev/null
+          if [ -n "$BUDGET_EMAIL" ]; then
+            echo 'BUDGET_EMAIL_SECRET=AVAILABLE'
+          else
+            echo 'BUDGET_EMAIL_SECRET=MISSING'
+          fi
+          if aws cloudformation describe-stacks --region "$AWS_REGION" --stack-name "$STACK_NAME" >/tmp/stack.json 2>/dev/null; then
+            status="$(jq -r '.Stacks[0].StackStatus' /tmp/stack.json)"
+            echo "CANONICAL_STACK_STATUS=$status"
+            jq -r '.Stacks[0].Outputs[]? | "OUTPUT_PRESENT=" + .OutputKey' /tmp/stack.json | sort
+          else
+            echo 'CANONICAL_STACK_STATUS=ABSENT'
+          fi
+          account="$(aws sts get-caller-identity --query Account --output text)"
+          if aws budgets describe-budget --account-id "$account" --budget-name 'Ripple-Zero-Cost-Guard' --region us-east-1 >/dev/null 2>&1; then
+            echo 'EXISTING_COST_GUARD=PASS'
+          else
+            echo 'EXISTING_COST_GUARD=ABSENT'
+          fi
+          echo 'CANONICAL_AWS_PREFLIGHT=PASS'
