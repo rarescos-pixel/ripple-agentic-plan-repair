@@ -1,44 +1,51 @@
-# AWS readiness — cost-efficient structural integration
+# AWS readiness — canonical structural runtime
 
 ## Decision
-Use AWS only where it increases correctness and hackathon evidence. Railway remains the public MCP transport host; AWS strengthens the narrow capabilities where durable state, model normalization and trace evidence matter.
+Ripple now runs its canonical public MCP service on AWS ECS Express Mode / Fargate. AWS is no longer only a sidecar evidence layer: the public runtime itself uses the structural AWS backends that matter for correctness and proof.
 
 ## Locked structural stack
-1. **Amazon Bedrock / Nova 2 Lite** — one constrained inference per reported change; normalization only, never repair ranking or execution.
-2. **DynamoDB** — durable proposal/approval state, idempotency ledger and authoritative receipts.
-3. **CloudWatch Logs** — redacted structured traces for execution and recovery evidence.
-4. **AWS Budgets / cost anomaly controls** — bounded-spend guardrails.
+1. **Amazon ECS Express Mode / Fargate** — canonical public HTTPS MCP runtime.
+2. **Amazon Bedrock / Nova 2 Lite** — one constrained changed-fact normalization per reported change; normalization only, never repair ranking or execution.
+3. **DynamoDB** — durable proposal/approval state, idempotency ledger and authoritative receipts.
+4. **CloudWatch Logs** — redacted structured traces for execution and recovery evidence.
+5. **IAM / GitHub OIDC** — short-lived deployment authority; the runtime itself uses task roles, not static access keys.
+6. **AWS Budgets / cost anomaly controls** — bounded-spend guardrails.
 
-There is deliberately **no Lambda/ECS/Fargate duplication** in the locked architecture. The deterministic Ripple engine remains in the Railway-hosted MCP process. Adding another compute layer would increase cost and failure surface without improving the primary Alexa+ behavior.
+The deterministic Ripple engine remains the authority for dependency analysis, economic optimization, approval validation and bounded execution. The LLM has no write authority.
+
+## Canonical public runtime
+
+- HTTPS base: `https://ri-9fd0e66d62464ec4ae642ccf46e6864d.ecs.eu-central-1.on.aws`
+- MCP: `https://ri-9fd0e66d62464ec4ae642ccf46e6864d.ecs.eu-central-1.on.aws/mcp`
+- readiness: `/readyz`
+- runtime mode: `aws-structural`
+- required components: `dynamodb`, `bedrock`, `cloudwatch`
+
+The release workflow requires the public `/readyz` response to report the exact Git source SHA before the release can be considered canonical.
+
+## Runtime proof boundary
+A valid canonical proof requires all of the following in one exact-SHA release:
+
+- ECS control plane converges to the exact immutable ECR image digest;
+- public `/readyz` repeatedly reports the exact source SHA and `aws-structural` composition;
+- OAuth and MCP 2025-11-25 authenticated flows pass;
+- Bedrock produces the normalized ChangeEvent;
+- the five-impact plan preserves the deterministic golden economics;
+- fresh-session replay returns `5/5 deduplicated`;
+- the authoritative write count remains unchanged across that replay (`5 -> 5`), proving **0 new provider writes**;
+- CloudWatch contains the execution trace;
+- the ECR digest is re-read and matches the deployed digest.
+
+The authoritative automation for this boundary is the final AWS canonical proof workflow in `.github/workflows/` together with `scripts/aws_runtime_smoke.py`.
 
 ## Cost controls
-- on-demand Bedrock only;
-- one bounded model call per change;
-- temperature 0 and tightly bounded output;
-- application-owned old state and allowlisted node/field context;
+- one canonical Fargate task;
+- one bounded Bedrock call per reported change;
+- tightly bounded model output;
 - DynamoDB on-demand;
-- short CloudWatch retention and no raw prompt/secret logging;
-- account-level budget/anomaly guardrails;
-- no provisioned throughput or always-on AWS compute.
+- short/redacted CloudWatch evidence logging;
+- no duplicate application compute tier;
+- account-level budget/anomaly guardrails.
 
-## Verified live boundary — 2026-09-06
-Direct structural AWS evidence is now **PASS**:
-
-- GitHub OIDC assume-role: PASS;
-- DynamoDB table live: PASS;
-- durable receipt write/readback: PASS;
-- replay conditional-write rejection: PASS;
-- Amazon Nova 2 Lite real inference: PASS;
-- CloudWatch Logs structured event write + readback: PASS;
-- aggregate marker: `AWS_DIRECT_LIVE_EVIDENCE=PASS`.
-
-See [`AWS_DIRECT_LIVE_EVIDENCE.md`](AWS_DIRECT_LIVE_EVIDENCE.md) for the exact run and claim boundary.
-
-## Remaining stronger runtime claim
-The canonical public Railway service is **not yet claimed to be AWS-backed for every request**. That stronger statement requires a credential-safe Railway cutover plus an exact-revision public smoke proving Bedrock, DynamoDB and CloudWatch from the public MCP process.
-
-Until that final cutover passes, use the precise wording:
-
-> **AWS services are live and structurally verified; the canonical public Railway runtime cutover is pending.**
-
-This is intentionally stricter than merely showing AWS resources or a successful SDK call.
+## Historical note
+Earlier evidence used Railway as the public MCP host while Bedrock, DynamoDB and CloudWatch were proven separately. Those reports remain useful historical evidence, but they no longer define the canonical runtime architecture. The current canonical public service is AWS ECS Express Mode / Fargate.
