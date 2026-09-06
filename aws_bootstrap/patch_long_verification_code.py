@@ -11,10 +11,18 @@ s = s.replace(
     1,
 )
 
-# AWS CLI `login --remote` now displays a long verification code. The CLI
-# expects that exact code back. Do not decode/re-encode or reconstruct it.
+# Runtime imports for strict verification-envelope parsing/canonicalization.
+if 'import base64\n' not in s:
+    s = s.replace('import json\n', 'import base64\nimport json\n', 1)
+if 'from urllib.parse import parse_qs, urlparse\n' not in s:
+    s = s.replace('from typing import Any\n', 'from typing import Any\nfrom urllib.parse import parse_qs, urlparse\n', 1)
+
+# AWS CLI `login --remote` displays a long Base64 verification envelope. Copy /
+# paste can add whitespace or omit trailing Base64 padding. Decode it locally,
+# bind its state to this exact login attempt, then emit one canonical padded
+# Base64 envelope for the CLI. Never log the embedded authorization code.
 old_validator = '''    code = str(data.get("code", "")).strip()\n    if not (4 <= len(code) <= 128) or not re.fullmatch(r"[A-Za-z0-9._-]+", code):\n        return JSONResponse({"ok": False, "error": "Invalid authorization-code format."}, status_code=400)'''
-new_validator = '''    raw_code = str(data.get("code", ""))\n    # Copy/paste from AWS may contain visual line wraps/newlines. Remove only\n    # whitespace and pass every other character through unchanged to aws login.\n    code = re.sub(r"\\s+", "", raw_code)\n    if not (16 <= len(code) <= 32768) or any(ord(ch) < 33 or ord(ch) > 126 for ch in code):\n        return JSONResponse({"ok": False, "error": "Invalid AWS verification-code format."}, status_code=400)'''
+new_validator = '''    raw_code = str(data.get("code", ""))\n    compact = re.sub(r"\\s+", "", raw_code)\n    if not (16 <= len(compact) <= 32768) or any(ord(ch) < 33 or ord(ch) > 126 for ch in compact):\n        return JSONResponse({"ok": False, "error": "Invalid AWS verification-code format."}, status_code=400)\n    try:\n        padded = compact + ("=" * (-len(compact) % 4))\n        decoded = base64.b64decode(padded, validate=True).decode("utf-8")\n        fields = parse_qs(decoded, keep_blank_values=True, strict_parsing=True)\n        embedded_code = fields.get("code", [""])[0]\n        embedded_state = fields.get("state", [""])[0]\n    except Exception:\n        return JSONResponse({"ok": False, "error": "AWS verification code could not be decoded. Copy it again with the AWS Copy verification code button."}, status_code=400)\n    if not embedded_code or not embedded_state:\n        return JSONResponse({"ok": False, "error": "AWS verification envelope is missing code/state."}, status_code=400)\n    with lock:\n        current_auth_url = str(state.get("auth_url") or "")\n    try:\n        expected_state = parse_qs(urlparse(current_auth_url).query).get("state", [""])[0]\n    except Exception:\n        expected_state = ""\n    if not expected_state:\n        return JSONResponse({"ok": False, "error": "Current AWS login state is unavailable. Restart this bootstrap session."}, status_code=409)\n    if embedded_state != expected_state:\n        return JSONResponse({"ok": False, "error": "This verification code belongs to a different AWS login session. Use the code from the window opened by this bootstrap."}, status_code=409)\n    canonical_envelope = f"code={embedded_code}&state={embedded_state}".encode("utf-8")\n    code = base64.b64encode(canonical_envelope).decode("ascii")'''
 if old_validator not in s:
     raise SystemExit('validator pattern not found')
 s = s.replace(old_validator, new_validator, 1)
@@ -48,4 +56,4 @@ if '"Sid": "RippleCostGuard"' not in s:
     s = s.replace(cost_anchor, cost_stmt + cost_anchor, 1)
 
 path.write_text(s, encoding='utf-8')
-print('patched AWS bootstrap for immutable OIDC subject, exact long verification code, sanitized diagnostics, and least-privilege cost guard access')
+print('patched AWS bootstrap for immutable OIDC subject, state-bound canonical verification envelope, sanitized diagnostics, and least-privilege cost guard access')
