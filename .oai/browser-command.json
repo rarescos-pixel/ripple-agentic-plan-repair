@@ -1,14 +1,12 @@
 {
-  "id": "aws-bootstrap-handoff-20260906T0546Z",
-  "issuedAt": "2026-09-06T05:46:00Z",
-  "expiresAt": "2026-09-06T06:00:00Z",
+  "id": "aws-bootstrap-handoff-20260906T0550Z",
+  "issuedAt": "2026-09-06T05:50:00Z",
+  "expiresAt": "2026-09-06T06:05:00Z",
   "action": "awsBootstrapHandoff",
   "target": {
-    "url": "https://plasma-estimation-gate-developmental.trycloudflare.com",
-    "bootstrapUrl": "https://plasma-estimation-gate-developmental.trycloudflare.com"
+    "urlContains": "plasma-estimation-gate-developmental.trycloudflare.com"
   },
   "args": {
-    "url": "https://plasma-estimation-gate-developmental.trycloudflare.com",
     "bootstrapUrl": "https://plasma-estimation-gate-developmental.trycloudflare.com"
   }
 }
