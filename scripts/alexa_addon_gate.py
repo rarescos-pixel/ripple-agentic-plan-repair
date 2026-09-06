@@ -11,8 +11,9 @@ ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "addon-package" / "addon.json"
 DOCKERFILE = ROOT / "Dockerfile"
 REQUIRED_ICON_SIZES = {(64, 64), (72, 72), (88, 88), (126, 126), (180, 180), (241, 241)}
-PROD_MCP = "https://ripple-v12-production.up.railway.app/mcp"
-PROD_CAROUSEL = "https://ripple-v12-production.up.railway.app/assets/alexa/ripple-carousel-600x900.png"
+PROD_BASE = "https://ri-9fd0e66d62464ec4ae642ccf46e6864d.ecs.eu-central-1.on.aws"
+PROD_MCP = f"{PROD_BASE}/mcp"
+PROD_CAROUSEL = f"{PROD_BASE}/assets/alexa/ripple-carousel-600x900.png"
 
 
 def png_size_bytes(data: bytes) -> tuple[int, int]:
@@ -42,9 +43,9 @@ def main() -> None:
     assert manifest["manifestVersion"] == "1.0"
     assert manifest.get("accountLinking", {}).get("enabled") is True
 
-    # The one-shot remote evidence runner is built from the same Dockerfile as
-    # production. Keep the manifest inside the image so package evidence is
-    # self-contained and cannot silently depend on host-side repository files.
+    # The remote evidence runner is built from the same Dockerfile as the
+    # canonical service. Keep the manifest inside the image so package evidence
+    # is self-contained and cannot silently depend on host-side files.
     dockerfile = DOCKERFILE.read_text(encoding="utf-8")
     assert "COPY addon-package ./addon-package" in dockerfile
 
