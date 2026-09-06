@@ -24,7 +24,7 @@ from ripple.golden import build_golden
 from ripple.orchestration.agent import AgentResponse, RippleAgent
 from ripple.orchestration.session import RippleSession
 from ripple.policy.approval import ApprovalPolicy
-from ripple.presentation import build_repair_card
+from ripple.presentation import build_receipt_timeline, build_repair_card
 from ripple.presentation.mcp_app import (
     REPAIR_CARD_RESOURCE_URI,
     repair_card_resource_contents,
@@ -90,6 +90,7 @@ TOOLS = [
         },
         [],
         destructive=True,
+        ui_resource_uri=REPAIR_CARD_RESOURCE_URI,
     ),
     _tool("get_repair_status", "Return current phase, receipts, unique external writes, and unresolved items.", {}, [], read_only=True),
 ]
@@ -273,6 +274,12 @@ class McpRippleSession:
             "deduplicated": sum(1 for r in self.receipts if r.status == "deduplicated"),
             "unique_external_writes": authoritative_writes,
             "recovered_after_restart": recovered,
+            "receipt_timeline": build_receipt_timeline(
+                self.proposal.plan,
+                self.receipts,
+                authoritative_unique_writes=authoritative_writes,
+                recovered_after_restart=recovered,
+            ),
             "receipts": [asdict(r) for r in self.receipts],
         }
         self._trace("plan.executed", {
@@ -473,7 +480,11 @@ async def mcp_post(request: Request) -> Response:
                 req_id,
                 _tool_result(
                     payload,
-                    ui_resource_uri=REPAIR_CARD_RESOURCE_URI if name == "preview_repair_plan" else None,
+                    ui_resource_uri=(
+                        REPAIR_CARD_RESOURCE_URI
+                        if name in {"preview_repair_plan", "execute_repair_plan"}
+                        else None
+                    ),
                 ),
             ))
         except (KeyError, TypeError, ValueError) as exc:
