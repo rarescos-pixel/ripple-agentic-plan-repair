@@ -4,6 +4,14 @@ Status: PREPRODUCTION ONLY until a VIDEO-READY CANDIDATE is declared.
 
 This directory contains submission-video work that is deliberately isolated from production code. It must not change Ripple runtime behavior.
 
+## Canonical quality authority
+
+`video/VIDEO_ACCEPTANCE_STANDARD.md` is the **LOCKED authority** for deciding whether any cut may be called GOOD, READY, FINAL, or SUBMISSION-READY.
+
+Organizer requirements are Layer 0 and must pass first. Winner/competitor-derived benchmarks are an additional stricter layer. **There is no score-based override: one failed mandatory criterion means NOT READY.**
+
+Every real review uses a copy of `video/VIDEO_SCORECARD.template.md` and records evidence/timestamps rather than impressions.
+
 ## Goal
 
 Produce a <= 3 minute English demo video that makes the product understandable immediately and proves the strongest claims with real product footage.
@@ -53,6 +61,8 @@ The first ~25 seconds are a proof-trailer built from the real golden flow, not a
    - compositing and pacing
 
 5. ADVERSARIAL AUDIT
+   - apply every mandatory gate in `VIDEO_ACCEPTANCE_STANDARD.md`
+   - use `VIDEO_SCORECARD.template.md` with PASS/FAIL/UNKNOWN evidence
    - a judge understands Ripple by 5s / 10s / 20s
    - every technical claim maps to evidence
    - no simulated element is presented as independently verified
