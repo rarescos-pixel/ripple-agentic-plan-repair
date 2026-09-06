@@ -1,16 +1,42 @@
 from __future__ import annotations
 
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 import json
 import os
 import sqlite3
 from pathlib import Path
 from typing import Any, Protocol
 
-from ripple.domain.models import Approval, ExecutionReceipt
+from ripple.domain.models import (
+    ActionStatus,
+    Approval,
+    ChangeEvent,
+    ExecutionReceipt,
+    Impact,
+    ImpactStatus,
+    RepairAction,
+    RepairOption,
+    RepairPlan,
+)
+
+
+@dataclass(frozen=True)
+class PersistedProposal:
+    """Content-addressed proposal needed to resume an exact approved plan.
+
+    The owner subject is stored alongside the snapshot so a different MCP
+    principal cannot recover another user's approved authority merely by
+    learning a plan id/hash pair.
+    """
+
+    plan: RepairPlan
+    change: ChangeEvent
+    owner_subject: str
 
 
 class StateStore(Protocol):
+    def save_proposal(self, plan: RepairPlan, change: ChangeEvent, owner_subject: str) -> None: ...
+    def get_proposal(self, plan_id: str, snapshot_hash: str) -> PersistedProposal | None: ...
     def save_approval(self, plan_id: str, approval: Approval) -> None: ...
     def get_approval(self, plan_id: str, snapshot_hash: str) -> Approval | None: ...
     def save_receipt(self, plan_id: str, receipt: ExecutionReceipt) -> None: ...
@@ -38,10 +64,114 @@ def _receipt_from(payload: dict[str, Any]) -> ExecutionReceipt:
     )
 
 
+def _option_from(payload: dict[str, Any]) -> RepairOption:
+    return RepairOption(
+        tool=str(payload["tool"]),
+        operation=str(payload["operation"]),
+        params=dict(payload.get("params") or {}),
+        added_cost=float(payload.get("added_cost", 0)),
+        avoidable_loss=float(payload.get("avoidable_loss", 0)),
+        reversible=bool(payload.get("reversible", True)),
+        external_side_effect=bool(payload.get("external_side_effect", True)),
+    )
+
+
+def _impact_from(payload: dict[str, Any]) -> Impact:
+    return Impact(
+        affected_node_id=str(payload["affected_node_id"]),
+        dependency_path=[str(x) for x in payload.get("dependency_path") or []],
+        reason=str(payload["reason"]),
+        status=ImpactStatus(str(payload["status"])),
+        direct_cash_at_risk=float(payload.get("direct_cash_at_risk", 0)),
+        urgency=int(payload.get("urgency", 0)),
+        options=[_option_from(x) for x in payload.get("options") or []],
+    )
+
+
+def _action_from(payload: dict[str, Any]) -> RepairAction:
+    return RepairAction(
+        id=str(payload["id"]),
+        tool=str(payload["tool"]),
+        operation=str(payload["operation"]),
+        target_id=str(payload["target_id"]),
+        params=dict(payload.get("params") or {}),
+        reversible=bool(payload.get("reversible", True)),
+        external_side_effect=bool(payload.get("external_side_effect", True)),
+        added_cost=float(payload.get("added_cost", 0)),
+        avoidable_loss=float(payload.get("avoidable_loss", 0)),
+        idempotency_key=str(payload["idempotency_key"]),
+        approval_level=str(payload.get("approval_level", "explicit_plan")),
+        status=ActionStatus(str(payload.get("status", ActionStatus.PROPOSED.value))),
+    )
+
+
+def _plan_from(payload: dict[str, Any]) -> RepairPlan:
+    return RepairPlan(
+        id=str(payload["id"]),
+        version=int(payload["version"]),
+        source_change_event_id=str(payload["source_change_event_id"]),
+        impacts=[_impact_from(x) for x in payload.get("impacts") or []],
+        actions=[_action_from(x) for x in payload.get("actions") or []],
+        total_added_cost=float(payload.get("total_added_cost", 0)),
+        total_avoidable_loss=float(payload.get("total_avoidable_loss", 0)),
+        external_people_notified=int(payload.get("external_people_notified", 0)),
+        unresolved_items=[str(x) for x in payload.get("unresolved_items") or []],
+        status=str(payload.get("status", "proposed")),
+    )
+
+
+def _change_from(payload: dict[str, Any]) -> ChangeEvent:
+    return ChangeEvent(
+        id=str(payload["id"]),
+        node_id=str(payload["node_id"]),
+        field=str(payload["field"]),
+        old_value=payload.get("old_value"),
+        new_value=payload.get("new_value"),
+        source=str(payload.get("source", "voice")),
+        confidence=float(payload.get("confidence", 1.0)),
+        correlation_id=str(payload.get("correlation_id", "golden")),
+    )
+
+
+def _proposal_json(plan: RepairPlan, change: ChangeEvent, owner_subject: str) -> str:
+    if not owner_subject:
+        raise ValueError("owner_subject is required for durable proposal recovery")
+    if change.id != plan.source_change_event_id:
+        raise ValueError("proposal change does not match plan source event")
+    return json.dumps(
+        {"plan": asdict(plan), "change": asdict(change), "owner_subject": owner_subject},
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    )
+
+
+def _proposal_from(payload: dict[str, Any], expected_hash: str) -> PersistedProposal:
+    plan = _plan_from(dict(payload["plan"]))
+    change = _change_from(dict(payload["change"]))
+    owner_subject = str(payload["owner_subject"])
+    if not owner_subject:
+        raise ValueError("persisted proposal has no owner subject")
+    if change.id != plan.source_change_event_id:
+        raise ValueError("persisted proposal source event mismatch")
+    if plan.snapshot_hash() != expected_hash:
+        raise ValueError("persisted proposal content hash mismatch")
+    return PersistedProposal(plan=plan, change=change, owner_subject=owner_subject)
+
+
 class MemoryStateStore:
     def __init__(self) -> None:
+        self.proposals: dict[tuple[str, str], PersistedProposal] = {}
         self.approvals: dict[tuple[str, str], Approval] = {}
         self.receipts: dict[str, ExecutionReceipt] = {}
+
+    def save_proposal(self, plan: RepairPlan, change: ChangeEvent, owner_subject: str) -> None:
+        snapshot_hash = plan.snapshot_hash()
+        payload = json.loads(_proposal_json(plan, change, owner_subject))
+        self.proposals[(plan.id, snapshot_hash)] = _proposal_from(payload, snapshot_hash)
+
+    def get_proposal(self, plan_id: str, snapshot_hash: str) -> PersistedProposal | None:
+        return self.proposals.get((plan_id, snapshot_hash))
 
     def save_approval(self, plan_id: str, approval: Approval) -> None:
         self.approvals[(plan_id, approval.plan_snapshot_hash)] = approval
@@ -73,6 +203,11 @@ class SqliteStateStore:
         parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as db:
             db.execute(
+                "CREATE TABLE IF NOT EXISTS proposals ("
+                "plan_id TEXT NOT NULL, snapshot_hash TEXT NOT NULL, payload TEXT NOT NULL, "
+                "PRIMARY KEY(plan_id, snapshot_hash))"
+            )
+            db.execute(
                 "CREATE TABLE IF NOT EXISTS approvals ("
                 "plan_id TEXT NOT NULL, snapshot_hash TEXT NOT NULL, payload TEXT NOT NULL, "
                 "PRIMARY KEY(plan_id, snapshot_hash))"
@@ -84,6 +219,23 @@ class SqliteStateStore:
 
     def _connect(self) -> sqlite3.Connection:
         return sqlite3.connect(self.path)
+
+    def save_proposal(self, plan: RepairPlan, change: ChangeEvent, owner_subject: str) -> None:
+        snapshot_hash = plan.snapshot_hash()
+        payload = _proposal_json(plan, change, owner_subject)
+        with self._connect() as db:
+            db.execute(
+                "INSERT OR REPLACE INTO proposals(plan_id, snapshot_hash, payload) VALUES (?, ?, ?)",
+                (plan.id, snapshot_hash, payload),
+            )
+
+    def get_proposal(self, plan_id: str, snapshot_hash: str) -> PersistedProposal | None:
+        with self._connect() as db:
+            row = db.execute(
+                "SELECT payload FROM proposals WHERE plan_id=? AND snapshot_hash=?",
+                (plan_id, snapshot_hash),
+            ).fetchone()
+        return _proposal_from(json.loads(row[0]), snapshot_hash) if row else None
 
     def save_approval(self, plan_id: str, approval: Approval) -> None:
         payload = json.dumps(asdict(approval), sort_keys=True, separators=(",", ":"))
@@ -122,7 +274,7 @@ class SqliteStateStore:
 
 
 class DynamoDbStateStore:
-    """Single-table approval/idempotency store.
+    """Single-table proposal/approval/idempotency store.
 
     boto3 is imported lazily so local development and CI need no AWS SDK unless
     the DynamoDB backend is explicitly selected. A client can be injected for
@@ -146,6 +298,13 @@ class DynamoDbStateStore:
         self.client = client
 
     @staticmethod
+    def _proposal_key(plan_id: str, snapshot_hash: str) -> dict[str, dict[str, str]]:
+        return {
+            "pk": {"S": f"PLAN#{plan_id}"},
+            "sk": {"S": f"PROPOSAL#{snapshot_hash}"},
+        }
+
+    @staticmethod
     def _approval_key(plan_id: str, snapshot_hash: str) -> dict[str, dict[str, str]]:
         return {
             "pk": {"S": f"PLAN#{plan_id}"},
@@ -166,6 +325,26 @@ class DynamoDbStateStore:
             return False
         error = response.get("Error") or {}
         return error.get("Code") == "ConditionalCheckFailedException"
+
+    def save_proposal(self, plan: RepairPlan, change: ChangeEvent, owner_subject: str) -> None:
+        snapshot_hash = plan.snapshot_hash()
+        item = {
+            **self._proposal_key(plan.id, snapshot_hash),
+            "entity_type": {"S": "proposal"},
+            "payload": {"S": _proposal_json(plan, change, owner_subject)},
+        }
+        self.client.put_item(TableName=self.table_name, Item=item)
+
+    def get_proposal(self, plan_id: str, snapshot_hash: str) -> PersistedProposal | None:
+        out = self.client.get_item(
+            TableName=self.table_name,
+            Key=self._proposal_key(plan_id, snapshot_hash),
+            ConsistentRead=True,
+        )
+        item = out.get("Item")
+        if not item:
+            return None
+        return _proposal_from(json.loads(item["payload"]["S"]), snapshot_hash)
 
     def save_approval(self, plan_id: str, approval: Approval) -> None:
         item = {
