@@ -3,6 +3,14 @@ from pathlib import Path
 path = Path('aws_bootstrap/app.py')
 s = path.read_text(encoding='utf-8')
 
+# GitHub on this account emits an immutable-ID OIDC subject, verified by the
+# independent smoke workflow. Keep AWS trust bound to this exact repository.
+s = s.replace(
+    'REPO = "rarescos-pixel/ripple-agentic-plan-repair"',
+    'REPO = "rarescos-pixel@321760901/ripple-agentic-plan-repair@1356792571"',
+    1,
+)
+
 # Runtime imports needed to reconstruct AWS's displayed verification envelope.
 if 'import base64\n' not in s:
     s = s.replace('import json\n', 'import base64\nimport json\n', 1)
@@ -33,4 +41,4 @@ if old_eof not in s:
 s = s.replace(old_eof, new_eof, 1)
 
 path.write_text(s, encoding='utf-8')
-print('patched AWS bootstrap for verification envelope and sanitized diagnostics')
+print('patched AWS bootstrap for immutable OIDC subject, verification envelope, and sanitized diagnostics')
