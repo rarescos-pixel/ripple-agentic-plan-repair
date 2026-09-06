@@ -1,0 +1,117 @@
+name: AWS canonical runtime capability probe
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/aws-runtime-capability-probe.yml'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials from GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::873363353521:role/RippleGitHubOidcRole
+          aws-region: eu-central-1
+          role-session-name: ripple-runtime-capability-probe
+          retry-max-attempts: 2
+
+      - name: Verify identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARN="$(aws sts get-caller-identity --query Arn --output text)"
+          case "$ARN" in
+            arn:aws:sts::*:assumed-role/RippleGitHubOidcRole/*) ;;
+            *) echo 'Unexpected AWS identity' >&2; exit 1 ;;
+          esac
+          echo 'AWS_OIDC_MAIN=PASS'
+
+      - name: Read effective inline deploy policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          if aws iam get-role-policy \
+            --role-name RippleGitHubOidcRole \
+            --policy-name RippleGitHubDeployPolicy \
+            --query PolicyDocument --output json >/tmp/policy.json 2>/tmp/policy.err; then
+            python - <<'PY'
+          import json
+          p=json.load(open('/tmp/policy.json'))
+          actions=[]
+          for s in p.get('Statement',[]):
+              a=s.get('Action',[])
+              if isinstance(a,str): a=[a]
+              actions.extend(a)
+          for prefix in ('ecs:','ecr:','iam:PassRole','iam:CreateRole','iam:PutRolePolicy','elasticloadbalancing:','ec2:'):
+              matches=sorted(x for x in actions if x.startswith(prefix) or x==prefix)
+              print(prefix, ','.join(matches) if matches else 'NONE')
+          PY
+            echo 'INLINE_POLICY_READ=PASS'
+          else
+            echo 'INLINE_POLICY_READ=DENIED'
+            sed -E 's/[0-9]{12}/************/g' /tmp/policy.err | head -3
+          fi
+
+      - name: Probe read-only service visibility
+        shell: bash
+        run: |
+          set -uo pipefail
+          for spec in \
+            "ECS:aws ecs list-clusters --max-results 10" \
+            "ECR:aws ecr describe-repositories --max-results 10" \
+            "EC2:aws ec2 describe-vpcs --max-results 5" \
+            "ELB:aws elbv2 describe-load-balancers --page-size 5"; do
+            label="${spec%%:*}"; cmd="${spec#*:}"
+            if eval "$cmd" >/tmp/out 2>/tmp/err; then
+              echo "${label}_READ=PASS"
+            else
+              echo "${label}_READ=DENIED_OR_UNAVAILABLE"
+              sed -E 's/[0-9]{12}/************/g' /tmp/err | head -2
+            fi
+          done
+
+      - name: Simulate required deploy permissions when allowed
+        shell: bash
+        run: |
+          set -uo pipefail
+          ROLE_ARN="arn:aws:iam::873363353521:role/RippleGitHubOidcRole"
+          ACTIONS=(
+            ecr:CreateRepository ecr:GetAuthorizationToken ecr:InitiateLayerUpload ecr:UploadLayerPart ecr:CompleteLayerUpload ecr:PutImage
+            ecs:CreateCluster ecs:RegisterTaskDefinition ecs:CreateService ecs:UpdateService ecs:DescribeServices ecs:DescribeTasks
+            iam:CreateRole iam:PutRolePolicy iam:AttachRolePolicy iam:PassRole
+            ec2:DescribeVpcs ec2:DescribeSubnets ec2:DescribeSecurityGroups ec2:CreateSecurityGroup ec2:AuthorizeSecurityGroupIngress
+            elasticloadbalancing:CreateLoadBalancer elasticloadbalancing:CreateTargetGroup elasticloadbalancing:CreateListener
+          )
+          if aws iam simulate-principal-policy --policy-source-arn "$ROLE_ARN" --action-names "${ACTIONS[@]}" --output json >/tmp/sim.json 2>/tmp/sim.err; then
+            python - <<'PY'
+          import json
+          d=json.load(open('/tmp/sim.json'))
+          allowed=[]; denied=[]
+          for x in d.get('EvaluationResults',[]):
+              (allowed if x.get('EvalDecision')=='allowed' else denied).append(x.get('EvalActionName'))
+          print('SIM_ALLOWED=' + ','.join(sorted(allowed)))
+          print('SIM_DENIED=' + ','.join(sorted(denied)))
+          print('SAFE_AWS_NATIVE_DEPLOY_CAPABILITY=' + ('PASS' if not denied else 'NO'))
+          PY
+          else
+            echo 'POLICY_SIMULATION=DENIED'
+            sed -E 's/[0-9]{12}/************/g' /tmp/sim.err | head -3
+          fi
+
+      - name: Decision markers
+        shell: bash
+        run: |
+          echo 'PROBE_ONLY=true'
+          echo 'NO_AWS_RESOURCE_MUTATION=true'
+          echo 'NO_RAILWAY_MUTATION=true'
