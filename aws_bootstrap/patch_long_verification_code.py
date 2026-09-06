@@ -11,12 +11,10 @@ s = s.replace(
     1,
 )
 
-# Runtime imports needed to reconstruct AWS's displayed verification envelope.
-if 'import base64\n' not in s:
-    s = s.replace('import json\n', 'import base64\nimport json\n', 1)
-
+# AWS CLI `login --remote` now displays a long verification code. The CLI
+# expects that exact code back. Do not decode/re-encode or reconstruct it.
 old_validator = '''    code = str(data.get("code", "")).strip()\n    if not (4 <= len(code) <= 128) or not re.fullmatch(r"[A-Za-z0-9._-]+", code):\n        return JSONResponse({"ok": False, "error": "Invalid authorization-code format."}, status_code=400)'''
-new_validator = '''    raw_code = str(data.get("code", ""))\n    # AWS's confirmation page displays a Base64 verification envelope whose\n    # decoded value is `code=<oauth-code>&state=<oauth-state>`. The browser\n    # controller intentionally returns only the short-lived `code` query value,\n    # so reconstruct the envelope here using this login process's own state.\n    code = re.sub(r"\\s+", "", raw_code)\n    is_envelope = False\n    try:\n        decoded = base64.b64decode(code, validate=True).decode("ascii")\n        is_envelope = decoded.startswith("code=") and "&state=" in decoded\n    except Exception:\n        is_envelope = False\n    if not is_envelope:\n        with lock:\n            current_auth_url = str(state.get("auth_url") or "")\n        m = re.search(r"[?&]state=([^&]+)", current_auth_url)\n        if not m:\n            return JSONResponse({"ok": False, "error": "AWS login state unavailable."}, status_code=409)\n        envelope = f"code={code}&state={m.group(1)}"\n        code = base64.b64encode(envelope.encode("ascii")).decode("ascii")\n    if not (16 <= len(code) <= 16384) or any(ord(ch) < 33 or ord(ch) > 126 for ch in code):\n        return JSONResponse({"ok": False, "error": "Invalid AWS verification-code format."}, status_code=400)'''
+new_validator = '''    raw_code = str(data.get("code", ""))\n    # Copy/paste from AWS may contain visual line wraps/newlines. Remove only\n    # whitespace and pass every other character through unchanged to aws login.\n    code = re.sub(r"\\s+", "", raw_code)\n    if not (16 <= len(code) <= 32768) or any(ord(ch) < 33 or ord(ch) > 126 for ch in code):\n        return JSONResponse({"ok": False, "error": "Invalid AWS verification-code format."}, status_code=400)'''
 if old_validator not in s:
     raise SystemExit('validator pattern not found')
 s = s.replace(old_validator, new_validator, 1)
@@ -50,4 +48,4 @@ if '"Sid": "RippleCostGuard"' not in s:
     s = s.replace(cost_anchor, cost_stmt + cost_anchor, 1)
 
 path.write_text(s, encoding='utf-8')
-print('patched AWS bootstrap for immutable OIDC subject, verification envelope, sanitized diagnostics, and least-privilege cost guard access')
+print('patched AWS bootstrap for immutable OIDC subject, exact long verification code, sanitized diagnostics, and least-privilege cost guard access')
