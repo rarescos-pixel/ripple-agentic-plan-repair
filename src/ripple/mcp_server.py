@@ -90,7 +90,6 @@ TOOLS = [
         },
         [],
         destructive=True,
-        ui_resource_uri=REPAIR_CARD_RESOURCE_URI,
     ),
     _tool("get_repair_status", "Return current phase, receipts, unique external writes, and unresolved items.", {}, [], read_only=True),
 ]
