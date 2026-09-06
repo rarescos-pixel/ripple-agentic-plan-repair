@@ -22,6 +22,7 @@ jobs:
           role-to-assume: arn:aws:iam::873363353521:role/RippleGitHubOidcRole
           aws-region: eu-central-1
           role-session-name: ripple-oidc-smoke
+          retry-max-attempts: 2
 
       - name: Verify assumed identity
         shell: bash
