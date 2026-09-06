@@ -14,7 +14,10 @@ CAROUSEL_PATH = "/assets/alexa/ripple-carousel-600x900.png"
 
 
 def _public_source_revision() -> str | None:
-    sha = os.getenv("RAILWAY_GIT_COMMIT_SHA", "").strip().lower()
+    sha = (
+        os.getenv("RIPPLE_RELEASE_SHA", "").strip().lower()
+        or os.getenv("RAILWAY_GIT_COMMIT_SHA", "").strip().lower()
+    )
     if len(sha) == 40 and all(ch in "0123456789abcdef" for ch in sha):
         return sha
     return None
