@@ -83,32 +83,37 @@ A cheaper repair option is intentionally included but rejected because it preser
 - exact-content approval binding to cost, scope and snapshot;
 - zero-write preview and zero-write approval phases;
 - provider preflight, idempotency keys and authoritative receipts;
-- interruption/restart recovery with duplicate suppression;
-- money-first Repair Card with voice/visual parity;
+- exact approved-plan recovery across MCP process/session restart with owner binding and duplicate suppression;
+- money-first Repair Card with voice/visual parity, deterministic “Why this plan?” evidence and post-execution receipt timeline;
 - display-only MCP App resource via `ui://` + `text/html;profile=mcp-app`;
 - Alexa+ package assets, six icon sizes, 600×900 carousel, privacy and terms;
 - independent remote authenticated smoke from a separate Railway container: PASS;
 - remote flow: 0 preview writes, 0 approval writes, 5 receipts at execute, 5/5 deduplicated on replay;
+- one bounded real external provider proof through GitHub Issues: write PASS, readback PASS, replay dedup PASS, exact restore PASS, provider cost $0;
+- direct live AWS structural proof: GitHub OIDC PASS, real Nova 2 Lite inference PASS, DynamoDB receipt/replay PASS, CloudWatch Logs write+readback PASS;
 - independent remote store-media gate: PASS;
-- deterministic release gate and adversarial matrix: PASS;
-- public CI covering core tests, MCP conformance, MCP App safety, Alexa package, CloudFormation, AWS credential lifecycle and evidence drift.
+- deterministic release gate and adversarial/failure matrix: PASS;
+- judge-verifiable cost benchmark and bounded-spend architecture;
+- public CI covering core tests, MCP conformance, MCP App safety, Alexa package, CloudFormation, AWS evidence/lifecycle scripts and evidence drift.
 
 ## Public runtime
 
 MCP endpoint: `https://ripple-v12-production.up.railway.app/mcp`
 
-Judge evidence is linked from the repository README, including `ALEXA_REMOTE_EVIDENCE.md`, `REMOTE_SMOKE_REPORT.md`, `VALIDATION_REPORT.md`, `EVIDENCE_MATRIX.md` and `RUBRIC_MAP.md`.
+Judge evidence is linked from the repository README, including `ALEXA_REMOTE_EVIDENCE.md`, `REMOTE_SMOKE_REPORT.md`, `VALIDATION_REPORT.md`, `EVIDENCE_MATRIX.md`, `ADVERSARIAL_FAILURE_MATRIX.md`, `COST_BENCHMARK_2026-09-06.md`, `AWS_DIRECT_LIVE_EVIDENCE.md` and `RUBRIC_MAP.md`.
 
 ## AWS Builder
-Ripple keeps the public MCP host on Railway and uses AWS only where it is structural:
+Ripple keeps the public MCP transport host on Railway and uses AWS where it is structural:
 
-- Amazon Bedrock — changed-fact normalization only;
-- Amazon DynamoDB — durable approvals, idempotency records and authoritative receipts;
+- Amazon Bedrock / Nova 2 Lite — changed-fact normalization only;
+- Amazon DynamoDB — durable proposal/approval state, idempotency records and authoritative receipts;
 - Amazon CloudWatch Logs — redacted structured traces;
-- IAM — resource-scoped runtime policy;
-- AWS Budgets — project cost guardrails.
+- IAM + GitHub OIDC — bounded live-evidence authority without committed static credentials;
+- AWS Budgets / anomaly controls — project cost guardrails.
 
-The IaC, adapters, benchmark harness, runtime cutover, least-privilege credential lifecycle and live verification scripts are implemented and CI-validated. **Current evidence status is AWS-ready, not AWS-live verified.** The final submission will claim live AWS use only after the real stack, Railway cutover and post-restart replay proof pass on one source SHA.
+**Direct AWS structural evidence is live verified.** The completed evidence workflow performs real Nova 2 Lite inference, real DynamoDB receipt write/readback plus conditional replay rejection, and CloudWatch Logs structured-event write plus readback, ending with `AWS_DIRECT_LIVE_EVIDENCE=PASS`.
+
+The stronger claim that the canonical public Railway process is already AWS-backed for every request remains gated by the credential-safe Railway cutover and a post-cutover exact-revision public smoke. Until that passes, the precise status is: **AWS services are live and structurally verified; the canonical public Railway AWS-runtime cutover is pending.**
 
 ## Open Source Mini Challenge
 
@@ -125,11 +130,13 @@ What I did / how it works / why it matters is captured in `docs/OPEN_SOURCE_SUBM
 The contribution is not a README-only change. The public project includes the complete MCP consequence-repair engine, exact-approval and replay-safety patterns, MCP App integration, OAuth interoperability, AWS infrastructure/lifecycle tooling, adversarial tests and reproducible remote probes. PR #22 is supplied as a representative concrete contribution because it turns a real Alexa Local Inspector interoperability mismatch into an integration test, bounded compatibility fix and reusable remote probe.
 
 ## Trust and disclosure
-Real running software: MCP transport, OAuth/PKCE, dependency analysis, economic optimization, approval boundary, execution ledger, receipts, replay suppression, MCP App and Alexa package/media surfaces.
+Real running software/evidence: MCP transport, OAuth/PKCE, dependency analysis, economic optimization, approval boundary, execution ledger, durable recovery, receipts, replay suppression, MCP App, Alexa package/media surfaces, one bounded real GitHub Issues provider, and direct live Bedrock/DynamoDB/CloudWatch evidence.
 
-Deterministic simulated integrations: airline, ride, reservation, delivery, pet-care and calendar provider adapters. Ripple does not claim real third-party bookings or payments.
+Deterministic simulated integrations: airline, ride, reservation, delivery, pet-care and calendar provider adapters. Ripple does not claim real third-party bookings, payments or market prices. The example dollar values are deterministic fixtures.
 
-No actual Alexa+ production-client session is claimed unless the official onboarding/inspection path is successfully exercised. The hackathon rules explicitly allow the simulated Alexa+ experience path, so official client access is not treated as a prerequisite. No live Bedrock/DynamoDB/CloudWatch runtime is claimed until the AWS live gate passes.
+No actual Alexa+ production-client session is claimed unless the official onboarding/inspection path is successfully exercised. The hackathon rules allow the simulated Alexa+ experience path, so official client access is not treated as a prerequisite.
+
+The direct AWS proof is not represented as a completed Railway runtime cutover. That stronger claim will be made only after the canonical public service is configured to use the AWS backends and passes the post-cutover smoke on one exact source SHA.
 
 ## Product feedback / friction
 The project includes real friction-log entries covering Alexa-compatible OAuth refresh behavior, MCP App rendering contracts, add-on package/media validation, least-privilege AWS credentials for an external PaaS runtime and Local Inspector request-shape interoperability. Each entry includes steps, expected vs actual behavior, severity, workaround and an actionable suggestion.
