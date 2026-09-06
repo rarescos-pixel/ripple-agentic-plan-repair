@@ -1,10 +1,11 @@
 """Independent public-endpoint proof for Ripple's structural AWS runtime.
 
-Run only after the Railway service has been cut over to DynamoDB + Bedrock +
-CloudWatch. The script proves the public service advertises the structural AWS
-composition without exposing resource identifiers, Bedrock normalization from
-the returned ChangeEvent, and DynamoDB durability by destroying the first MCP
-session and requiring a fresh session to deduplicate the same provider writes.
+Run only after the canonical AWS service has been cut over to DynamoDB +
+Bedrock + CloudWatch. The script proves the public service advertises the
+structural AWS composition without exposing resource identifiers, Bedrock
+normalization from the returned ChangeEvent, and DynamoDB durability by
+destroying the first MCP session and requiring a fresh session to deduplicate
+the same provider writes without increasing the authoritative write count.
 """
 from __future__ import annotations
 
@@ -85,11 +86,12 @@ def execute_cycle(client: httpx.Client, service_access: str, user_access: str, r
     approval = dict(preview["approval_snapshot"], user_confirmed=True)
     approved = call(client, user_headers, req_id + 3, "approve_repair_plan", approval)
     assert approved["writes"] == 0
-    executed = call(client, user_headers, req_id + 4, "execute_repair_plan")
+    before_execute = call(client, user_headers, req_id + 4, "get_repair_status")
+    executed = call(client, user_headers, req_id + 5, "execute_repair_plan")
     assert executed["receipt_count"] == 5
-    replay = call(client, user_headers, req_id + 5, "execute_repair_plan")
+    replay = call(client, user_headers, req_id + 6, "execute_repair_plan")
     assert replay["deduplicated"] == 5
-    return sid, changed, preview, executed, replay
+    return sid, changed, preview, before_execute, executed, replay
 
 
 def main() -> None:
@@ -111,40 +113,50 @@ def main() -> None:
         service_access = service_token(client)
         user_access, _ = user_tokens(client)
 
-        first_sid, first_change, first_preview, first_execute, first_replay = execute_cycle(
+        first_sid, first_change, first_preview, _, first_execute, first_replay = execute_cycle(
             client, service_access, user_access, 100
         )
         change = first_change["change"]
         assert change["id"].startswith("change:bedrock:"), change
         assert change["correlation_id"].startswith("bedrock:"), change
         assert first_preview["plan"]["impact_count"] == 5
+        assert first_execute["unique_external_writes"] == 5
         assert first_replay["deduplicated"] == 5
+        assert first_replay["unique_external_writes"] == 5
         close_session(client, service_access, first_sid)
 
-        # A fresh session creates a fresh ToolRegistry and executor. Five
-        # deduplicated receipts with zero provider writes therefore require the
-        # authoritative receipts to have survived outside MCP session memory.
-        second_sid, second_change, second_preview, second_execute, _ = execute_cycle(
+        # A fresh session creates a fresh ToolRegistry and executor. Before the
+        # second execution, the persisted proposal already sees five
+        # authoritative receipts. The second execution must return five
+        # deduplicated receipts while leaving that count unchanged at five.
+        # The unchanged 5 -> 5 count is the direct proof of zero new provider
+        # writes during fresh-session replay.
+        second_sid, second_change, second_preview, second_before, second_execute, _ = execute_cycle(
             client, service_access, user_access, 200
         )
         assert second_change["change"]["id"] == change["id"]
         assert second_change["change"]["correlation_id"].startswith("bedrock:")
         assert second_change["change"]["correlation_id"] != change["correlation_id"]
         assert second_preview["approval_snapshot"]["snapshot_hash"] == first_preview["approval_snapshot"]["snapshot_hash"]
+        assert second_before["unique_external_writes"] == 5
         assert second_execute["deduplicated"] == 5
-        assert second_execute["unique_external_writes"] == 0
+        assert second_execute["unique_external_writes"] == second_before["unique_external_writes"]
+        assert all(receipt["status"] == "deduplicated" for receipt in second_execute["receipts"])
+        second_new_writes = second_execute["unique_external_writes"] - second_before["unique_external_writes"]
+        assert second_new_writes == 0
         close_session(client, service_access, second_sid)
 
         print("Ripple AWS runtime smoke: PASS")
         print("structural AWS readiness: DynamoDB + Bedrock + CloudWatch")
         print("Bedrock normalization: PASS")
-        print("fresh-session durable replay: 5/5 deduplicated, 0 provider writes")
+        print("fresh-session durable replay: 5/5 deduplicated, authoritative writes 5 -> 5, 0 new provider writes")
         print("base:", BASE_URL)
         print("source revision:", source_revision or "unavailable")
         print("change id:", change["id"])
         print("trace correlation:", change["correlation_id"])
         print("net preserved:", first_preview["plan"]["net_direct_cash_preserved"])
-        print("first-cycle provider writes:", first_execute["unique_external_writes"])
+        print("authoritative provider writes:", first_execute["unique_external_writes"])
+        print("fresh-session new provider writes:", second_new_writes)
 
 
 if __name__ == "__main__":
