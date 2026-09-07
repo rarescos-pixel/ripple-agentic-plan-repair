@@ -16,7 +16,7 @@ concurrency:
 jobs:
   deploy-and-prove:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 40
     env:
       AWS_REGION: eu-central-1
       AWS_ACCOUNT_ID: '873363353521'
@@ -218,6 +218,48 @@ jobs:
           test "$STREAK" -ge 6
           cat /tmp/ready.json
           echo 'FINAL_PUBLIC_EXACT_SHA_STABLE=PASS'
+
+      - name: Require stable 7/7 judge-demo evidence without AWS privileges
+        env:
+          BASE_URL: ${{ steps.target.outputs.base_url }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_SECURITY_TOKEN
+          STREAK=0
+          for i in $(seq 1 18); do
+            if curl -fsS --max-time 10 "$BASE_URL/demo/api/evidence" >/tmp/demo-evidence.json 2>/dev/null && python - <<'PY'
+          import json
+          d=json.load(open('/tmp/demo-evidence.json'))
+          rows={row['scenario']: row for row in d.get('scenarios', [])}
+          golden=rows.get('golden_flight_cascade', {}).get('observed', {})
+          recovery=rows.get('interruption_recovery', {}).get('observed', {})
+          ok=(
+              d.get('passed') == 7
+              and d.get('total') == 7
+              and len(rows) == 7
+              and all(row.get('passed') is True for row in d.get('scenarios', []))
+              and golden.get('writes') == 5
+              and recovery.get('persisted_receipts_before_resume') == 2
+              and recovery.get('deduplicated_on_resume') == 2
+              and recovery.get('new_writes_on_resume') == 3
+              and recovery.get('unique_writes_total') == 5
+              and recovery.get('final_status') == 'executed'
+          )
+          raise SystemExit(0 if ok else 1)
+          PY
+            then
+              STREAK=$((STREAK+1))
+              echo "final_public_demo_7_of_7_streak=$STREAK attempt=$i"
+              [ "$STREAK" -ge 6 ] && break
+            else
+              STREAK=0
+            fi
+            sleep 2
+          done
+          test "$STREAK" -ge 6
+          cat /tmp/demo-evidence.json
+          echo 'FINAL_PUBLIC_JUDGE_DEMO_7_OF_7_STABLE=PASS'
 
       - name: Run corrected AWS replay proof and authenticated MCP smoke over HTTPS
         env:
