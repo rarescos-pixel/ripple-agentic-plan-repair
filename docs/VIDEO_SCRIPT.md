@@ -334,3 +334,19 @@ The final cut is successful only if a judge can answer all four questions after 
 2. Why is Alexa+ a natural interface for it?
 3. Why is Ripple technically safer/deeper than a basic MCP wrapper?
 4. Why could it matter beyond this hackathon?
+
+---
+
+# Submission-gate compatibility invariants
+
+The current CI gate also preserves four legacy textual assertions. They remain true for Winner Cut v2; the finer-grained timeline above supersedes the old coarse timing blocks.
+
+## 0:00–0:20
+
+The opening twenty seconds remain strictly customer-first: hook → spoken change → Alexa+ simulated experience. No architecture-first detour is permitted.
+
+**No terminal scrolling as the primary demo.**
+
+**Keep the final cut under **3:00**.** The operational target remains 2:35–2:42.
+
+**Do not claim AWS live until the real AWS gate** and exact-SHA public proof have passed. For the frozen release used in the final video, this condition must be re-verified immediately before recording.
