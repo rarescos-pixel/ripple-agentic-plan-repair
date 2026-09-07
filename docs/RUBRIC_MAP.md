@@ -1,12 +1,12 @@
-# Amazon judging rubric mapping — winner-build state
+# Amazon judging rubric mapping — 10/10 target state
 
-Ripple is audited against the four equally weighted hackathon criteria. Claims are separated from observed evidence. Simulated provider behavior and the still-pending public Railway AWS-backend cutover are disclosed explicitly.
+Ripple is audited against the four equally weighted Stage 2 criteria. Claims are separated from observed evidence, simulated provider behavior is disclosed explicitly, and the canonical public architecture is AWS ECS Express Mode / Fargate.
 
 ## 1. Technical Implementation
 
-**Current strength: very high / freeze candidate.**
+**Target state: no-obvious-deduction / 10-of-10 candidate.**
 
-Verified evidence:
+Verified product evidence:
 
 - public MCP `2025-11-25` Streamable HTTP endpoint;
 - OAuth protected-resource / authorization-server discovery;
@@ -20,37 +20,38 @@ Verified evidence:
 - money-first Repair Card implemented as a real display-only MCP App resource;
 - deterministic “Why this plan?” evidence plus post-execution receipt timeline;
 - one bounded real external provider integration with live write → readback → replay dedup → exact restore at $0 provider cost;
-- independent remote authenticated MCP smoke: PASS;
-- exact-revision Railway production proof on source SHA `58898530b40564e1b0025db4ac8ea7d2f9249817`: PASS;
-- independent Alexa package/store-media gate: PASS;
-- adversarial/failure-truth matrix: PASS;
-- direct AWS structural evidence: GitHub OIDC PASS, Nova 2 Lite live inference PASS, DynamoDB live receipt/replay PASS, CloudWatch Logs write+readback PASS;
-- CI validation for MCP protocol, Alexa request-shape compatibility, MCP App safety, Alexa package, CloudFormation, AWS evidence/lifecycle, submission surfaces and generated evidence drift.
+- Alexa package/store-media and Local Inspector compatibility gates;
+- adversarial/failure-truth matrix;
+- canonical public AWS runtime on ECS Express Mode / Fargate with Bedrock, DynamoDB and CloudWatch;
+- IAM task roles + GitHub OIDC, with no committed static application AWS credentials;
+- CI validation for MCP protocol, Alexa request-shape compatibility, MCP App safety, package/media, AWS evidence/lifecycle, submission surfaces and generated-evidence drift.
 
-**Remaining technical gap:** the canonical public Railway process is not yet claimed to use Bedrock + DynamoDB + CloudWatch for every request. That stronger runtime cutover requires a credential-safe external-workload identity path and must not be achieved by leaking static AWS credentials or weakening the working endpoint. Direct structural AWS evidence is already live and independently verified.
+**Freeze acceptance is stricter than source-level correctness.** Every frozen SHA must pass the full quality gate, an exact-SHA AWS public deployment proof, repeated exact-revision `/readyz` checks, authenticated MCP/OAuth smoke, fresh-session DynamoDB replay, and repeated public `/demo/api/evidence` = `7/7`.
+
+Historical Railway evidence remains audit history only and does not define the current architecture.
 
 ## 2. Design
 
-**Current strength: very high; final perceived score is now mostly a video/presentation problem.**
+**Target state: no-obvious-deduction / 10-of-10 candidate once the final video is complete.**
 
 Design contract:
 
 - one utterance captures the changed fact;
-- first decision surface is money-first: affected commitments, dollars at risk, repair cost and net value preserved;
+- the first decision surface is money-first: affected commitments, dollars at risk, repair cost and net value preserved;
 - voice summary, visual card, accessibility label and CTA disclose the same exact approval;
 - Repair Card uses human-readable commitment names rather than technical IDs;
 - “Why this plan?” is emitted only when the economic comparison is mechanically provable;
-- execution result returns a sanitized receipt timeline, making new writes and replay dedup visible;
-- MCP App is display-only: polish cannot bypass approval or execute tools;
+- execution returns a sanitized receipt timeline so new writes and replay dedup are visible;
+- the MCP App is display-only: polish cannot bypass approval or execute tools;
 - material drift forces re-approval;
 - unresolved or expired work remains explicit;
 - restart recovery preserves the exact already-approved authority rather than silently widening it.
 
-Remaining design work is **VIDEO LOCKED** and must be done with the owner: the final sub-3-minute narrative must make this sophistication obvious without turning into a technical walkthrough.
+The remaining design deliverable is presentation: the final sub-three-minute video must make the customer magic obvious before exposing protocol, cloud or release evidence.
 
 ## 3. Potential Impact
 
-**Current strength: very high and unusually measurable for an assistant workflow.**
+**Target state: no-obvious-deduction / 10-of-10 candidate with an external reality anchor in the judge-facing submission.**
 
 Golden consumer fixture:
 
@@ -69,16 +70,17 @@ Why the impact claim is credible:
 
 - Ripple prices the consequence set and repair rather than using generic productivity language;
 - optimization maximizes net preserved value rather than merely minimizing repair cost;
-- a cheaper-but-worse alternative is executable evidence in the Event Operations scenario;
+- a cheaper-but-worse alternative is executable evidence in Event Operations;
 - consumer travel is a narrow hero wedge while the dependency/economic engine is generic;
 - dollar amounts are explicitly deterministic scenario fixtures, not market statistics;
-- a bounded real provider proof demonstrates that the execution/receipt contract is not simulation-only.
+- a bounded real provider proof demonstrates that the execution/receipt contract is not simulation-only;
+- the final judge-facing copy should include one authoritative external disruption-volume anchor, explicitly separated from the fixture economics.
 
 Applicable domains without changing the primitive include travel concierge, corporate travel, hospitality recovery, event operations, insurance workflows, executive assistance and other dependency-heavy operations.
 
 ## 4. Quality of the Idea
 
-**Current strength: top-tier target.**
+**Target state: no-obvious-deduction / 10-of-10 candidate.**
 
 Ripple is not a basic MCP wrapper or single-turn information tool. Its primitive is **cascading consequence repair**:
 
@@ -97,25 +99,24 @@ Do not dilute this with feature-count competition, multi-agent theatre or decora
 
 ## AWS Builder mini challenge
 
-**Direct structural AWS live evidence: VERIFIED.**
+**Canonical public AWS runtime: LIVE / exact-SHA proof required per freeze.**
 
-- Bedrock / Nova 2 Lite: constrained language normalization, live invocation PASS;
-- DynamoDB: durable state/idempotency contract, live receipt write/readback and conditional replay rejection PASS;
-- CloudWatch Logs: redacted structured trace write + readback PASS;
-- IAM / GitHub OIDC: temporary bounded evidence-run credentials without committed static keys;
-- Budgets / anomaly controls: bounded-spend guardrails.
+- ECS Express Mode / Fargate: canonical public HTTPS MCP runtime;
+- Bedrock / Nova 2 Lite: constrained changed-fact normalization only;
+- DynamoDB: durable state, exact approvals, idempotency and authoritative receipts;
+- CloudWatch Logs: redacted structured execution traces;
+- IAM task roles + GitHub OIDC: bounded runtime/deployment identity;
+- Budgets / anomaly controls: spend guardrails.
 
 The precise claim boundary is:
 
-> **AWS services are live and structurally verified; the canonical public Railway AWS-runtime cutover is pending.**
-
-This is stronger and more truthful than either a diagram-only AWS claim or pretending the public process has completed a cutover it has not.
+> **Ripple's canonical public MCP runtime runs on AWS ECS Express Mode / Fargate with Bedrock, DynamoDB and CloudWatch structurally active. Every frozen release must bind that claim to the exact Git SHA, immutable ECR digest, ECS task definition, public readiness, authenticated smoke and replay evidence.**
 
 ## Open Source mini challenge
 
 **Eligible / submission-ready.**
 
-Ripple is a new public MIT-licensed repository created during the hackathon window, not a pre-existing project with a formatting-only contribution. The repository publishes the complete project plus reusable safety/interoperability patterns and tests.
+Ripple is a new public MIT-licensed repository created during the hackathon window. The repository publishes the complete project plus reusable safety/interoperability patterns and tests.
 
 Representative contribution: **PR #22**, turning a real Alexa Local Inspector request-shape mismatch into a bounded compatibility fix, regression test, protocol negotiation verification, MCP App discovery check and reusable remote probe.
 
@@ -123,10 +124,10 @@ Required Devpost fields are frozen in `docs/OPEN_SOURCE_SUBMISSION.md`.
 
 ## Bonus — friction log
 
-`docs/FRICTION_LOG.md` contains real development friction with the complete required fields: task, steps, expected vs actual result, severity, workaround and actionable suggestion. Entries cover OAuth refresh interoperability, MCP App binding, package/media preflight, AWS credentials for an external PaaS and Local Inspector request-shape compatibility.
+`docs/FRICTION_LOG.md` contains real development friction with the complete required fields: task, steps, expected vs actual result, severity, workaround and actionable suggestion.
 
-No friction entry is fabricated solely to chase bonus points.
+The final Devpost submission should provide the direct public friction-log URL so the project is eligible for the announced judging bonus.
 
 ## Evidence rule
 
-Marketing copy does not count. Each important claim must map to executable tests, public runtime behavior, live provider receipts/readback, AWS live evidence, a remote gate, or an explicit simulation/non-live disclosure.
+Marketing copy does not count. Each important claim must map to executable tests, public runtime behavior, live provider receipts/readback, exact-SHA AWS evidence, a remote gate, or an explicit simulation/non-live disclosure.

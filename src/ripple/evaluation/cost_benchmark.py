@@ -106,9 +106,9 @@ def render_markdown(rows: Iterable[ModelCostRow], infra: InfraCostRow) -> str:
         "",
         f"Pure token-cost winner at this envelope: **{cheaper.name}**. Model lock still follows the separate accuracy-first Bedrock benchmark; price cannot override lower normalization accuracy.",
         "",
-        "## Public transport idle envelope",
+        "## Historical pre-AWS-cutover Railway idle envelope",
         "",
-        f"Observed Railway idle resources model to **${infra.modeled_monthly_usd:.3f}/month** before traffic. "
+        f"Historical pre-AWS-cutover Railway idle resources model to **${infra.modeled_monthly_usd:.3f}/month** before traffic. "
         f"With the Hobby minimum/included-usage floor, the effective billing floor is **${infra.effective_monthly_floor_usd:.2f}/month** unless the workspace is on a different plan.",
         "",
         "## Economic scale check",

@@ -13,9 +13,9 @@ Assumption: one normalization call per change, 2,000 input tokens + 256 output t
 
 Pure token-cost winner at this envelope: **Amazon Nova Lite**. Model lock still follows the separate accuracy-first Bedrock benchmark; price cannot override lower normalization accuracy.
 
-## Public transport idle envelope
+## Historical pre-AWS-cutover Railway idle envelope
 
-Observed Railway idle resources model to **$0.258/month** before traffic. With the Hobby minimum/included-usage floor, the effective billing floor is **$5.00/month** unless the workspace is on a different plan.
+Historical pre-AWS-cutover Railway idle resources model to **$0.258/month** before traffic. With the Hobby minimum/included-usage floor, the effective billing floor is **$5.00/month** unless the workspace is on a different plan.
 
 ## Economic scale check
 

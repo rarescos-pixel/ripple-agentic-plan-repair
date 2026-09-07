@@ -10,6 +10,7 @@ from ripple.golden import build_golden
 from ripple.orchestration.executor import Executor, SimulatedInterruption
 from ripple.orchestration.planner import Planner
 from ripple.presentation import build_repair_card
+from ripple.persistence import MemoryStateStore
 from ripple.tools.simulated import ToolRegistry
 
 
@@ -22,7 +23,7 @@ class ScenarioEvidence:
 
 
 def golden_evidence() -> ScenarioEvidence:
-    _, tools, planner, executor, change = build_golden()
+    _, tools, planner, executor, change = build_golden(store=MemoryStateStore())
     plan = planner.build_plan(change)
     approval = Approval(plan.id, plan.version, 42, 3, plan.snapshot_hash())
     receipts = executor.execute(plan, approval)
@@ -57,14 +58,14 @@ def missed_deadline_evidence() -> ScenarioEvidence:
 
 
 def ambiguous_provider_evidence() -> ScenarioEvidence:
-    nodes, _, _, _, change = build_golden()
+    nodes, _, _, _, change = build_golden(store=MemoryStateStore())
     tools = ToolRegistry(ambiguous_operations={"reschedule_delivery"})
     edges = [DependencyEdge("flight:return", nid, "arrival_dependency") for nid in nodes if nid != "flight:return"]
     plan = Planner(nodes, DependencyEngine(nodes, edges, tools)).build_plan(change)
     approval = Approval(plan.id, plan.version, 42, 3, plan.snapshot_hash())
     blocked = False
     try:
-        Executor(tools).execute(plan, approval)
+        Executor(tools, store=MemoryStateStore()).execute(plan, approval)
     except ValueError as exc:
         blocked = "Provider state ambiguous" in str(exc)
     return ScenarioEvidence("ambiguous_provider", blocked and not tools.execution_log, "ambiguous provider state blocks the whole plan before writes", {
@@ -173,7 +174,7 @@ def event_operations_evidence() -> ScenarioEvidence:
 
 
 def content_drift_evidence() -> ScenarioEvidence:
-    _, tools, planner, executor, change = build_golden()
+    _, tools, planner, executor, change = build_golden(store=MemoryStateStore())
     plan = planner.build_plan(change)
     approval = Approval(plan.id, plan.version, 42, 3, plan.snapshot_hash())
     original_hash = approval.plan_snapshot_hash
@@ -189,7 +190,7 @@ def content_drift_evidence() -> ScenarioEvidence:
 
 
 def interruption_recovery_evidence() -> ScenarioEvidence:
-    _, tools, planner, executor, change = build_golden()
+    _, tools, planner, executor, change = build_golden(store=MemoryStateStore())
     plan = planner.build_plan(change)
     approval = Approval(plan.id, plan.version, 42, 3, plan.snapshot_hash())
     interrupted = False

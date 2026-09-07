@@ -99,7 +99,7 @@ def render_markdown(evidence: Dict[str, Any]) -> str:
         lines.append(f"- **{'PASS' if row['passed'] else 'FAIL'}** `{row['scenario']}` — {row['invariant']}")
     lines += [
         "",
-        "This deterministic gate does not claim a live Alexa+ client, live AWS runtime, or real external-service integrations. Ripple v1.5 preserves the money-first Repair Card, exact approval and restart-durability contracts while adding opt-in AWS runtime switches and Alexa-first decision-surface parity. AWS readiness is audited separately in AWS_READY_REPORT.md; live Bedrock, DynamoDB and CloudWatch use is not claimed until provisioned and exercised.",
+        "This deterministic gate proves Ripple's application-level safety, approval, replay and presentation invariants; it does not by itself prove a live Alexa+ production client or live cloud infrastructure. Live AWS is audited separately and the canonical release requires an exact-SHA public proof on ECS Express Mode / Fargate with Bedrock, DynamoDB and CloudWatch structurally active. Third-party airline, ride, reservation, delivery, pet-care and calendar adapters remain explicitly disclosed deterministic simulations unless separately live-proven.",
         "",
     ]
     return "\n".join(lines)

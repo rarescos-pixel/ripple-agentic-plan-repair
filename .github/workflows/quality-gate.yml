@@ -17,6 +17,19 @@ jobs:
         run: python -m pip install -e . pytest cfn-lint
       - name: Run full test suite
         run: PYTHONPATH=src python -m pytest -q
+      - name: Verify deterministic matrix isolation under AWS production profile
+        env:
+          RIPPLE_ENV: production
+          RIPPLE_STATE_BACKEND: dynamodb
+          RIPPLE_DYNAMODB_TABLE: ripple-ci-must-not-be-used
+          RIPPLE_CHANGE_INTERPRETER: bedrock
+          RIPPLE_BEDROCK_MODEL_ID: eu.amazon.nova-2-lite-v1:0
+          RIPPLE_TRACE_BACKEND: cloudwatch
+          RIPPLE_CLOUDWATCH_LOG_GROUP: /ripple/ci/must-not-be-used
+          RIPPLE_REQUIRE_AWS_RUNTIME: 'true'
+          AWS_REGION: eu-central-1
+          AWS_EC2_METADATA_DISABLED: 'true'
+        run: PYTHONPATH=src python -m ripple.evaluation.matrix
       - name: Run MCP 2025-11-25 protocol conformance tests explicitly
         run: PYTHONPATH=src python -m pytest -q tests/test_mcp_protocol_2025_11_25.py
       - name: Run Alexa Local Inspector request-shape compatibility explicitly
