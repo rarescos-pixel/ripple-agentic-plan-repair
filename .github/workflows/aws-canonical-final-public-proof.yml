@@ -245,3 +245,5 @@ jobs:
             echo 'FINAL_PUBLIC_TEMP_BOOTSTRAP_DELETE=NOT_PRESENT_OR_NOT_AUTHORIZED'
           fi
           exit 0
+
+# canonical exact-SHA proof refresh marker; no behavioral change
