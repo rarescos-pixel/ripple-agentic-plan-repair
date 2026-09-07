@@ -16,7 +16,7 @@ concurrency:
 jobs:
   deploy-and-prove:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 35
     env:
       AWS_REGION: eu-central-1
       AWS_ACCOUNT_ID: '873363353521'
@@ -26,22 +26,22 @@ jobs:
       INFRA_ROLE: RippleEcsInfrastructureRole
       EXECUTION_ROLE: RippleEcsTaskExecutionRole
       TASK_ROLE: RippleEcsTaskRole
+      BOOTSTRAP_POLICY: RippleExactShaProofBootstrapTemporary
       SERVICE_SECRET_PARAM: /ripple/canonical/service-client-secret
       DEMO_PASSWORD_PARAM: /ripple/canonical/demo-user-password
-      GITHUB_OIDC_SUB: repo:rarescos-pixel@321760901/ripple-agentic-plan-repair@1356792571:ref:refs/heads/main
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Assume bounded bootstrap role
+      - name: Assume least-privilege proof bootstrap role
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::873363353521:role/RippleGitHubOidcRole
           aws-region: eu-central-1
-          role-session-name: ripple-final-public-bootstrap
+          role-session-name: ripple-exact-sha-public-proof
           retry-max-attempts: 2
 
-      - name: Resolve endpoint and cache smoke credentials
+      - name: Resolve canonical target and cache smoke credentials
         id: target
         shell: bash
         run: |
@@ -59,13 +59,16 @@ jobs:
           print('base_url='+base)
           print('service_arn='+service['serviceArn'])
           PY
+          ROLE_ID="$(aws iam get-role --role-name "$INFRA_ROLE" --query 'Role.RoleId' --output text)"
+          test "$ROLE_ID" = 'AROA4WWEDF6YQ5P4BQQ7Y'
+          echo "role_id=$ROLE_ID" >> "$GITHUB_OUTPUT"
           SERVICE_SECRET="$(aws ssm get-parameter --name "$SERVICE_SECRET_PARAM" --with-decryption --query 'Parameter.Value' --output text)"
           DEMO_PASSWORD="$(aws ssm get-parameter --name "$DEMO_PASSWORD_PARAM" --with-decryption --query 'Parameter.Value' --output text)"
           echo "::add-mask::$SERVICE_SECRET"
           echo "::add-mask::$DEMO_PASSWORD"
           echo "RIPPLE_PROOF_SERVICE_SECRET=$SERVICE_SECRET" >> "$GITHUB_ENV"
           echo "RIPPLE_PROOF_DEMO_PASSWORD=$DEMO_PASSWORD" >> "$GITHUB_ENV"
-          echo 'FINAL_PUBLIC_ENDPOINT_AND_SECRETS=PASS'
+          echo 'FINAL_PUBLIC_ENDPOINT_ROLE_ID_AND_SECRETS=PASS'
 
       - name: Build and push exact-SHA image
         id: image
@@ -84,41 +87,7 @@ jobs:
           echo "FINAL_PUBLIC_IMAGE_DIGEST=$DIGEST"
           echo 'FINAL_PUBLIC_EXACT_SHA_ECR=PASS'
 
-      - name: Add registrar trust in-place
-        id: trust
-        shell: bash
-        run: |
-          set -euo pipefail
-          ROLE_ID="$(aws iam get-role --role-name "$INFRA_ROLE" --query 'Role.RoleId' --output text)"
-          echo "role_id=$ROLE_ID" >> "$GITHUB_OUTPUT"
-          EXEC_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:role/${EXECUTION_ROLE}"
-          TASK_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:role/${TASK_ROLE}"
-          cat >/tmp/dual-trust.json <<JSON
-          {"Version":"2012-10-17","Statement":[
-            {"Sid":"AllowECSExpressInfrastructure","Effect":"Allow","Principal":{"Service":"ecs.amazonaws.com"},"Action":"sts:AssumeRole"},
-            {"Sid":"AllowTemporaryGitHubRegistrar","Effect":"Allow","Principal":{"Federated":"arn:aws:iam::${AWS_ACCOUNT_ID}:oidc-provider/token.actions.githubusercontent.com"},"Action":"sts:AssumeRoleWithWebIdentity","Condition":{"StringEquals":{"token.actions.githubusercontent.com:aud":"sts.amazonaws.com"},"StringLike":{"token.actions.githubusercontent.com:sub":"${GITHUB_OIDC_SUB}"}}}
-          ]}
-          JSON
-          aws iam update-assume-role-policy --role-name "$INFRA_ROLE" --policy-document file:///tmp/dual-trust.json
-          cat >/tmp/registrar.json <<JSON
-          {"Version":"2012-10-17","Statement":[
-            {"Effect":"Allow","Action":["ecs:RegisterTaskDefinition","ecs:DescribeTaskDefinition"],"Resource":"*"},
-            {"Effect":"Allow","Action":"iam:PassRole","Resource":["$EXEC_ARN","$TASK_ARN"]}
-          ]}
-          JSON
-          aws iam put-role-policy --role-name "$INFRA_ROLE" --policy-name RippleTaskDefinitionRegistrarTemporary --policy-document file:///tmp/registrar.json
-          sleep 60
-          echo 'FINAL_PUBLIC_REGISTRAR_READY=PASS'
-
-      - name: Assume task-definition registrar
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::873363353521:role/RippleEcsInfrastructureRole
-          aws-region: eu-central-1
-          role-session-name: ripple-final-public-registrar
-          retry-max-attempts: 12
-
-      - name: Register exact-SHA task definition
+      - name: Register exact-SHA task definition directly
         id: taskdef
         env:
           BASE_URL: ${{ steps.target.outputs.base_url }}
@@ -163,31 +132,20 @@ jobs:
           echo "FINAL_PUBLIC_TASK_DEFINITION=$TD_ARN"
           echo 'FINAL_PUBLIC_TASKDEF=PASS'
 
-      - name: Restore bounded bootstrap identity
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::873363353521:role/RippleGitHubOidcRole
-          aws-region: eu-central-1
-          role-session-name: ripple-final-public-update
-          retry-max-attempts: 2
-
-      - name: Restore infrastructure trust and update ECS
+      - name: Update ECS without changing infrastructure-role trust
         env:
-          ORIGINAL_ROLE_ID: ${{ steps.trust.outputs.role_id }}
           SERVICE_ARN: ${{ steps.target.outputs.service_arn }}
           TD_ARN: ${{ steps.taskdef.outputs.task_definition_arn }}
+          ORIGINAL_ROLE_ID: ${{ steps.target.outputs.role_id }}
         shell: bash
         run: |
           set -euo pipefail
-          aws iam delete-role-policy --role-name "$INFRA_ROLE" --policy-name RippleTaskDefinitionRegistrarTemporary >/dev/null 2>&1 || true
-          cat >/tmp/service-trust.json <<'JSON'
-          {"Version":"2012-10-17","Statement":[{"Sid":"AllowECSExpressInfrastructure","Effect":"Allow","Principal":{"Service":"ecs.amazonaws.com"},"Action":"sts:AssumeRole"}]}
-          JSON
-          aws iam update-assume-role-policy --role-name "$INFRA_ROLE" --policy-document file:///tmp/service-trust.json
-          CURRENT_ROLE_ID="$(aws iam get-role --role-name "$INFRA_ROLE" --query 'Role.RoleId' --output text)"
-          test "$CURRENT_ROLE_ID" = "$ORIGINAL_ROLE_ID"
-          sleep 60
+          BEFORE="$(aws iam get-role --role-name "$INFRA_ROLE" --query 'Role.RoleId' --output text)"
+          test "$BEFORE" = "$ORIGINAL_ROLE_ID"
           aws ecs update-express-gateway-service --service-arn "$SERVICE_ARN" --task-definition-arn "$TD_ARN" --health-check-path /healthz >/tmp/update.json
+          AFTER="$(aws iam get-role --role-name "$INFRA_ROLE" --query 'Role.RoleId' --output text)"
+          test "$AFTER" = "$ORIGINAL_ROLE_ID"
+          echo 'FINAL_PUBLIC_INFRA_TRUST_UNTOUCHED=PASS'
           echo 'FINAL_PUBLIC_ROLE_ID_PRESERVED=PASS'
           echo 'FINAL_PUBLIC_ECS_UPDATE=PASS'
 
@@ -235,9 +193,7 @@ jobs:
           golden=rows.get('golden_flight_cascade', {}).get('observed', {})
           recovery=rows.get('interruption_recovery', {}).get('observed', {})
           ok=(
-              d.get('passed') == 7
-              and d.get('total') == 7
-              and len(rows) == 7
+              d.get('passed') == 7 and d.get('total') == 7 and len(rows) == 7
               and all(row.get('passed') is True for row in d.get('scenarios', []))
               and golden.get('writes') == 5
               and recovery.get('persisted_receipts_before_resume') == 2
@@ -275,3 +231,17 @@ jobs:
           echo "FINAL_PUBLIC_CANONICAL_SHA=$GITHUB_SHA"
           echo "FINAL_PUBLIC_ECR_DIGEST=${{ steps.image.outputs.image_digest }}"
           echo 'FINAL_PUBLIC_AWS_AND_MCP_SMOKE=PASS'
+
+      - name: Remove temporary proof bootstrap policy
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          aws iam delete-role-policy --role-name RippleGitHubOidcRole --policy-name "$BOOTSTRAP_POLICY"
+          RC=$?
+          if [ "$RC" -eq 0 ]; then
+            echo 'FINAL_PUBLIC_TEMP_BOOTSTRAP_DELETE=PASS'
+          else
+            echo 'FINAL_PUBLIC_TEMP_BOOTSTRAP_DELETE=NOT_PRESENT_OR_NOT_AUTHORIZED'
+          fi
+          exit 0
