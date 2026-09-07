@@ -1,129 +1,336 @@
-# Submission video script — judge-first target 2:35–2:45
+# Ripple — Winner Cut Video Script v2
 
-The video must lead with customer value, not architecture. Do not show internal hashes, test matrices or AWS diagrams before the judge understands the product.
+**Target runtime:** 2:35–2:42
 
-The Sep 3 Amazon build-session guidance strongly favors a **customer talking to an agent**, a working web Alexa+ simulation connected to the real MCP server, and useful in-place feedback such as a rich card. Treat that as the default demo shape.
+**Submission constraints:** public YouTube/Vimeo, English, under 3:00. The first customer value must land before the judge has time to wonder about architecture.
 
-If an actual Alexa+ client is not available at recording time, label the shown web/Repair Card surface clearly as the **Alexa+ simulated experience backed by the real public MCP server**. This is an explicitly permitted submission path; do not waste demo time apologizing for it or imply an official Alexa session that did not happen.
+## Core video principle
 
-## 0:00–0:20 — Customer → agent → consequence repair
+This is not a screen recording of a hackathon project. It is a product demo with technical proof.
 
-Show the customer speaking / simulated Alexa+ prompt:
+The video must make one idea unforgettable:
+
+> **One change. Five consequences. One safe repair. One exact approval. Five receipts. Zero duplicate writes.**
+
+Do not lead with AWS, MCP, OAuth, GitHub, hashes, diagrams or test matrices. The judge must understand the customer value before any infrastructure appears.
+
+---
+
+## 0:00–0:07 — Hook
+
+Full-screen typography over a clean Ripple background:
+
+> **ONE CANCELLATION.**
+> **FIVE BROKEN COMMITMENTS.**
+
+Small Ripple mark only. No architecture logos.
+
+Voiceover:
+
+> “Plans rarely break one thing.”
+
+---
+
+## 0:07–0:19 — Customer → Alexa+
+
+Show the real rules-permitted simulated Alexa+ experience backed by the public MCP server.
+
+Customer says:
 
 > “Our flight home was cancelled. We’ll land tomorrow at six.”
 
-Immediately show the money-first Repair Card:
+On-screen label, small but unambiguous:
 
-> **5 commitments are affected. $116 is at risk. Ripple can repair them for $42 and preserve $74. Approve $42 repair?**
-
-Voiceover:
-
-> “Plans rarely break one thing. Ripple repairs the consequences — without making you open five apps or sites.”
-
-This first shot must visibly look like a customer using an agent, not a developer testing an endpoint.
-
-## 0:20–0:50 — Exact approval → visible outcome
-
-Show the five human-readable affected commitments, then approve the exact $42 repair.
-
-Show execution completing with five receipts.
+> **Simulated Alexa+ experience · real public Ripple MCP backend**
 
 Voiceover:
 
-> “One spoken change becomes one bounded repair plan. Nothing is written before approval. The approval applies only to this exact cost, scope and notification set.”
+> “Ripple starts with one changed fact.”
 
-Do **not** lead with snapshot hashes. They can appear briefly in technical evidence later if needed.
+Do not apologize for the simulation path and do not imply an official Alexa+ production-client session.
 
-The visual decision surface should remain the real display-only MCP App Repair Card. Do not add a second direct-UI approval authority merely to make the demo more clickable.
+---
 
-## 0:50–1:08 — Replay safety
+## 0:19–0:34 — Moment of magic
 
-Replay the same exact plan or reconnect in a fresh session.
+The Repair Card becomes the dominant visual.
+
+Animate the four numbers one by one, large enough to read instantly:
+
+> **5 commitments affected**
+> **$116 at risk**
+> **$42 repair cost**
+> **$74 preserved**
+
+Then reveal:
+
+> **Approve $42 repair?**
+
+Voiceover:
+
+> “Ripple finds what breaks downstream, prices the consequence set, and proposes one safe repair. Five commitments are affected. One hundred sixteen dollars are at risk. Ripple can repair the cascade for forty-two and preserve seventy-four.”
+
+This is the primary product moment. Hold the numbers long enough to register.
+
+---
+
+## 0:34–0:50 — What actually broke + trust before action
+
+Show the five human-readable commitments, not internal IDs:
+
+- ride
+- dinner reservation
+- grocery delivery
+- pet-care window
+- tomorrow’s meeting
+
+At the bottom, show a single proof line:
+
+> **Provider writes before approval: 0**
+
+Voiceover:
+
+> “Instead of making the customer discover five failures across five apps, Ripple exposes the whole cascade before anything is changed.”
+
+Avoid snapshots/hashes in the main visual.
+
+---
+
+## 0:50–1:08 — Exact approval → execution → receipts
+
+Show the exact approval action:
+
+> **Approve $42 repair**
+
+Then animate five receipts arriving, one by one, with clear statuses.
+
+Voiceover:
+
+> “The approval is bound to this exact cost and scope. After approval, Ripple executes only the disclosed actions and returns authoritative receipts.”
+
+On screen briefly:
+
+> **5 actions · 5 receipts**
+
+Do not show terminal output.
+
+---
+
+## 1:08–1:23 — Technical wow: replay safety
+
+Run the exact plan again or reconnect through a fresh session.
+
+Use very large proof text:
+
+> **5/5 DEDUPLICATED**
+> **AUTHORITATIVE WRITES: 5 → 5**
+> **NEW PROVIDER WRITES: 0**
+
+Voiceover:
+
+> “Run it again. Nothing happens twice. Durable receipts and idempotency suppress duplicate external writes, even after a fresh session.”
+
+This is the most important technical moment in the video. It demonstrates sophisticated safety without requiring the judge to understand implementation details.
+
+---
+
+## 1:23–1:39 — Trust model in one animation
+
+Use a single horizontal animation with five steps:
+
+> **Bedrock normalizes → deterministic policy validates → user approves exact plan → bounded execution → receipts**
+
+Under Bedrock, add small text:
+
+> **no write authority · no spending choice**
+
+Voiceover:
+
+> “The language model does not decide how to spend money and never receives write authority. Deterministic policy chooses the repair, and material drift forces re-approval.”
+
+Optionally flash one fail-closed state for two seconds:
+
+> **Ambiguous provider state → execution blocked**
+
+No diagram with more than these five concepts.
+
+---
+
+## 1:39–1:54 — Why this is a real Amazon build
+
+Show a clean four-part technical proof panel, not a console walkthrough:
+
+> **Alexa+ / MCP 2025-11-25** — public Streamable HTTP server
+>
+> **Amazon ECS Express / Fargate** — canonical public runtime
+>
+> **Amazon Bedrock / Nova 2 Lite** — changed-fact normalization
+>
+> **DynamoDB + CloudWatch** — durable authority + redacted trace evidence
+
+Small proof footer:
+
+> **OAuth + PKCE · authenticated remote smoke PASS · exact-SHA release proof**
+
+Voiceover:
+
+> “The experience is backed by a real public MCP 2025-11-25 server on AWS. Bedrock normalizes the changed fact, DynamoDB makes approval and receipts durable, and CloudWatch records redacted execution evidence.”
+
+Do not show IAM screens, CloudShell, deployment logs or hashes unless one very short proof shot is aesthetically useful.
+
+---
+
+## 1:54–2:09 — Generality: Event Operations
+
+Cut to a second, visually distinct Repair Card labelled:
+
+> **EVENT OPERATIONS**
 
 Show:
 
-- 5/5 actions deduplicated
-- unique writes still 5
-- duplicate provider writes: 0
+> **$5,800 at risk**
+> **$620 repair**
+> **$5,180 preserved**
+
+Small subline:
+
+> AV · catering · VIP transport · security · sponsor briefing
 
 Voiceover:
 
-> “If a retry or restart happens, authoritative receipts stop duplicate writes.”
+> “Ripple is not a flight workflow. The same consequence-repair engine handles a conference-time change across AV, catering, VIP transport, security and sponsor commitments — and rejects a cheaper option when it preserves less value.”
 
-## 1:08–1:32 — Why this is a general consequence-repair layer
+Do not spend time explaining the full scenario.
 
-Switch briefly to Event Operations.
+---
 
-Show:
+## 2:09–2:23 — Real-world impact anchor
 
-> **$5,800 at risk → $620 repair → $5,180 net preserved**
+Use one restrained data card, clearly sourced:
 
-Voiceover:
-
-> “This is not a flight workflow. The same engine repairs a conference-time change across AV, catering, VIP transport, security and sponsor commitments. It does not choose the cheapest action; it chooses the safe option that preserves the most net value.”
-
-## 1:32–1:52 — The trust model
-
-Use one simple architecture animation:
-
-**language model normalizes → deterministic policy validates → user approves exact plan → bounded execution → receipts**
+> **2025 U.S. flight operations**
+> **1.69M delayed arrivals**
+> **118K cancellations**
+> **Source: U.S. DOT Bureau of Transportation Statistics**
 
 Voiceover:
 
-> “The model never gets write authority and never decides how to spend money. Deterministic policy makes the economic choice and material drift forces re-approval.”
+> “The trigger is not hypothetical. U.S. DOT data shows disruption at massive scale. Ripple does not treat that as a market-size claim; it is the real stream of schedule changes on top of which downstream commitments break.”
 
-Show one failure state for only a few seconds: ambiguous provider or expired repair window stays unresolved instead of being fabricated as success.
+Do not show percentages if they make the frame too busy. Do not imply every disruption becomes a Ripple repair event.
 
-## 1:52–2:12 — Why this is a real Alexa+ MCP build
+---
 
-Show the simulated Alexa+ surface and, briefly, the live public MCP evidence / Repair Card resource.
+## 2:23–2:38 — Return to the customer outcome
 
-On screen, keep only judge-relevant proof:
+Return to the original Repair Card after execution.
 
-- real public MCP 2025-11-25 / Streamable HTTP
-- OAuth + PKCE
-- real MCP App Repair Card
-- remote authenticated smoke: PASS
-- store-media gate: PASS
+Show only:
 
-Voiceover:
-
-> “The conversation is backed by a real public MCP server. OAuth, tool discovery, exact approval, execution and replay were exercised from a separate remote container. The Repair Card is a real MCP App resource, not a screenshot.”
-
-Do not make Local Inspector or certification footage mandatory. If official Alexa+ Inspector/on-device access works cleanly, one short shot can replace part of this proof section; otherwise the simulated Alexa+ path remains the primary demo.
-
-## 2:12–2:30 — AWS structural proof
-
-**Record this section only from the final frozen state.**
-
-If AWS LIVE has passed, show the shortest possible evidence overlay:
-
-- Bedrock normalized the spoken change
-- DynamoDB preserved approval/receipts across a fresh session
-- CloudWatch received the redacted trace
-- replay remained 5/5 deduplicated
+> **5 commitments repaired**
+> **$74 preserved**
+> **0 duplicate writes**
 
 Voiceover:
 
-> “AWS is structural: Bedrock only normalizes the changed fact, DynamoDB makes approval and receipts durable, and CloudWatch gives redacted evidence. Railway stays the public MCP host.”
+> “One cancellation. Five consequences. One bounded repair. The customer stays in control, and every effect is provable.”
 
-If AWS LIVE has **not** passed, omit this section entirely rather than showing architecture as if it were live. Use the saved time for the customer outcome and remote MCP proof.
+---
 
-## 2:30–2:40 — Close
+## 2:38–2:42 — Memory anchor
 
-Return to the customer-facing Repair Card and the $74 saved outcome.
+Full-screen Ripple mark + tagline:
 
-> “One thing changed. Five commitments broke. Ripple repaired the cascade safely — without five separate apps. Tell Alexa one thing that changed. Ripple fixes what breaks downstream.”
+> **Tell Alexa one thing that changed.**
+> **Ripple fixes what breaks downstream.**
 
-## Recording rules
+Optional final micro-line:
 
-- Keep the final cut under **3:00**; target under **2:45**.
-- First value proposition must land within **20 seconds**.
-- First minute must primarily show **customer → agent → rich card → approval → outcome**.
-- No terminal scrolling as the primary demo.
-- No long dependency-graph explanation.
-- Do not claim real airline/ride/reservation/delivery/care transactions: those adapters are deterministic simulations.
-- Do not claim actual Alexa+ production-client use unless it is recorded from an exercised official client/onboarding path.
-- Do not imply that official Alexa+ client access is required for the track; a simulated Alexa+ experience is explicitly permitted.
-- Do not claim AWS live until the real AWS gate and Railway cutover pass.
-- Prefer large numbers and human-readable commitment names over implementation identifiers.
+> **One safe approval. Zero duplicate writes.**
+
+No call-to-action beyond the tagline.
+
+---
+
+# Production direction
+
+## Visual language
+
+- 16:9, 1080p minimum;
+- clean white/ivory background consistent with the real Ripple judge UI;
+- large typography and generous whitespace;
+- real Ripple UI as the primary visual asset;
+- slow, deliberate zooms rather than frantic cursor movement;
+- numbers `$116 / $42 / $74` and replay proof must be readable on a laptop without pausing;
+- receipts should appear one by one to make execution tangible;
+- no generic AI particles, neon brains, robots, stock footage or decorative cloud diagrams;
+- no airline/provider logos unless rights are unquestionably safe;
+- subtitles burned in, in English;
+- voiceover should be calm, confident and human, not synthetic-advertising style.
+
+## Audio
+
+Prefer voiceover + very light original/licensed sound design.
+
+Possible micro-cues:
+
+- soft impact when the four economic metrics appear;
+- subtle confirmation sound when approval occurs;
+- five restrained receipt ticks;
+- one quiet click when replay resolves to zero new writes.
+
+Music is optional. If used, it must never compete with narration and must be licensed/original.
+
+## Editing rules
+
+- no shot longer than necessary;
+- no terminal scrolling;
+- no code editor as the main proof;
+- no raw JSON unless used for a sub-second exact-SHA/7-of-7 proof insert;
+- no architecture explanation before 1:23;
+- no internal IDs in customer-facing shots;
+- do not exceed 2:45 in the working cut; target 2:35–2:42 final;
+- leave at least 15 seconds of safety margin under the 3:00 rule;
+- the first 34 seconds must already prove the problem, the product and the economic outcome.
+
+# Evidence and claim boundaries
+
+The video may claim:
+
+- canonical public AWS-hosted MCP runtime;
+- MCP 2025-11-25 Streamable HTTP;
+- OAuth/PKCE and authenticated remote smoke;
+- Bedrock normalization;
+- DynamoDB durable approval/receipts/replay;
+- CloudWatch redacted trace evidence;
+- exact approval;
+- zero preapproval provider writes;
+- five authoritative receipts;
+- 5/5 replay deduplication and writes 5 → 5;
+- seven executable adversarial scenarios passing in the frozen release;
+- one bounded real GitHub Issues provider proof.
+
+The video must **not** claim:
+
+- real airline, ride, restaurant, grocery, pet-care or calendar production transactions;
+- live market prices for the fixture dollar amounts;
+- actual Alexa+ production-client use unless separately recorded from a successfully exercised official client;
+- that BTS disruption counts equal Ripple addressable market;
+- Railway as the current public runtime.
+
+# Judge-score mapping
+
+Every major beat must buy points:
+
+- **0:00–0:34:** Design + Quality of Idea + customer comprehension
+- **0:34–1:23:** Technical Implementation + trust + complete product loop
+- **1:23–1:54:** Technical Implementation + Amazon ecosystem understanding
+- **1:54–2:23:** Potential Impact + generality + credibility
+- **2:23–2:42:** Design + memory/brand retention
+
+The final cut is successful only if a judge can answer all four questions after one viewing:
+
+1. What problem does Ripple solve?
+2. Why is Alexa+ a natural interface for it?
+3. Why is Ripple technically safer/deeper than a basic MCP wrapper?
+4. Why could it matter beyond this hackathon?
