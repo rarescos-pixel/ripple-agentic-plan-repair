@@ -53,7 +53,7 @@ jobs:
               a=s.get('Action',[])
               if isinstance(a,str): a=[a]
               actions.extend(a)
-          for prefix in ('ecs:','ecr:','iam:PassRole','iam:CreateRole','iam:PutRolePolicy','elasticloadbalancing:','ec2:'):
+          for prefix in ('ecs:','ecr:','ssm:','iam:GetRole','iam:PassRole','iam:UpdateAssumeRolePolicy','iam:PutRolePolicy','iam:DeleteRolePolicy'):
               matches=sorted(x for x in actions if x.startswith(prefix) or x==prefix)
               print(prefix, ','.join(matches) if matches else 'NONE')
           PY
@@ -63,15 +63,16 @@ jobs:
             sed -E 's/[0-9]{12}/************/g' /tmp/policy.err | head -3
           fi
 
-      - name: Probe read-only service visibility
+      - name: Probe exact read-only runtime visibility
         shell: bash
         run: |
           set -uo pipefail
+          SERVICE_ARN='arn:aws:ecs:eu-central-1:873363353521:service/default/ripple-canonical'
           for spec in \
-            "ECS:aws ecs list-clusters --max-results 10" \
-            "ECR:aws ecr describe-repositories --max-results 10" \
-            "EC2:aws ec2 describe-vpcs --max-results 5" \
-            "ELB:aws elbv2 describe-load-balancers --page-size 5"; do
+            "EXPRESS:aws ecs describe-express-gateway-service --service-arn $SERVICE_ARN" \
+            "ECR:aws ecr describe-repositories --repository-names ripple-canonical-runtime" \
+            "INFRA_ROLE:aws iam get-role --role-name RippleEcsInfrastructureRole" \
+            "SSM:aws ssm get-parameter --name /ripple/canonical/service-client-secret"; do
             label="${spec%%:*}"; cmd="${spec#*:}"
             if eval "$cmd" >/tmp/out 2>/tmp/err; then
               echo "${label}_READ=PASS"
@@ -81,17 +82,15 @@ jobs:
             fi
           done
 
-      - name: Simulate required deploy permissions when allowed
+      - name: Simulate exact safe cutover permissions when allowed
         shell: bash
         run: |
           set -uo pipefail
           ROLE_ARN="arn:aws:iam::873363353521:role/RippleGitHubOidcRole"
           ACTIONS=(
-            ecr:CreateRepository ecr:GetAuthorizationToken ecr:InitiateLayerUpload ecr:UploadLayerPart ecr:CompleteLayerUpload ecr:PutImage
-            ecs:CreateCluster ecs:RegisterTaskDefinition ecs:CreateService ecs:UpdateService ecs:DescribeServices ecs:DescribeTasks
-            iam:CreateRole iam:PutRolePolicy iam:AttachRolePolicy iam:PassRole
-            ec2:DescribeVpcs ec2:DescribeSubnets ec2:DescribeSecurityGroups ec2:CreateSecurityGroup ec2:AuthorizeSecurityGroupIngress
-            elasticloadbalancing:CreateLoadBalancer elasticloadbalancing:CreateTargetGroup elasticloadbalancing:CreateListener
+            ecs:DescribeExpressGatewayService ecs:UpdateExpressGatewayService ecs:RegisterTaskDefinition ecs:DescribeTaskDefinition
+            ecr:GetAuthorizationToken ecr:DescribeImages ecr:BatchCheckLayerAvailability ecr:InitiateLayerUpload ecr:UploadLayerPart ecr:CompleteLayerUpload ecr:PutImage
+            ssm:GetParameter iam:GetRole iam:PassRole iam:UpdateAssumeRolePolicy iam:PutRolePolicy iam:DeleteRolePolicy
           )
           if aws iam simulate-principal-policy --policy-source-arn "$ROLE_ARN" --action-names "${ACTIONS[@]}" --output json >/tmp/sim.json 2>/tmp/sim.err; then
             python - <<'PY'
@@ -102,7 +101,7 @@ jobs:
               (allowed if x.get('EvalDecision')=='allowed' else denied).append(x.get('EvalActionName'))
           print('SIM_ALLOWED=' + ','.join(sorted(allowed)))
           print('SIM_DENIED=' + ','.join(sorted(denied)))
-          print('SAFE_AWS_NATIVE_DEPLOY_CAPABILITY=' + ('PASS' if not denied else 'NO'))
+          print('SAFE_CUTOVER_CAPABILITY=' + ('PASS' if not denied else 'NO'))
           PY
           else
             echo 'POLICY_SIMULATION=DENIED'
@@ -114,4 +113,4 @@ jobs:
         run: |
           echo 'PROBE_ONLY=true'
           echo 'NO_AWS_RESOURCE_MUTATION=true'
-          echo 'NO_RAILWAY_MUTATION=true'
+          echo 'NO_SECRET_VALUES_PRINTED=true'
