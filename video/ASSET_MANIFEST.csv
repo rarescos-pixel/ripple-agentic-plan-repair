@@ -1,6 +1,8 @@
 asset_id,type,source_or_generator,source_url_or_ref,license_or_terms,commercial_use_verified,attribution_required,watermark_free,cost_usd,used_in_final,notes
-ripple_product_capture,video,Ripple VIDEO-READY build,,project-owned,yes,no,yes,0,no,Populate exact source SHA and capture hash after VIDEO FREEZE
-ripple_motion_graphics,video,project-generated,,project-owned,yes,no,yes,0,no,Data-driven graphics only; no unverified claims
-ripple_sfx,audio,project-generated,,project-owned,yes,no,yes,0,no,Procedural sound design preferred
-optional_context_001,video,,,,unknown,unknown,unknown,0,no,Do not use until source license and zero-cost status are verified
-optional_music_001,audio,,,,unknown,unknown,unknown,0,no,Prefer project-generated score/sound bed to avoid licensing risk
+ripple_product_capture,video,Ripple VIDEO-READY build,source SHA c6766c5919ea903530a8da2d526d64a49b7f0578,project-owned,yes,no,yes,0,yes,Golden raw capture SHA256 c564486eaf86355cd1d10a5ded764353876fc27900d80f9e67c3b5d527540f32; exact frozen build
+ripple_motion_graphics,video,project-generated,video pipeline evidence cards,project-owned,yes,no,yes,0,yes,Data-driven graphics use only verified frozen evidence; no unverified claims
+ripple_captions,subtitle,project-generated from VIDEO_SCRIPT_v3.md,video/VIDEO_SCRIPT_v3.md,project-owned,yes,no,yes,0,yes,English captions burned into review master; 28 timed events
+ripple_sfx,audio,project-generated procedural synthesis,video/generate_sfx_v3.py,project-owned,yes,no,yes,0,yes,48 kHz mono procedural sound grammar; WAV SHA256 d87426bd1ae22c96b19aaa04d1f093e8aacc5052dd74fbca5b02aa0fddb81294
+edge_tts_draft_voiceover,audio,edge-tts / Microsoft Edge Read Aloud,local preproduction draft,redistribution rights not verified,no,unknown,yes,0,no,INVALIDATED for final after licensing audit; final does not contain this voiceover
+optional_context_001,video,,,,unknown,unknown,unknown,0,no,Not used
+optional_music_001,audio,,,,unknown,unknown,unknown,0,no,Not used; no third-party music in review master
