@@ -73,7 +73,7 @@ jobs:
 
           echo '--- Budgets ---'
           ACCOUNT="$(aws sts get-caller-identity --query Account --output text)"
-          if BUDGET="$(aws budgets describe-budget --account-id "$ACCOUNT" --budget-name Ripple-Zero-Cost-Guard --query 'Budget.[BudgetName,BudgetLimit.Amount,BudgetLimit.Unit,CalculatedSpend.ActualSpend.Amount,CalculatedSpend.ActualSpend.Unit,CalculatedSpend.ForecastedSpend.Amount]' --output text 2>/tmp/budget.err)"; then
+          if BUDGET="$(aws budgets describe-budget --account-id "$ACCOUNT" --budget-name Ripple-Zero-Cost-Guard --query 'Budget.[BudgetName,BudgetLimit.Amount,BudgetLimit.Unit,CalculatedSpend.ActualSpend.Amount,CalculatedSpend.ActualSpend.Unit,CalculatedSpend.ForecastedSpend.Amount,CostTypes.IncludeCredit]' --output text 2>/tmp/budget.err)"; then
             echo "BUDGET_STATE=$BUDGET"
           else
             echo 'BUDGET_STATE=NOT_FOUND_OR_DENIED'
@@ -82,16 +82,27 @@ jobs:
 
           echo 'AWS_LIVE_AUDIT=COMPLETE'
 
-      - name: Audit Free Plan credits and month-to-date spend read-only
+      - name: Audit credits and month-to-date spend read-only
         shell: bash
         run: |
           set -uo pipefail
+          ACCOUNT="$(aws sts get-caller-identity --query Account --output text)"
+
           echo '--- Free Tier account plan ---'
           if PLAN="$(aws freetier get-account-plan-state --region us-east-1 --query '[accountPlanType,accountPlanStatus,accountPlanRemainingCredits.amount,accountPlanRemainingCredits.unit,accountPlanExpirationDate]' --output text 2>/tmp/plan.err)"; then
             echo "ACCOUNT_PLAN=$PLAN"
           else
             echo 'ACCOUNT_PLAN=DENIED_OR_UNAVAILABLE'
             sed -E 's/[0-9]{12}/************/g' /tmp/plan.err | head -5
+          fi
+
+          echo '--- Billing credit ledger ---'
+          CREDIT_START="$(date -u -d '11 months ago' +%s)"
+          if CREDITS="$(aws billing get-credits --region us-east-1 --account-id "$ACCOUNT" --start-date "$CREDIT_START" --query 'credits[*].[creditType,creditStatus,initialAmount.currencyAmount,remainingAmount.currencyAmount,remainingAmount.currencyCode,endDate]' --output text 2>/tmp/credits.err)"; then
+            echo "CREDIT_LEDGER=${CREDITS:-NONE}"
+          else
+            echo 'CREDIT_LEDGER=DENIED_OR_UNAVAILABLE'
+            sed -E 's/[0-9]{12}/************/g' /tmp/credits.err | head -5
           fi
 
           echo '--- Current month unblended cost ---'
@@ -119,7 +130,7 @@ jobs:
               a=s.get('Action',[])
               if isinstance(a,str): a=[a]
               actions.extend(a)
-          wanted=['iam:PutRolePolicy','iam:DeleteRolePolicy','iam:GetRolePolicy','freetier:GetAccountPlanState','ce:GetCostAndUsage']
+          wanted=['iam:PutRolePolicy','iam:DeleteRolePolicy','iam:GetRolePolicy','freetier:GetAccountPlanState','billing:GetCredits','ce:GetCostAndUsage']
           for w in wanted:
               print(f'POLICY_{w}=' + ('PRESENT' if w in actions or '*' in actions else 'ABSENT'))
           PY
