@@ -73,10 +73,10 @@ jobs:
 
           echo '--- Budgets ---'
           ACCOUNT="$(aws sts get-caller-identity --query Account --output text)"
-          if BUDGET="$(aws budgets describe-budget --account-id "$ACCOUNT" --budget-name Ripple-Zero-Cost-Guard --query 'Budget.[BudgetName,BudgetLimit.Amount,BudgetLimit.Unit]' --output text 2>/tmp/budget.err)"; then
-            echo "BUDGET_GUARD=$BUDGET"
+          if BUDGET="$(aws budgets describe-budget --account-id "$ACCOUNT" --budget-name Ripple-Zero-Cost-Guard --query 'Budget.[BudgetName,BudgetLimit.Amount,BudgetLimit.Unit,CalculatedSpend.ActualSpend.Amount,CalculatedSpend.ActualSpend.Unit,CalculatedSpend.ForecastedSpend.Amount]' --output text 2>/tmp/budget.err)"; then
+            echo "BUDGET_STATE=$BUDGET"
           else
-            echo 'BUDGET_GUARD=NOT_FOUND_OR_DENIED'
+            echo 'BUDGET_STATE=NOT_FOUND_OR_DENIED'
             sed -E 's/[0-9]{12}/************/g' /tmp/budget.err | head -3
           fi
 
@@ -105,3 +105,26 @@ jobs:
           fi
 
           echo 'AWS_BILLING_READ_ONLY_AUDIT=COMPLETE'
+
+      - name: Inspect effective deploy policy read-only
+        shell: bash
+        run: |
+          set -uo pipefail
+          if aws iam get-role-policy --role-name RippleGitHubOidcRole --policy-name RippleGitHubDeployPolicy --query PolicyDocument --output json >/tmp/deploy-policy.json 2>/tmp/policy.err; then
+            python - <<'PY'
+          import json
+          p=json.load(open('/tmp/deploy-policy.json'))
+          actions=[]
+          for s in p.get('Statement',[]):
+              a=s.get('Action',[])
+              if isinstance(a,str): a=[a]
+              actions.extend(a)
+          wanted=['iam:PutRolePolicy','iam:DeleteRolePolicy','iam:GetRolePolicy','freetier:GetAccountPlanState','ce:GetCostAndUsage']
+          for w in wanted:
+              print(f'POLICY_{w}=' + ('PRESENT' if w in actions or '*' in actions else 'ABSENT'))
+          PY
+            echo 'DEPLOY_POLICY_READ=PASS'
+          else
+            echo 'DEPLOY_POLICY_READ=DENIED'
+            sed -E 's/[0-9]{12}/************/g' /tmp/policy.err | head -5
+          fi
