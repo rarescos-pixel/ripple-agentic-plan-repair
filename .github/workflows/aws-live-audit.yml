@@ -81,3 +81,27 @@ jobs:
           fi
 
           echo 'AWS_LIVE_AUDIT=COMPLETE'
+
+      - name: Audit Free Plan credits and month-to-date spend read-only
+        shell: bash
+        run: |
+          set -uo pipefail
+          echo '--- Free Tier account plan ---'
+          if PLAN="$(aws freetier get-account-plan-state --region us-east-1 --query '[accountPlanType,accountPlanStatus,accountPlanRemainingCredits.amount,accountPlanRemainingCredits.unit,accountPlanExpirationDate]' --output text 2>/tmp/plan.err)"; then
+            echo "ACCOUNT_PLAN=$PLAN"
+          else
+            echo 'ACCOUNT_PLAN=DENIED_OR_UNAVAILABLE'
+            sed -E 's/[0-9]{12}/************/g' /tmp/plan.err | head -5
+          fi
+
+          echo '--- Current month unblended cost ---'
+          START="$(date -u +%Y-%m-01)"
+          END="$(date -u +%Y-%m-%d)"
+          if COST="$(aws ce get-cost-and-usage --region us-east-1 --time-period "Start=$START,End=$END" --granularity MONTHLY --metrics UnblendedCost --query 'ResultsByTime[0].Total.UnblendedCost.[Amount,Unit]' --output text 2>/tmp/cost.err)"; then
+            echo "MTD_UNBLENDED_COST=$COST"
+          else
+            echo 'MTD_UNBLENDED_COST=DENIED_OR_UNAVAILABLE'
+            sed -E 's/[0-9]{12}/************/g' /tmp/cost.err | head -5
+          fi
+
+          echo 'AWS_BILLING_READ_ONLY_AUDIT=COMPLETE'
