@@ -14,25 +14,26 @@ Ripple is a consequence-repair agent, not a Q&A wrapper. It discovers a dependen
 
 | Judge question | Answer | Evidence |
 |---|---|---|
-| Does a real public agent exist? | **YES** | Public MCP `2025-11-25` Streamable HTTP + exact-revision Railway proof |
+| Does a real public agent exist? | **YES** | Canonical public MCP `2025-11-25` runtime on AWS ECS Express Mode / Fargate with exact-SHA release proof |
 | Does it write before approval? | **NO** | Preview = 0 writes; approval = 0 writes |
 | Is approval actually bounded? | **YES** | Plan ID/version/content hash + max cost + notification scope |
 | Can it duplicate effects after replay/restart? | **NO in verified contract** | authoritative receipts, idempotency keys, restart recovery, replay 5/5 dedup |
 | Does the model choose spending? | **NO** | deterministic economic planner/policy owns repair choice |
 | Is the economic choice visible? | **YES** | Repair Card “Why this plan?” only when mechanically provable |
 | Are all integrations fake? | **NO** | bounded real GitHub Issues provider: write/readback/dedup/restore PASS |
-| Is AWS just a diagram? | **NO** | real Nova 2 Lite + DynamoDB receipt/replay + CloudWatch write/readback PASS |
-| Is the public Railway process already AWS-backed on every request? | **NOT CLAIMED** | credential-safe cutover still pending |
+| Is AWS just a diagram? | **NO** | canonical ECS runtime + live Nova 2 Lite + DynamoDB receipt/replay + CloudWatch evidence |
+| Is the public runtime AWS-backed? | **YES** | ECS task roles, exact-SHA readiness, authenticated MCP/OAuth smoke, Bedrock/DynamoDB/CloudWatch structural runtime |
 | Is it travel-specific? | **NO** | Event Operations: $5,800 risk → $620 repair → $5,180 preserved |
 
 ## Public runtime
 
-- MCP: `https://ripple-v12-production.up.railway.app/mcp`
-- exact-revision production SHA already proven during winner hardening: `58898530b40564e1b0025db4ac8ea7d2f9249817`
-- deployment: PASS
-- independent Railway production proof: PASS
+- Base: `https://ri-9fd0e66d62464ec4ae642ccf46e6864d.ecs.eu-central-1.on.aws`
+- MCP: `https://ri-9fd0e66d62464ec4ae642ccf46e6864d.ecs.eu-central-1.on.aws/mcp`
+- runtime mode: `aws-structural`
+- canonical host: Amazon ECS Express Mode / Fargate
+- release identity: exact Git SHA → immutable ECR digest → ECS task definition → repeated `/readyz` readback
 
-Any merge after that SHA requires one final exact-revision deploy/proof before technical freeze.
+Historical Railway deployment and smoke reports are retained only as audit evidence from the earlier hosting phase. They are not the current runtime and are not required for judging.
 
 ## Golden contract
 
@@ -81,7 +82,7 @@ The fixture is restored after the proof.
 
 ## AWS Builder proof
 
-Direct structural live evidence:
+Canonical AWS evidence:
 
 ```text
 AWS_OIDC=PASS
@@ -95,17 +96,19 @@ AWS_DIRECT_LIVE_EVIDENCE=PASS
 ```
 
 AWS role split:
+- ECS Express Mode / Fargate: canonical public MCP compute and HTTPS ingress;
 - Nova 2 Lite: constrained changed-fact normalization only;
 - DynamoDB: durable proposal/approval/idempotency/receipts;
 - CloudWatch Logs: redacted structured traces;
-- GitHub OIDC: temporary bounded evidence-run authority;
+- ECS task roles: application runtime authority;
+- GitHub OIDC: temporary bounded deployment/proof authority;
 - Budgets/anomaly controls: bounded-spend guardrails.
 
 Precise claim boundary:
 
-> **AWS services are live and structurally verified; the canonical public Railway AWS-runtime cutover is pending.**
+> **Ripple's canonical public MCP runtime runs on AWS ECS Express Mode / Fargate with Bedrock, DynamoDB and CloudWatch structurally active.**
 
-Evidence: `AWS_DIRECT_LIVE_EVIDENCE.md`.
+Every frozen release must bind that claim to the exact Git SHA, immutable image digest, task definition, public readiness, authenticated smoke and replay evidence.
 
 ## Design proof
 
@@ -134,35 +137,33 @@ A cheaper candidate is rejected because it preserves less net value. The planner
 
 ## Cost / engineering discipline
 
-- AWS pay-per-use; no always-on AWS compute added for diagram value;
-- no AgentCore/Step Functions/vector DB/multi-agent feature theatre without need;
-- $5 budget guard + $5 anomaly threshold;
+- AWS pay-per-use;
+- no unnecessary application tier duplicated for diagram value;
+- budget/anomaly guardrails;
 - judge-verifiable cost benchmark: `COST_BENCHMARK_2026-09-06.md`.
 
 ## What is intentionally not claimed
 
 - airline/ride/reservation/delivery/pet-care/calendar production provider writes;
 - market validity of fixture dollar values;
-- official Alexa+ production-client session without evidence;
-- AWS-backed execution for every public Railway request before credential-safe cutover.
+- official Alexa+ production-client session without evidence.
 
 ## Fast evidence order
 
 1. README — understand product in seconds.
 2. `JUDGE_RUNBOOK.md` — fastest reproduction route.
-3. `VALIDATION_REPORT.md` + `ADVERSARIAL_FAILURE_MATRIX.md` — safety/recovery.
-4. real-provider workflow evidence — actual external write/readback/replay/restore.
-5. `AWS_DIRECT_LIVE_EVIDENCE.md` — actual Bedrock/DynamoDB/CloudWatch proof.
+3. `AWS_READINESS.md` + `AWS_DIRECT_LIVE_EVIDENCE.md` — current public runtime and AWS proof.
+4. `VALIDATION_REPORT.md` + `ADVERSARIAL_FAILURE_MATRIX.md` — safety/recovery.
+5. real-provider workflow evidence — actual external write/readback/replay/restore.
 6. `RUBRIC_MAP.md` — claim-to-criterion mapping.
 7. `PRODUCT_FEEDBACK.md` / `FRICTION_LOG.md` — Amazon feedback bonus.
 
 ## Remaining before submission freeze
 
 1. finish only score-positive non-video work;
-2. make a bounded go/no-go decision on Railway AWS-runtime cutover;
-3. merge the final technical/docs state;
-4. repeat exact-revision Railway deployment + independent proof on the final SHA;
-5. require main Quality Gate PASS;
-6. freeze repo/judge packet;
-7. **STOP — VIDEO only with Rareș explicitly present**;
-8. final Devpost copy/compliance audit.
+2. require main Quality Gate PASS;
+3. perform one exact-SHA AWS release proof on the final main SHA;
+4. reconcile final public URL/SHA/evidence surfaces;
+5. freeze repo/judge packet;
+6. **STOP — VIDEO only with Rareș explicitly present**;
+7. final Devpost copy/compliance audit.
