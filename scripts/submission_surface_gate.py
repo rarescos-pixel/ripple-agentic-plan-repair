@@ -31,6 +31,10 @@ def main() -> int:
     video = read("docs/VIDEO_SCRIPT.md")
     rubric = read("docs/RUBRIC_MAP.md")
     master = read("docs/MASTER.md")
+    judge_packet = read("docs/JUDGE_PACKET.md")
+    judge_runbook = read("docs/JUDGE_RUNBOOK.md")
+    release_checklist = read("docs/RELEASE_CHECKLIST.md")
+    technology_disclosure = read("docs/TECHNOLOGY_DISCLOSURE.md")
     open_source = read("docs/OPEN_SOURCE_SUBMISSION.md")
     aws_live = read("docs/AWS_DIRECT_LIVE_EVIDENCE.md")
     aws_readiness = read("docs/AWS_READINESS.md")
@@ -153,6 +157,36 @@ def main() -> int:
     ):
         forbid(master, needle, "MASTER", errors)
 
+    # Judge-facing surfaces must never regress to the retired Railway endpoint.
+    judge_surfaces = (
+        ("README", readme),
+        ("SUBMISSION_DRAFT", submission),
+        ("VIDEO_SCRIPT", video),
+        ("RUBRIC_MAP", rubric),
+        ("MASTER", master),
+        ("JUDGE_PACKET", judge_packet),
+        ("JUDGE_RUNBOOK", judge_runbook),
+        ("RELEASE_CHECKLIST", release_checklist),
+        ("TECHNOLOGY_DISCLOSURE", technology_disclosure),
+        ("ADDON_PACKAGE", addon),
+    )
+    for label, text in judge_surfaces:
+        forbid(text, "up.railway.app", label, errors)
+        forbid(text, "canonical public Railway AWS-runtime cutover is pending", label, errors)
+        forbid(text, "Railway remains the public MCP transport host", label, errors)
+        forbid(text, "current public Railway service has not yet been claimed", label, errors)
+
+    for label, text in (
+        ("JUDGE_PACKET", judge_packet),
+        ("JUDGE_RUNBOOK", judge_runbook),
+        ("TECHNOLOGY_DISCLOSURE", technology_disclosure),
+    ):
+        require(text, AWS_MCP, label, errors)
+        require(text, "AWS", label, errors)
+
+    require(release_checklist, "Public MCP / AWS canonical runtime — VERIFIED", "RELEASE_CHECKLIST", errors)
+    require(release_checklist, "No Railway deployment is required", "RELEASE_CHECKLIST", errors)
+
     for needle in (
         "# Ripple — AWS direct live evidence",
         "AWS_DIRECT_LIVE_EVIDENCE=PASS",
@@ -181,7 +215,6 @@ def main() -> int:
 
     require(addon, AWS_MCP, "ADDON_PACKAGE", errors)
     require(addon, AWS_BASE + "/assets/alexa/ripple-carousel-600x900.png", "ADDON_PACKAGE", errors)
-    forbid(addon, "ripple-v12-production.up.railway.app", "ADDON_PACKAGE", errors)
 
     for needle in (
         "# Open Source Mini Challenge — submission packet",
@@ -207,6 +240,7 @@ def main() -> int:
     print("aws_claim: canonical AWS ECS runtime + Bedrock/DynamoDB/CloudWatch")
     print("replay_claim: 5/5 deduplicated / authoritative writes unchanged / 0 new provider writes")
     print("alexa_package_endpoint:", AWS_MCP)
+    print("railway_current_surface_refs: 0")
     print("real_provider: bounded reversible external write/readback/replay/restore PASS")
     print("mini_challenges: AWS Builder + Open Source")
     return 0

@@ -10,9 +10,19 @@ Ripple is a **money-aware consequence-repair layer for Alexa+**. It is not a gen
 
 ## 60 seconds — inspect the public proof
 
-Public MCP:
+Canonical public MCP:
 
-`https://ripple-v12-production.up.railway.app/mcp`
+`https://ri-9fd0e66d62464ec4ae642ccf46e6864d.ecs.eu-central-1.on.aws/mcp`
+
+Canonical runtime:
+
+- Amazon ECS Express Mode / Fargate;
+- runtime mode `aws-structural`;
+- Bedrock / Nova 2 Lite normalization;
+- DynamoDB durable proposals, approvals, idempotency and receipts;
+- CloudWatch redacted structured traces;
+- IAM task roles for runtime authority;
+- GitHub OIDC for bounded release/proof operations.
 
 Verified remote contract:
 
@@ -20,22 +30,20 @@ Verified remote contract:
 protocol: 2025-11-25
 preview: 5 impacts / 0 writes
 approval writes: 0
-execute: 5 receipts / 5 unique writes
-replay: 5 deduplicated / still 5 unique writes
+execute: 5 receipts / 5 authoritative unique writes
+replay: 5/5 deduplicated / authoritative writes unchanged
 ```
 
-Current exact-revision evidence:
+A frozen release is accepted only when the exact Git SHA is bound to an immutable ECR digest and ECS task definition, `/readyz` repeatedly reports that exact revision, authenticated MCP/OAuth smoke passes, Bedrock is live, DynamoDB replay remains duplicate-free, CloudWatch contains execution evidence and the deployed digest reads back correctly.
 
-- source SHA deployed/proven: `58898530b40564e1b0025db4ac8ea7d2f9249817`;
-- Railway deployment: SUCCESS;
-- independent `Ripple Railway production proof`: SUCCESS.
-
-If the repository advances beyond that SHA before freeze, the exact-revision proof must be repeated for the final head.
+Historical Railway reports remain available as evidence of the earlier hosting phase. They are not a current endpoint or a judging dependency.
 
 See:
 
-- `docs/ALEXA_REMOTE_EVIDENCE.md`
-- `docs/REMOTE_SMOKE_REPORT.md`
+- `docs/AWS_READINESS.md`
+- `docs/AWS_DIRECT_LIVE_EVIDENCE.md`
+- `docs/ALEXA_REMOTE_EVIDENCE.md` — historical remote interoperability evidence
+- `docs/REMOTE_SMOKE_REPORT.md` — historical independent remote smoke evidence
 - `docs/MCP_APP_EVIDENCE.md`
 - `docs/RELEASE_CHECKLIST.md`
 
@@ -103,9 +111,9 @@ The app cannot invoke approval or execution tools. Voice captures the changed fa
 
 The hackathon rules permit a clearly labelled simulated Alexa+ experience backed by the real MCP server. No actual Alexa+ production-client session is claimed unless separately evidenced.
 
-## AWS Builder — direct structural evidence is LIVE
+## AWS Builder — canonical runtime is LIVE
 
-A completed AWS evidence workflow independently exercises:
+The current public runtime independently exercises:
 
 ```text
 AWS_OIDC=PASS
@@ -119,23 +127,17 @@ AWS_DIRECT_LIVE_EVIDENCE=PASS
 Meaning:
 
 - real Amazon Nova 2 Lite inference;
-- real DynamoDB authoritative receipt write/readback and conditional replay rejection;
-- real CloudWatch Logs structured event write + readback;
-- temporary GitHub OIDC credentials rather than committed static AWS keys.
+- real DynamoDB durable receipt/replay behavior;
+- real CloudWatch Logs structured trace evidence;
+- ECS task roles rather than static application AWS keys;
+- short-lived GitHub OIDC for release/proof authority.
 
-See `docs/AWS_DIRECT_LIVE_EVIDENCE.md`.
-
-Claim boundary:
-
-> **AWS services are live and structurally verified; the canonical public Railway AWS-runtime cutover is pending.**
-
-Do not interpret the direct live proof as a claim that every current public Railway request already uses AWS. That stronger cutover remains deliberately gated by a credential-safe external-workload identity/transfer path.
+See `docs/AWS_DIRECT_LIVE_EVIDENCE.md` and `docs/AWS_RUNTIME_CREDENTIALS.md`.
 
 ## Cost / failure evidence
 
 - `docs/COST_BENCHMARK_2026-09-06.md` — deterministic judge-verifiable cost model/benchmark;
-- `docs/ADVERSARIAL_FAILURE_MATRIX.md` — failure truth, drift, interruption and recovery proof;
-- AWS architecture remains pay-per-use with no always-on AWS compute added merely for a larger diagram.
+- `docs/ADVERSARIAL_FAILURE_MATRIX.md` — failure truth, drift, interruption and recovery proof.
 
 ## Run locally, if desired
 
@@ -159,8 +161,7 @@ See `docs/TECHNOLOGY_DISCLOSURE.md`, `docs/AWS_DIRECT_LIVE_EVIDENCE.md` and the 
 - travel-world providers are deterministic fixtures;
 - one bounded external-provider path is real and live-proven;
 - fixture dollar amounts are scenario values, not market statistics;
-- no actual Alexa+ production-client session is claimed without evidence;
-- direct AWS services are live-proven, while the public Railway AWS-backend cutover is still pending.
+- no actual Alexa+ production-client session is claimed without evidence.
 
 ## VIDEO
 
