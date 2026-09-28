@@ -32,7 +32,6 @@ def expression_tokens(expr):
     if op == "fact": return [{"kind": "fact", "fact": value}]
     if op == "literal": return [_literal_token(value)]
     if op not in OPS:
-        # Preserve malformed operator names so the production normalizer proves rejection.
         return [{"kind": "operator", "operator": op}]
     tokens = []
     for child in value:
@@ -51,12 +50,8 @@ def contract_wire(spec, confidence=.99):
             result.append(row)
         return result
 
-    goal_at = expression_tokens(spec["goal_at"])
-    if len(goal_at) != 1:
-        # Keep malformed canonical fixture representable so production rejects it.
-        goal_at = goal_at[0]
-    else:
-        goal_at = goal_at[0]
+    goal_at_tokens = expression_tokens(spec["goal_at"])
+    goal_at = goal_at_tokens[0] if len(goal_at_tokens) == 1 else {"kind": "operator", "operator": next(iter(spec["goal_at"]))}
     data = {
         "goal": expression_tokens(spec["goal"]),
         "goal_at": goal_at,
