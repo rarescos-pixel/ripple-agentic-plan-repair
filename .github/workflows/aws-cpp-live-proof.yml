@@ -2,38 +2,40 @@ name: AWS CPP isolated live proof
 
 on:
   push:
-    branches: [codex/continuous-promise-preservation]
-    paths:
-      - '.github/workflows/aws-cpp-live-proof.yml'
-      - 'src/**'
-      - 'tests/**'
+    branches: [main]
+    paths: ['.github/workflows/aws-cpp-live-proof.yml']
   workflow_dispatch:
 
 permissions:
   id-token: write
   contents: read
 
+concurrency:
+  group: ripple-cpp-isolated-live-proof
+  cancel-in-progress: false
+
 jobs:
   live-proof:
+    if: github.ref == 'refs/heads/main' && github.repository == 'rarescos-pixel/ripple-agentic-plan-repair'
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 10
     env:
       AWS_REGION: eu-central-1
       EXPECTED_SHA: 8b939542d5055f5c6c308cacdcd66667d71a0b68
+      PROOF_DIR: /tmp/ripple-cpp-proof
     steps:
-      - name: Checkout exact verified SHA
+      - name: Checkout exact verified implementation SHA
         uses: actions/checkout@v4
         with:
           ref: ${{ env.EXPECTED_SHA }}
-
+          persist-credentials: false
       - name: Prove exact source under test
-        shell: bash
         run: |
-          set -euo pipefail
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          git diff --exit-code HEAD -- src pyproject.toml
+          mkdir -p "$PROOF_DIR"
           echo "SOURCE_SHA=$EXPECTED_SHA"
-
-      - name: Record non-secret OIDC claims for trust diagnosis
+      - name: Record non-secret OIDC claims
         uses: actions/github-script@v7
         with:
           script: |
@@ -41,89 +43,270 @@ jobs:
             core.setSecret(jwt);
             const claims = JSON.parse(Buffer.from(jwt.split('.')[1], 'base64url').toString());
             const safe = Object.fromEntries(['iss', 'aud', 'sub', 'event_name', 'ref', 'repository', 'repository_id', 'workflow_ref'].map(k => [k, claims[k]]));
+            require('fs').writeFileSync(process.env.PROOF_DIR + '/oidc-claims.json', JSON.stringify(safe, null, 2));
             core.info('OIDC_CLAIMS=' + JSON.stringify(safe));
-
-      - name: Configure AWS credentials from existing GitHub OIDC
+      - name: Configure the existing role with a restricted evidence-only session
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::873363353521:role/RippleGitHubOidcRole
           aws-region: eu-central-1
-          role-session-name: ripple-cpp-proof
+          role-session-name: ripple-cpp-proof-${{ github.run_id }}
+          allowed-account-ids: '873363353521'
+          audience: sts.amazonaws.com
           retry-max-attempts: 2
-
-      - name: Verify AWS identity
+          inline-session-policy: >-
+            {"Version":"2012-10-17","Statement":[
+              {"Effect":"Allow","Action":"sts:GetCallerIdentity","Resource":"*"},
+              {"Effect":"Allow","Action":["dynamodb:DescribeTable","dynamodb:GetItem","dynamodb:PutItem"],"Resource":"arn:aws:dynamodb:eu-central-1:873363353521:table/ripple-live-evidence-state"},
+              {"Effect":"Allow","Action":"bedrock:InvokeModel","Resource":["arn:aws:bedrock:eu-central-1:873363353521:inference-profile/eu.amazon.nova-2-lite-v1:0","arn:aws:bedrock:eu-*::foundation-model/amazon.nova-2-lite-v1:0"]},
+              {"Effect":"Allow","Action":"logs:DescribeLogGroups","Resource":"*"},
+              {"Effect":"Allow","Action":["logs:PutLogEvents","logs:GetLogEvents"],"Resource":"arn:aws:logs:eu-central-1:873363353521:log-group:/ripple/live-evidence:log-stream:github-actions"}
+            ]}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install the pinned implementation's AWS dependencies
+        run: python -m pip install -e '.[aws]'
+      - name: Exercise actual CPP adapters against live AWS and independently read back
+        env:
+          PYTHONPATH: src
         shell: bash
         run: |
           set -euo pipefail
-          ARN="$(aws sts get-caller-identity --query Arn --output text)"
-          case "$ARN" in
-            arn:aws:sts::*:assumed-role/RippleGitHubOidcRole/*) ;;
-            *) echo 'Unexpected AWS identity' >&2; exit 1 ;;
-          esac
-          echo 'AWS_OIDC=PASS'
+          cat > /tmp/ripple_cpp_live_probe.py <<'PY'
+          """Live AWS proof harness. Imports the unmodified, pinned Ripple implementation.
 
-      - name: Inspect exact role trust read-only
-        shell: bash
-        run: |
-          aws iam get-role --role-name RippleGitHubOidcRole --query 'Role.AssumeRolePolicyDocument' --output json
-
-      - name: Read-only DynamoDB proof
-        shell: bash
-        run: |
-          set -euo pipefail
-          aws dynamodb list-tables --output json >/tmp/ddb.json
-          python - <<'PY'
+          Only dedicated evidence resources are written. Household facts and human approvals
+          are controlled test fixtures; no physical-home or live Alexa claim is made.
+          """
+          from copy import deepcopy
+          import hashlib
+          import itertools
           import json
-          d=json.load(open('/tmp/ddb.json'))
-          assert isinstance(d.get('TableNames'), list)
-          print('DYNAMODB_AUTH_READ=PASS')
-          PY
+          import os
+          from pathlib import Path
+          import subprocess
+          import tempfile
+          import time
 
-      - name: Live Bedrock proof
-        shell: bash
-        run: |
-          set -euo pipefail
-          aws bedrock list-inference-profiles --type-equals SYSTEM_DEFINED --output json >/tmp/profiles.json
-          MODEL_ID="$(python - <<'PY'
-          import json
-          items=json.load(open('/tmp/profiles.json')).get('inferenceProfileSummaries', [])
-          for needle in ('nova-2-lite','nova-lite'):
-              for x in items:
-                  mid=str(x.get('inferenceProfileId') or '')
-                  if needle in mid.lower() and mid.startswith('eu.'):
-                      print(mid); raise SystemExit
-          raise SystemExit('No EU Amazon Nova Lite inference profile available')
-          PY
-          )"
-          cat >/tmp/request.json <<'JSON'
-          {"messages":[{"role":"user","content":[{"text":"Return exactly: RIPPLE_CPP_LIVE"}]}],"inferenceConfig":{"maxTokens":16,"temperature":0}}
-          JSON
-          aws bedrock-runtime invoke-model --model-id "$MODEL_ID" --content-type application/json --accept application/json --cli-binary-format raw-in-base64-out --body fileb:///tmp/request.json /tmp/response.json >/tmp/meta.json
-          python - <<'PY'
-          import json
-          b=json.load(open('/tmp/response.json'))
-          c=((b.get('output') or {}).get('message') or {}).get('content') or []
-          assert c and str(c[0].get('text') or '').strip()
-          print('BEDROCK_LIVE=PASS')
-          PY
+          import boto3
+          from botocore.config import Config
 
-      - name: Read-only CloudWatch proof
-        shell: bash
-        run: |
-          set -euo pipefail
-          aws logs describe-log-groups --log-group-name-prefix /ripple --output json >/tmp/cw.json
-          python - <<'PY'
-          import json
-          d=json.load(open('/tmp/cw.json'))
-          assert isinstance(d.get('logGroups'), list)
-          print('CLOUDWATCH_AUTH_READ=PASS')
-          PY
+          from ripple.aws.bedrock import TrackedBedrockConverseClient
+          from ripple.observability.cloudwatch import CloudWatchTraceSink
+          from ripple.promises.engine import PromiseEngine
+          from ripple.promises.examples import household
+          from ripple.promises.interpreter import BedrockIntentInterpreter
+          from ripple.promises.model import canonical, digest, evaluate
+          from ripple.promises.planner import check_invariants
+          from ripple.promises.provider import SqliteWorld
+          from ripple.promises.store import Conflict, DynamoPromiseStore
 
-      - name: Emit isolated proof status
-        run: |
-          echo 'RIPPLE_CPP_EXACT_SHA=PASS'
-          echo 'AWS_OIDC=PASS'
-          echo 'DYNAMODB_AUTH_READ=PASS'
-          echo 'BEDROCK_LIVE=PASS'
-          echo 'CLOUDWATCH_AUTH_READ=PASS'
-          echo 'NO_PRODUCTION_MUTATION=PASS'
+          SHA = "8b939542d5055f5c6c308cacdcd66667d71a0b68"
+          REGION = "eu-central-1"
+          TABLE = "ripple-live-evidence-state"
+          GROUP = "/ripple/live-evidence"
+          STREAM = "github-actions"
+          OUT = Path(os.environ["PROOF_DIR"])
+          OUT.mkdir(parents=True, exist_ok=True)
+          RUN = os.environ["GITHUB_RUN_ID"] + "-" + os.environ["GITHUB_RUN_ATTEMPT"]
+          CONFIG = Config(retries={"mode": "standard", "max_attempts": 2}, connect_timeout=10, read_timeout=60)
+
+
+          def save(name, value):
+              (OUT / name).write_text(json.dumps(value, indent=2, sort_keys=True, default=str) + "\n")
+
+
+          def client(service):
+              return boto3.client(service, region_name=REGION, config=CONFIG)
+
+
+          def require(condition, message):
+              if not condition:
+                  raise AssertionError(message)
+
+
+          class Clock:
+              value = 1000
+              def __call__(self):
+                  return self.value
+
+
+          def main():
+              require(subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip() == SHA, "Implementation SHA mismatch")
+              require(not subprocess.check_output(["git", "diff", "--name-only", "HEAD", "--", "src", "pyproject.toml"], text=True).strip(), "Implementation was modified")
+              source_files = sorted(Path("src/ripple").rglob("*.py"))
+              source_digest = hashlib.sha256("".join(str(p) + ":" + hashlib.sha256(p.read_bytes()).hexdigest() + "\n" for p in source_files).encode()).hexdigest()
+              result = {"schema": "ripple.cpp.aws.live.v1", "status": "RUNNING", "implementation_sha": SHA,
+                        "source_digest": source_digest, "run_id": RUN, "region": REGION,
+                        "scope": "Live AWS adapters and promise engine; fixture household provider/clock/approvals; no production deployment"}
+              save("result.json", result)
+              identity = client("sts").get_caller_identity()
+              require(identity["Arn"].startswith("arn:aws:sts::873363353521:assumed-role/RippleGitHubOidcRole/"), "Unexpected STS principal")
+              result["oidc"] = {"status": "PASS", "principal_arn": identity["Arn"], "request_id": identity["ResponseMetadata"]["RequestId"]}
+              print("AWS_OIDC=PASS", flush=True)
+              ddb = client("dynamodb")
+              table = ddb.describe_table(TableName=TABLE)["Table"]
+              require(table["TableStatus"] == "ACTIVE", "Dedicated evidence table is not active")
+              require({(k["AttributeName"], k["KeyType"]) for k in table["KeySchema"]} == {("pk", "HASH"), ("sk", "RANGE")}, "Unexpected evidence table keys")
+              logs = client("logs")
+              groups = logs.describe_log_groups(logGroupNamePrefix=GROUP)["logGroups"]
+              require(any(g["logGroupName"] == GROUP for g in groups), "Dedicated evidence log group missing")
+              sink = CloudWatchTraceSink(logs, GROUP, STREAM)
+
+              # Bedrock's actual IntentContract adapter, not a canned response or API ping.
+              now = int(time.time())
+              facts = {"mode": "home", "occupant_access": True, "departure_at": now + 60, "completed": False}
+              catalog = {"mode": {"values": ["home", "away"], "times": ["goal"], "reversible": True}}
+              utterance = (f"Set mode to away at departure_at, never before that time. Always preserve occupant_access as true. "
+                           f"The departure time may change; treat its present value {now + 60} as an assumption, not an invariant. "
+                           f"Ask me before every mode change; never change occupant_access. The goal time follows departure_at. "
+                           f"The promise is complete only when completed is true. Expire at UTC timestamp {now + 200}. "
+                           "Use the supplied evidence source with a 30 second freshness limit. These are all my requirements.")
+              context = {"world": facts, "catalog": catalog, "now": now, "source": "aws-proof-twin"}
+              model_id = "eu.amazon.nova-2-lite-v1:0"
+              tracked = TrackedBedrockConverseClient(region_name=REGION, client=client("bedrock-runtime"))
+              class Recorded:
+                  def converse(self, **kwargs):
+                      response = tracked.converse(**kwargs)
+                      save("bedrock-response.json", response)
+                      self.response = response
+                      return response
+              recorded = Recorded()
+              save("bedrock-input.json", {"utterance": utterance, "context": context, "model_id": model_id})
+              spec = BedrockIntentInterpreter(recorded, model_id).interpret(utterance, context)
+              save("bedrock-contract.json", spec)
+              require(not spec["questions"], "Explicit proof intent still needs clarification")
+              require(spec["authority"].get("mode") == "APPROVAL_REQUIRED", "Model lost exact approval")
+              require(spec["authority"].get("occupant_access", "FORBIDDEN") == "FORBIDDEN", "Model expanded access authority")
+              require(spec["expiry"]["at"] == now + 200, "Model changed explicit expiry")
+              semantic_cases = 0
+              for mode, access, delta in itertools.product(["home", "away"], [True, False], [-1, 0, 1]):
+                  sample = {**facts, "mode": mode, "occupant_access": access}
+                  at = facts["departure_at"] + delta
+                  observed = check_invariants(spec, sample, at)
+                  safe = not observed["violations"] and not observed["unknown"]
+                  require(safe == (access and (delta >= 0 or mode == "home")), "Model invariant meaning differs from explicit intent")
+                  semantic_cases += 1
+              moved = {**facts, "departure_at": now + 100}
+              require(evaluate(spec["goal_at"], moved, now) == now + 100, "Goal time did not preserve the mutable reference")
+              require(evaluate(spec["completion"], facts, now) is False and evaluate(spec["completion"], {**facts, "completed": True}, now) is True, "Completion meaning changed")
+              require(evaluate(spec["goal"], {**facts, "mode": "away"}, now + 60) is True, "Goal meaning changed")
+              result["bedrock"] = {"status": "PASS", "model_id": model_id, "usage": tracked.last_usage,
+                                   "request_id": recorded.response["ResponseMetadata"]["RequestId"],
+                                   "semantic_cases": semantic_cases, "contract_hash": digest(spec), "adapter": "BedrockIntentInterpreter"}
+              print("BEDROCK_INTENT_LIVE=PASS", flush=True)
+              store = DynamoPromiseStore(TABLE, client=ddb)
+              with tempfile.TemporaryDirectory() as folder:
+                  world = SqliteWorld(Path(folder) / "draft.db", source="aws-proof-twin", clock=lambda: now)
+                  world.seed(facts)
+                  engine = PromiseEngine(store, world, catalog, clock=lambda: now, trace=sink)
+                  draft_id = "cpp-model-" + RUN
+                  state = engine.draft(draft_id, "live-proof-fixture-owner", spec)
+                  require(state["phase"] == "DRAFT" and state["confirmation"] is None and state["approval"] is None, "Model minted human authority")
+                  require(DynamoPromiseStore(TABLE, client=client("dynamodb")).load(draft_id) == state, "Live model draft read-back failed")
+
+                  # Existing canonical hero, with real AWS state/trace and explicit test approvals.
+                  clock = Clock()
+                  contract, controls, initial = household(clock())
+                  provider = SqliteWorld(Path(folder) / "hero.db", source="household-twin", clock=clock)
+                  provider.seed(initial)
+                  hero_id = "cpp-hero-" + RUN
+                  owner = "live-proof-fixture-owner"
+                  engine = PromiseEngine(store, provider, controls, clock=clock, trace=sink)
+                  checkpoints = []
+                  def record(label, state):
+                      checkpoints.append({"label": label, "state": deepcopy(state), "world": provider.read()})
+                      return state
+                  state = record("draft", engine.draft(hero_id, owner, contract))
+                  stale_state = deepcopy(state)
+                  engine.confirm(hero_id, owner, 1, state["contract_hash"])
+                  try:
+                      store.save(stale_state, stale_state["revision"])
+                  except Conflict:
+                      pass
+                  else:
+                      raise AssertionError("DynamoDB accepted a stale CAS update")
+                  state = engine.reconcile(hero_id)
+                  engine.execute(hero_id)
+                  require(provider.write_count() == 0, "External effect without exact approval")
+                  engine.approve(hero_id, owner, state["binding"])
+                  old_binding = deepcopy(state["binding"])
+                  provider.change({"guest_present": False})
+                  state = record("mom_left", engine.reconcile(hero_id))
+                  try:
+                      engine.approve(hero_id, owner, old_binding)
+                  except ValueError:
+                      pass
+                  else:
+                      raise AssertionError("Stale approval accepted")
+                  engine.approve(hero_id, owner, state["binding"])
+                  record("first_verified_effect", engine.execute(hero_id))
+                  provider.change({"departure_at": 1100})
+                  state = record("future_violation_repaired", engine.reconcile(hero_id))
+                  require("departure_timing" in state["threat"]["violations"], "Missed future invariant threat")
+                  engine.approve(hero_id, owner, state["binding"])
+                  clock.value = 1060
+                  engine.execute(hero_id)
+                  require(provider.read()["facts"]["common_mode"] == "home", "Old schedule fired")
+                  clock.value = 1100
+                  require(engine.execute(hero_id)["decision"] == "WAIT_FOR_EVIDENCE", "Scheduled time substituted for occupancy evidence")
+                  provider.change({"family_departed": True})
+                  state = engine.reconcile(hero_id)
+                  engine.approve(hero_id, owner, state["binding"])
+                  state = record("second_verified_effect", engine.execute(hero_id))
+                  require(len(state["receipts"]) == 2 and all(r["verified"] for r in state["receipts"]), "Expected two verified receipts")
+                  before = provider.write_count()
+                  restarted = PromiseEngine(DynamoPromiseStore(TABLE, client=client("dynamodb")), provider, controls, clock=clock, trace=sink)
+                  for _ in range(5):
+                      restarted.execute(hero_id)
+                  require(provider.write_count() == before == 2, "Replay repeated effects")
+                  provider.change({"departure_verified": True})
+                  final = record("satisfied", restarted.reconcile(hero_id))
+                  require(final["phase"] == "SATISFIED" and final["contract_version"] == 1, "Hero did not finish with same meaning")
+                  readback = ddb.get_item(TableName=TABLE, Key=store.key(hero_id), ConsistentRead=True)
+                  require(json.loads(readback["Item"]["payload"]["S"]) == final, "Independent DynamoDB final read-back mismatch")
+                  require(all(not r["invariant_evaluation"]["violations"] and not r["invariant_evaluation"]["unknown"] for r in final["receipts"]), "Verified transition has invariant failure")
+                  save("hero-evidence.json", checkpoints)
+                  result["dynamodb"] = {"status": "PASS", "table": TABLE, "contract_id": hero_id,
+                                        "model_draft_id": draft_id, "cas_rejected_stale_update": True,
+                                        "independent_readback_request_id": readback["ResponseMetadata"]["RequestId"],
+                                        "final_revision": final["revision"], "ledger_hash": final["ledger"][-1]["hash"],
+                                        "verified_receipts": 2, "replay_attempts": 5, "extra_replay_writes": 0}
+                  print("DYNAMODB_CPP_LIVE=PASS", flush=True)
+                  # Observe the exact engine-emitted terminal ledger hash in actual CloudWatch.
+                  deadline = time.monotonic() + 30
+                  matching = []
+                  while time.monotonic() < deadline:
+                      response = logs.get_log_events(logGroupName=GROUP, logStreamName=STREAM, startFromHead=False, limit=100)
+                      for event in response["events"]:
+                          message = json.loads(event["message"])
+                          if message.get("correlation_id") == hero_id and message.get("payload", {}).get("ledger_hash") == final["ledger"][-1]["hash"]:
+                              matching.append(message)
+                      if matching:
+                          break
+                      time.sleep(1)
+                  require(matching and matching[-1]["payload"]["phase"] == "SATISFIED", "CloudWatch lacks exact terminal engine trace")
+                  save("cloudwatch-readback.json", matching)
+                  result["cloudwatch"] = {"status": "PASS", "log_group": GROUP, "log_stream": STREAM,
+                                          "correlation_id": hero_id, "readback_request_id": response["ResponseMetadata"]["RequestId"],
+                                          "terminal_ledger_hash_matches_dynamodb": True}
+                  print("CLOUDWATCH_CPP_LIVE=PASS", flush=True)
+              result["status"] = "PASS"
+              save("result.json", result)
+              print("RIPPLE_CPP_AWS_LIVE=PASS", flush=True)
+              print(json.dumps(result, sort_keys=True), flush=True)
+
+
+          if __name__ == "__main__":
+              main()
+          PY
+          python /tmp/ripple_cpp_live_probe.py
+          git diff --exit-code HEAD -- src pyproject.toml
+      - name: Preserve live evidence, including partial failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ripple-cpp-aws-live-${{ github.run_id }}-${{ github.run_attempt }}
+          path: /tmp/ripple-cpp-proof/
+          if-no-files-found: error
