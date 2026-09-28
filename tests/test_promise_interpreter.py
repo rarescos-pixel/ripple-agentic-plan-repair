@@ -148,6 +148,21 @@ def test_postfix_wire_rejects_ambiguous_and_malformed_representation(tmp_path, c
         normalize_wire(data, ctx)
 
 
+def test_live_role_confusion_shape_is_rejected_with_explicit_missing_roles(tmp_path):
+    engine, provider, clock, state = setup_engine(tmp_path)
+    ctx = context(engine, provider, clock)
+    data = contract_wire(state["contract"])
+    confused = deepcopy(data)
+    confused["goal"] = confused.pop("lifetime_completion")
+    confused["goal_at"] = confused.pop("goal_time")
+    confused.pop("desired_outcome")
+    with pytest.raises(ValueError) as exc:
+        normalize_wire(confused, ctx)
+    message = str(exc.value)
+    assert "desired_outcome" in message and "lifetime_completion" in message and "goal_time" in message
+    assert "goal" in message and "goal_at" in message
+
+
 def test_postfix_wire_round_trip_is_exact_representation_normalization(tmp_path):
     engine, provider, clock, state = setup_engine(tmp_path)
     spec, confidence = normalize_wire(contract_wire(state["contract"]), context(engine, provider, clock))
