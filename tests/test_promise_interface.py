@@ -13,6 +13,7 @@ from starlette.applications import Starlette
 
 HUMAN_KEY = "human-only-review-key-" + "x" * 32
 PROVIDER_KEY = "provider-only-write-key-" + "y" * 32
+OPS = {"eq", "ne", "lt", "le", "gt", "ge", "and", "or", "implies", "not"}
 
 
 def contract_wire(spec, confidence=.99):
@@ -35,9 +36,13 @@ def contract_wire(spec, confidence=.99):
             elif isinstance(value, str): literal_type, literal_value = "string", value
             else: raise ValueError("Unsupported fixture literal")
             nodes.append({"id": node_id, "kind": "literal", "literal_type": literal_type, "literal_value": literal_value})
-        else:
+        elif op in OPS:
             children = [add(child) for child in value]
             nodes.append({"id": node_id, "kind": "operator", "operator": op, "args": children})
+        else:
+            # Preserve the malformed operator token so the production normalizer,
+            # not the test fixture encoder, proves that it remains rejected.
+            nodes.append({"id": node_id, "kind": "operator", "operator": op, "args": []})
         return node_id
 
     def rows(items):
@@ -107,7 +112,7 @@ def test_mcp_cannot_mint_human_confirmation_or_action_approval(tmp_path):
         c.value = 100
         service.call("execute_promise", {"contract_id": "p"}, "owner")
         assert p.write_count() == 1
-        with pytest.raises(ValueError): service.call("get_promise", {"contract_id": "p", "owner": "other"}, "other")
+        with pytest.raises(ValueError): service.call("get_promise", {"contract_id": "p"}, "other")
 
 
 def test_worker_watchlist_survives_restart_and_observes_without_new_user_command(tmp_path):
