@@ -41,7 +41,7 @@ def expression_tokens(expr):
 
 
 def contract_wire(spec, confidence=.99):
-    """Deterministically encode canonical test fixtures into the untrusted postfix wire format."""
+    """Deterministically encode canonical fixtures into the untrusted role-explicit postfix wire format."""
     def rows(items):
         result = []
         for item in items:
@@ -51,17 +51,17 @@ def contract_wire(spec, confidence=.99):
         return result
 
     goal_at_tokens = expression_tokens(spec["goal_at"])
-    goal_at = goal_at_tokens[0] if len(goal_at_tokens) == 1 else {"kind": "operator", "operator": next(iter(spec["goal_at"]))}
+    goal_time = goal_at_tokens[0] if len(goal_at_tokens) == 1 else {"kind": "operator", "operator": next(iter(spec["goal_at"]))}
     data = {
-        "goal": expression_tokens(spec["goal"]),
-        "goal_at": goal_at,
+        "desired_outcome": expression_tokens(spec["goal"]),
+        "lifetime_completion": expression_tokens(spec["completion"]),
+        "goal_time": goal_time,
         "invariants": rows(spec["invariants"]),
         "assumptions": rows(spec["assumptions"]),
         "authority": [{"name": name, "permission": permission} for name, permission in spec["authority"].items()],
         "expiry_at": spec["expiry"]["at"],
         "evidence_source": spec["evidence"]["source"],
         "evidence_max_age_seconds": spec["evidence"]["max_age_seconds"],
-        "completion": expression_tokens(spec["completion"]),
         "meaning": spec["meaning"],
         "questions": list(spec["questions"]),
         "confidence": confidence,
