@@ -1725,7 +1725,7 @@
   ],
   "schema": "ripple.promise-build-gate.v1",
   "scope": "Separate HTTP digital-twin provider, SQLite durability, deterministic scenario clock; not physical Alexa/device or live Bedrock validation",
-  "source_digest": "659cc5cc1e80ce6b9edace857e501f62162767e7ac625e08ed7e245a863bc992",
+  "source_digest": "044c0446b54beae1f6935c556bc03f0985d5a6dc7abadd4481ee25206196e42e",
   "steps": [
     {
       "at": 1000,
