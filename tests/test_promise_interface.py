@@ -1,10 +1,10 @@
 from copy import deepcopy
+import json
 import pytest
 from starlette.testclient import TestClient
 
 from test_promise_acceptance import setup_engine, activate, approve
 from ripple.promises.interpreter import BedrockIntentInterpreter
-from ripple.promises.model import canonical
 from ripple.promises.interface import PromiseService, human_routes, promise_tools
 from ripple.promises.worker import PromiseWorker
 from ripple.promises.provider_http import HttpWorld, provider_app
@@ -15,11 +15,63 @@ HUMAN_KEY = "human-only-review-key-" + "x" * 32
 PROVIDER_KEY = "provider-only-write-key-" + "y" * 32
 
 
+def contract_wire(spec, confidence=.99):
+    """Deterministically encode canonical test fixtures into the untrusted wire format."""
+    nodes = []
+    counter = 0
+
+    def add(expr):
+        nonlocal counter
+        counter += 1
+        node_id = f"n{counter}"
+        op, value = next(iter(expr.items()))
+        if op == "fact":
+            nodes.append({"id": node_id, "kind": "fact", "fact": value})
+        elif op == "literal":
+            if isinstance(value, bool): literal_type, literal_value = "boolean", "true" if value else "false"
+            elif value is None: literal_type, literal_value = "null", "null"
+            elif type(value) is int: literal_type, literal_value = "integer", str(value)
+            elif type(value) is float: literal_type, literal_value = "number", json.dumps(value, allow_nan=False)
+            elif isinstance(value, str): literal_type, literal_value = "string", value
+            else: raise ValueError("Unsupported fixture literal")
+            nodes.append({"id": node_id, "kind": "literal", "literal_type": literal_type, "literal_value": literal_value})
+        else:
+            children = [add(child) for child in value]
+            nodes.append({"id": node_id, "kind": "operator", "operator": op, "args": children})
+        return node_id
+
+    def rows(items):
+        result = []
+        for item in items:
+            row = {"id": item["id"], "root": add(item["predicate"])}
+            if "label" in item: row["label"] = item["label"]
+            result.append(row)
+        return result
+
+    data = {
+        "goal_root": add(spec["goal"]),
+        "goal_at_root": add(spec["goal_at"]),
+        "invariants": rows(spec["invariants"]),
+        "assumptions": rows(spec["assumptions"]),
+        "authority": [{"name": name, "permission": permission} for name, permission in spec["authority"].items()],
+        "expiry_at": spec["expiry"]["at"],
+        "evidence_source": spec["evidence"]["source"],
+        "evidence_max_age_seconds": spec["evidence"]["max_age_seconds"],
+        "completion_root": add(spec["completion"]),
+        "meaning": spec["meaning"],
+        "questions": list(spec["questions"]),
+        "confidence": confidence,
+    }
+    if "when" in spec["expiry"]: data["expiry_when_root"] = add(spec["expiry"]["when"])
+    data["nodes"] = nodes
+    return data
+
+
 class DraftModel:
     def __init__(self, spec): self.spec = spec
     def converse(self, **kwargs):
         self.request = kwargs
-        return {"stopReason": "tool_use", "output": {"message": {"content": [{"toolUse": {"name": "draft_intent_contract", "input": {"contract_json": canonical(self.spec), "confidence": .99}}}]}}}
+        return {"stopReason": "tool_use", "output": {"message": {"content": [{"toolUse": {"name": "draft_intent_contract", "input": contract_wire(self.spec)}}]}}}
 
 
 def test_bedrock_only_drafts_and_rejects_invented_facts_and_low_confidence(tmp_path):
@@ -55,7 +107,7 @@ def test_mcp_cannot_mint_human_confirmation_or_action_approval(tmp_path):
         c.value = 100
         service.call("execute_promise", {"contract_id": "p"}, "owner")
         assert p.write_count() == 1
-        with pytest.raises(ValueError): service.call("get_promise", {"contract_id": "p"}, "other")
+        with pytest.raises(ValueError): service.call("get_promise", {"contract_id": "p", "owner": "other"}, "other")
 
 
 def test_worker_watchlist_survives_restart_and_observes_without_new_user_command(tmp_path):
