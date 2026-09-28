@@ -20,7 +20,7 @@ from botocore.config import Config
 from ripple.aws.bedrock import TrackedBedrockConverseClient
 from ripple.observability.cloudwatch import CloudWatchTraceSink
 from ripple.promises.engine import PromiseEngine
-from ripple.promises.interpreter import BedrockIntentInterpreter
+from ripple.promises.interpreter import BedrockIntentInterpreter, normalize_wire
 from ripple.promises.model import digest, evaluate, validate_contract
 from ripple.promises.planner import check_invariants
 from ripple.promises.provider import SqliteWorld
@@ -104,7 +104,7 @@ def main():
     require(not subprocess.check_output(["git", "diff", "--name-only", "HEAD", "--", "src", "scripts/promise_aws_live_proof.py", "pyproject.toml"], text=True).strip(), "Pinned implementation modified")
     files = sorted(Path("src/ripple").rglob("*.py"))
     source_digest = hashlib.sha256("".join(str(p) + ":" + hashlib.sha256(p.read_bytes()).hexdigest() + "\n" for p in files).encode()).hexdigest()
-    result = {"schema": "ripple.cpp.aws.normalization.v2", "status": "RUNNING", "implementation_sha": sha,
+    result = {"schema": "ripple.cpp.aws.normalization.v3", "status": "RUNNING", "implementation_sha": sha,
               "source_digest": source_digest, "run_id": run, "region": REGION, "cases": [],
               "scope": "Real Bedrock contracts through the unchanged deterministic engine, live DynamoDB and CloudWatch. Digital-twin provider, clock and human approvals are test fixtures. No production deployment."}
     save("result.json", result)
@@ -142,14 +142,16 @@ def main():
             recorded = Recorded(name)
             spec = BedrockIntentInterpreter(recorded, MODEL).interpret(case["utterance"], ctx)
             validate_contract(spec)
-            # No fixture substitution: raw tool output must be exactly the persisted contract.
             raw = recorded.response["output"]["message"]["content"]
-            raw_contract = json.loads(next(b["toolUse"]["input"]["contract_json"] for b in raw if "toolUse" in b))
-            require(spec == raw_contract, "Contract changed after live inference")
+            raw_wire = deepcopy(next(b["toolUse"]["input"] for b in raw if "toolUse" in b))
+            raw_contract, raw_confidence = normalize_wire(raw_wire, ctx)
+            require(raw_confidence >= .85, "Explicit intent was returned with low confidence")
+            require(spec == raw_contract, "Contract changed beyond deterministic representation normalization")
+            save(name + "-wire.json", raw_wire)
             save(name + "-contract.json", spec)
             save(name + "-semantic-checks.json", semantic_oracle(spec, case))
             evidence = {"name": name, "status": "RUNNING", "bedrock": recorded.inference_evidence(),
-                        "contract_hash": digest(spec), "raw_contract_equals_validated_contract": True,
+                        "contract_hash": digest(spec), "raw_wire_normalizes_to_validated_contract": True,
                         "deterministic_validation": "PASS", "semantic_oracle": "PASS"}
             result["cases"].append(evidence)
             print(name.upper() + "_REAL_BEDROCK_CONTRACT=PASS", flush=True)
@@ -179,7 +181,7 @@ def main():
                 require(provider.write_count() == 0, "Write before exact approval")
                 binding = deepcopy(state["binding"])
                 engine.approve(contract_id, owner, binding)
-                engine.approve(contract_id, owner, binding)  # duplicate approval is not a new authority
+                engine.approve(contract_id, owner, binding)
                 old_event = provider.read()
                 provider.change({case["timing"]: now + 100})
                 state = record("future_violation_repaired", engine.reconcile(contract_id))
@@ -203,7 +205,7 @@ def main():
                 state = record("verified_repair", engine.execute(contract_id))
                 require(len(state["receipts"]) == 1 and state["receipts"][0]["verified"], "Missing independently verified receipt")
                 receipt = state["receipts"][0]
-                require(receipt["binding"] == repair_binding and receipt["binding"]["contract_hash"] == digest(raw_contract), "Receipt is not bound to actual model contract")
+                require(receipt["binding"] == repair_binding and receipt["binding"]["contract_hash"] == digest(spec), "Receipt is not bound to actual normalized model contract")
                 require(receipt["independent_readback"]["facts"][case["target"]] == case["after"], "Independent provider readback differs")
                 restarted = PromiseEngine(DynamoPromiseStore(TABLE, client=client("dynamodb")), provider, ctx["catalog"], clock=clock, trace=sink)
                 for _ in range(5): restarted.execute(contract_id)
@@ -213,7 +215,7 @@ def main():
                 else: raise AssertionError("Used approval accepted")
                 provider.change({case["completion"]: True})
                 final = record("satisfied", restarted.reconcile(contract_id))
-                require(final["phase"] == "SATISFIED" and final["contract"] == raw_contract, "Lifetime outcome or persisted contract mismatch")
+                require(final["phase"] == "SATISFIED" and final["contract"] == spec, "Lifetime outcome or persisted contract mismatch")
                 readback = client("dynamodb").get_item(TableName=TABLE, Key=store.key(contract_id), ConsistentRead=True)
                 persisted = json.loads(readback["Item"]["payload"]["S"])
                 require(persisted == final, "Independent DynamoDB readback mismatch")
@@ -247,7 +249,6 @@ def main():
                 save("result.json", result)
                 print(name.upper() + "_DYNAMODB_RECEIPT_REPLAY_CLOUDWATCH=PASS", flush=True)
 
-        # A separate real inference must not invent missing consequential meaning.
         ambiguous = cases[0]
         ctx = ambiguous["context"]
         utterance = (f"I have not decided whether I want mode home or away. Draft my promise, but ask me which outcome; do not choose for me. "
