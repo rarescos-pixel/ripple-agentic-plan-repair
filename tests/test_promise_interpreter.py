@@ -17,7 +17,7 @@ def context(engine, provider, clock):
 
 
 @pytest.mark.parametrize("domain", ["business", "software", "household"])
-def test_model_receives_shallow_postfix_schema_and_real_authority_names(tmp_path, domain):
+def test_model_receives_shallow_role_explicit_postfix_schema_and_real_authority_names(tmp_path, domain):
     engine, provider, clock, state = setup_engine(tmp_path, domain)
     model = DraftModel(state["contract"])
     draft = BedrockIntentInterpreter(model, "test").interpret("Keep the specified promise", context(engine, provider, clock))
@@ -25,14 +25,15 @@ def test_model_receives_shallow_postfix_schema_and_real_authority_names(tmp_path
     schema = model.request["toolConfig"]["tools"][0]["toolSpec"]["inputSchema"]["json"]
     fields = schema["properties"]
     assert "contract_json" not in fields and "nodes" not in fields and "goal_root" not in fields
-    assert {"goal", "goal_at", "invariants", "assumptions", "authority", "expiry_at",
-            "evidence_source", "evidence_max_age_seconds", "completion", "meaning", "questions", "confidence"} <= set(fields)
-    token = fields["goal"]["items"]
+    assert "goal" not in fields and "goal_at" not in fields and "completion" not in fields
+    assert {"desired_outcome", "lifetime_completion", "goal_time", "invariants", "assumptions", "authority", "expiry_at",
+            "evidence_source", "evidence_max_age_seconds", "meaning", "questions", "confidence"} <= set(fields)
+    token = fields["desired_outcome"]["items"]
     assert token["additionalProperties"] is False
     assert token["properties"]["kind"]["enum"] == ["fact", "literal", "operator"]
     assert "id" not in token["properties"] and "args" not in token["properties"]
     assert set(token["properties"]["fact"]["enum"]) == set(provider.read()["facts"]) | {"$now"}
-    assert fields["goal_at"]["properties"]["kind"]["enum"] == ["fact", "literal"]
+    assert fields["goal_time"]["properties"]["kind"]["enum"] == ["fact", "literal"]
     authority = fields["authority"]["items"]
     assert authority["additionalProperties"] is False
     assert set(authority["properties"]["name"]["enum"]) == set(provider.read()["facts"])
@@ -113,7 +114,8 @@ def test_invalid_authority_evidence_and_predicates_stay_fail_closed(tmp_path, ch
 
 @pytest.mark.parametrize("case", [
     "insufficient_operands", "extra_operands", "ambiguous_token", "bad_literal",
-    "duplicate_authority", "legacy_string_transport", "legacy_graph_transport", "operator_goal_at",
+    "duplicate_authority", "legacy_string_transport", "legacy_graph_transport", "operator_goal_time",
+    "legacy_ambiguous_roles",
 ])
 def test_postfix_wire_rejects_ambiguous_and_malformed_representation(tmp_path, case):
     engine, provider, clock, state = setup_engine(tmp_path)
@@ -121,22 +123,26 @@ def test_postfix_wire_rejects_ambiguous_and_malformed_representation(tmp_path, c
     data = contract_wire(state["contract"])
 
     if case == "insufficient_operands":
-        data["goal"] = [{"kind": "operator", "operator": "eq"}]
+        data["desired_outcome"] = [{"kind": "operator", "operator": "eq"}]
     elif case == "extra_operands":
-        data["goal"] = [{"kind": "literal", "literal_type": "boolean", "literal_value": "true"},
-                        {"kind": "literal", "literal_type": "boolean", "literal_value": "false"}]
+        data["desired_outcome"] = [{"kind": "literal", "literal_type": "boolean", "literal_value": "true"},
+                                   {"kind": "literal", "literal_type": "boolean", "literal_value": "false"}]
     elif case == "ambiguous_token":
-        data["goal"][0]["literal_type"] = "string"
+        data["desired_outcome"][0]["literal_type"] = "string"
     elif case == "bad_literal":
-        data["goal"] = [{"kind": "literal", "literal_type": "boolean", "literal_value": "maybe"}]
+        data["desired_outcome"] = [{"kind": "literal", "literal_type": "boolean", "literal_value": "maybe"}]
     elif case == "duplicate_authority":
         data["authority"].append(deepcopy(data["authority"][0]))
     elif case == "legacy_string_transport":
         data = {"contract_json": "{}", "confidence": .99}
     elif case == "legacy_graph_transport":
         data = {"nodes": [], "goal_root": "mode", "confidence": .99}
+    elif case == "legacy_ambiguous_roles":
+        data["goal"] = data.pop("desired_outcome")
+        data["goal_at"] = data.pop("goal_time")
+        data.pop("lifetime_completion")
     else:
-        data["goal_at"] = {"kind": "operator", "operator": "eq"}
+        data["goal_time"] = {"kind": "operator", "operator": "eq"}
 
     with pytest.raises(ValueError):
         normalize_wire(data, ctx)
