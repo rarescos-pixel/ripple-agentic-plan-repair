@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import signal
 import socket
 import subprocess
 import sys
@@ -28,7 +29,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--screenshot", default=None)
     args = parser.parse_args()
-    from playwright.sync_api import sync_playwright
+    from playwright.sync_api import expect, sync_playwright
     with tempfile.TemporaryDirectory(prefix="ripple-review-test-") as temporary:
         root = Path(temporary)
         app_port, provider_port = port(), port()
@@ -36,7 +37,7 @@ def main():
         log_file = root / "server.log"
         with log_file.open("w") as log:
             process = subprocess.Popen([sys.executable, "scripts/promise_local_demo.py", "--port", str(app_port),
-                "--provider-port", str(provider_port), "--data-dir", str(root / "state")], stdout=log, stderr=subprocess.STDOUT)
+                "--provider-port", str(provider_port), "--data-dir", str(root / "state")], stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
             try:
                 token = None
                 for _ in range(200):
@@ -52,6 +53,7 @@ def main():
                 with sync_playwright() as playwright:
                     executable = os.getenv("RIPPLE_BROWSER_EXECUTABLE") or shutil.which("google-chrome") or shutil.which("chromium") or shutil.which("chromium-browser")
                     browser = playwright.chromium.launch(headless=True, executable_path=executable)
+                    page = None
                     try:
                         page = browser.new_page(viewport={"width": 1440, "height": 1080})
                         errors = []
@@ -62,7 +64,7 @@ def main():
                         page.locator("#content:not(.hidden)").wait_for()
                         assert "DRAFT" in page.locator("#status").inner_text()
                         page.locator("#confirm").click()
-                        page.wait_for_function("!document.querySelector('#approve').disabled")
+                        expect(page.locator("#approve")).to_be_enabled(timeout=15000)
                         page.locator("#approve").click()
 
                         def event(name):
@@ -72,12 +74,12 @@ def main():
 
                         event("guest_leaves")
                         page.locator("#refresh").click()
-                        page.wait_for_function("!document.querySelector('#approve').disabled")
+                        expect(page.locator("#approve")).to_be_enabled(timeout=15000)
                         page.locator("#approve").click()
-                        page.wait_for_function("document.querySelector('#latest').textContent.includes('independently verified')")
+                        expect(page.locator("#latest")).to_contain_text("independently verified", timeout=15000)
                         event("departure_delayed")
                         page.locator("#refresh").click()
-                        page.wait_for_function("!document.querySelector('#approve').disabled")
+                        expect(page.locator("#approve")).to_be_enabled(timeout=15000)
                         if args.screenshot:
                             Path(args.screenshot).parent.mkdir(parents=True, exist_ok=True)
                             page.screenshot(path=args.screenshot, full_page=True)
@@ -88,19 +90,30 @@ def main():
                         assert held["state"]["decision"] == "WAIT_FOR_EVIDENCE"
                         event("family_departs")
                         page.locator("#refresh").click()
-                        page.wait_for_function("!document.querySelector('#approve').disabled")
+                        expect(page.locator("#approve")).to_be_enabled(timeout=15000)
                         page.locator("#approve").click()
-                        page.wait_for_function("document.querySelector('#metrics strong').textContent === '2'")
+                        expect(page.locator("#metrics strong").first).to_have_text("2", timeout=15000)
                         completed = event("completion")
                         assert completed["state"]["phase"] == "SATISFIED" and completed["writes"] == 2
                         page.locator("#refresh").click()
-                        page.wait_for_function("document.querySelector('#status').textContent.includes('SATISFIED')")
+                        expect(page.locator("#status")).to_contain_text("SATISFIED", timeout=15000)
                         assert errors == [], errors
                         print("PROMISE_BROWSER_GATE=PASS; meaning/action separation, two verified effects, stale-world repair, terminal read-back")
+                    except Exception:
+                        if page is not None:
+                            print("BROWSER_STATE=" + page.locator("#status").inner_text())
+                            print("BROWSER_MESSAGE=" + page.locator("#message").inner_text())
+                            if args.screenshot:
+                                Path(args.screenshot).parent.mkdir(parents=True, exist_ok=True)
+                                page.screenshot(path=args.screenshot, full_page=True)
+                        raise
                     finally:
                         browser.close()
             finally:
-                process.terminate()
+                if hasattr(os, "killpg"):
+                    try: os.killpg(process.pid, signal.SIGTERM)
+                    except ProcessLookupError: pass
+                else: process.terminate()
                 try: process.wait(timeout=5)
                 except subprocess.TimeoutExpired:
                     process.kill()
