@@ -111,50 +111,38 @@ def test_invalid_authority_evidence_and_predicates_stay_fail_closed(tmp_path, ch
     assert provider.write_count() == 0
 
 
-def test_flat_wire_rejects_graph_ambiguity_and_malformed_representation(tmp_path):
+@pytest.mark.parametrize("case", [
+    "duplicate_node", "missing_root", "unused_node", "cycle",
+    "ambiguous_node", "bad_literal", "duplicate_authority", "legacy_string_transport",
+])
+def test_flat_wire_rejects_graph_ambiguity_and_malformed_representation(tmp_path, case):
     engine, provider, clock, state = setup_engine(tmp_path)
     ctx = context(engine, provider, clock)
-    valid = contract_wire(state["contract"])
-    cases = []
+    data = contract_wire(state["contract"])
 
-    duplicate = deepcopy(valid)
-    duplicate["nodes"].append(deepcopy(duplicate["nodes"][0]))
-    cases.append(duplicate)
+    if case == "duplicate_node":
+        data["nodes"].append(deepcopy(data["nodes"][0]))
+    elif case == "missing_root":
+        data["goal_root"] = "missing-node"
+    elif case == "unused_node":
+        data["nodes"].append({"id": "unused", "kind": "literal", "literal_type": "boolean", "literal_value": "true"})
+    elif case == "cycle":
+        operator = next(node for node in data["nodes"] if node["kind"] == "operator")
+        operator["args"][0] = operator["id"]
+    elif case == "ambiguous_node":
+        fact = next(node for node in data["nodes"] if node["kind"] == "fact")
+        fact["args"] = []
+    elif case == "bad_literal":
+        literal = next(node for node in data["nodes"] if node["kind"] == "literal")
+        literal["literal_type"] = "boolean"
+        literal["literal_value"] = "maybe"
+    elif case == "duplicate_authority":
+        data["authority"].append(deepcopy(data["authority"][0]))
+    else:
+        data = {"contract_json": "{}", "confidence": .99}
 
-    missing = deepcopy(valid)
-    missing["goal_root"] = "missing-node"
-    cases.append(missing)
-
-    unused = deepcopy(valid)
-    unused["nodes"].append({"id": "unused", "kind": "literal", "literal_type": "boolean", "literal_value": "true"})
-    cases.append(unused)
-
-    cycle = deepcopy(valid)
-    operator = next(node for node in cycle["nodes"] if node["kind"] == "operator")
-    operator["args"][0] = operator["id"]
-    cases.append(cycle)
-
-    ambiguous = deepcopy(valid)
-    fact = next(node for node in ambiguous["nodes"] if node["kind"] == "fact")
-    fact["args"] = []
-    cases.append(ambiguous)
-
-    bad_literal = deepcopy(valid)
-    literal = next(node for node in bad_literal["nodes"] if node["kind"] == "literal")
-    literal["literal_type"] = "boolean"
-    literal["literal_value"] = "maybe"
-    cases.append(bad_literal)
-
-    duplicate_authority = deepcopy(valid)
-    duplicate_authority["authority"].append(deepcopy(duplicate_authority["authority"][0]))
-    cases.append(duplicate_authority)
-
-    legacy_string_transport = {"contract_json": "{}", "confidence": .99}
-    cases.append(legacy_string_transport)
-
-    for data in cases:
-        with pytest.raises(ValueError):
-            normalize_wire(data, ctx)
+    with pytest.raises(ValueError):
+        normalize_wire(data, ctx)
 
 
 def test_flat_wire_round_trip_is_exact_representation_normalization(tmp_path):
