@@ -17,22 +17,22 @@ def context(engine, provider, clock):
 
 
 @pytest.mark.parametrize("domain", ["business", "software", "household"])
-def test_model_receives_flat_typed_wire_schema_and_real_authority_names(tmp_path, domain):
+def test_model_receives_shallow_postfix_schema_and_real_authority_names(tmp_path, domain):
     engine, provider, clock, state = setup_engine(tmp_path, domain)
     model = DraftModel(state["contract"])
     draft = BedrockIntentInterpreter(model, "test").interpret("Keep the specified promise", context(engine, provider, clock))
-    assert draft == state["contract"]  # representation normalization only; no semantic replacement
+    assert draft == state["contract"]
     schema = model.request["toolConfig"]["tools"][0]["toolSpec"]["inputSchema"]["json"]
     fields = schema["properties"]
-    assert "contract_json" not in fields
-    assert {"nodes", "goal_root", "goal_at_root", "invariants", "assumptions", "authority",
-            "expiry_at", "evidence_source", "evidence_max_age_seconds", "completion_root",
-            "meaning", "questions", "confidence"} <= set(fields)
-    node = fields["nodes"]["items"]
-    assert node["additionalProperties"] is False
-    assert node["properties"]["kind"]["enum"] == ["fact", "literal", "operator"]
-    assert set(node["properties"]["fact"]["enum"]) == set(provider.read()["facts"]) | {"$now"}
-    assert node["properties"]["args"]["items"]["type"] == "string"  # non-recursive wire transport
+    assert "contract_json" not in fields and "nodes" not in fields and "goal_root" not in fields
+    assert {"goal", "goal_at", "invariants", "assumptions", "authority", "expiry_at",
+            "evidence_source", "evidence_max_age_seconds", "completion", "meaning", "questions", "confidence"} <= set(fields)
+    token = fields["goal"]["items"]
+    assert token["additionalProperties"] is False
+    assert token["properties"]["kind"]["enum"] == ["fact", "literal", "operator"]
+    assert "id" not in token["properties"] and "args" not in token["properties"]
+    assert set(token["properties"]["fact"]["enum"]) == set(provider.read()["facts"]) | {"$now"}
+    assert fields["goal_at"]["properties"]["kind"]["enum"] == ["fact", "literal"]
     authority = fields["authority"]["items"]
     assert authority["additionalProperties"] is False
     assert set(authority["properties"]["name"]["enum"]) == set(provider.read()["facts"])
@@ -42,7 +42,7 @@ def test_model_receives_flat_typed_wire_schema_and_real_authority_names(tmp_path
     assert provider.write_count() == 0
 
 
-def test_captured_live_bedrock_failures_are_still_rejected():
+def test_captured_legacy_live_bedrock_failures_are_still_rejected():
     evidence = json.loads((Path(__file__).parents[1] / "docs/PROMISE_AWS_LIVE_EVIDENCE.json").read_text())
     class Captured:
         def converse(self, **kwargs): return deepcopy(evidence["bedrock_response"])
@@ -50,7 +50,7 @@ def test_captured_live_bedrock_failures_are_still_rejected():
     with pytest.raises(ValueError):
         BedrockIntentInterpreter(Captured(), "test").interpret(request["utterance"], request["context"])
     invalid = evidence["bedrock_response"]["output"]["message"]["content"][0]["toolUse"]["input"]["contract"]
-    with pytest.raises(ValueError, match="Unsupported deterministic operator"):
+    with pytest.raises(ValueError):
         BedrockIntentInterpreter(DraftModel(invalid), "test").interpret(request["utterance"], request["context"])
 
 
@@ -68,8 +68,8 @@ def test_structurally_valid_but_ill_typed_model_predicates_are_rejected(tmp_path
     engine, provider, clock, state = setup_engine(tmp_path)
     spec = deepcopy(state["contract"])
     spec[field] = value
-    validate_contract(spec)  # structural validity alone does not imply typed meaning
-    with pytest.raises(ValueError, match="type|boolean|integer"):
+    validate_contract(spec)
+    with pytest.raises(ValueError, match="type|boolean|integer|fact or literal"):
         BedrockIntentInterpreter(DraftModel(spec), "test").interpret("x", context(engine, provider, clock))
     assert provider.write_count() == 0
 
@@ -112,40 +112,37 @@ def test_invalid_authority_evidence_and_predicates_stay_fail_closed(tmp_path, ch
 
 
 @pytest.mark.parametrize("case", [
-    "duplicate_node", "missing_root", "unused_node", "cycle",
-    "ambiguous_node", "bad_literal", "duplicate_authority", "legacy_string_transport",
+    "insufficient_operands", "extra_operands", "ambiguous_token", "bad_literal",
+    "duplicate_authority", "legacy_string_transport", "legacy_graph_transport", "operator_goal_at",
 ])
-def test_flat_wire_rejects_graph_ambiguity_and_malformed_representation(tmp_path, case):
+def test_postfix_wire_rejects_ambiguous_and_malformed_representation(tmp_path, case):
     engine, provider, clock, state = setup_engine(tmp_path)
     ctx = context(engine, provider, clock)
     data = contract_wire(state["contract"])
 
-    if case == "duplicate_node":
-        data["nodes"].append(deepcopy(data["nodes"][0]))
-    elif case == "missing_root":
-        data["goal_root"] = "missing-node"
-    elif case == "unused_node":
-        data["nodes"].append({"id": "unused", "kind": "literal", "literal_type": "boolean", "literal_value": "true"})
-    elif case == "cycle":
-        operator = next(node for node in data["nodes"] if node["kind"] == "operator")
-        operator["args"][0] = operator["id"]
-    elif case == "ambiguous_node":
-        fact = next(node for node in data["nodes"] if node["kind"] == "fact")
-        fact["args"] = []
+    if case == "insufficient_operands":
+        data["goal"] = [{"kind": "operator", "operator": "eq"}]
+    elif case == "extra_operands":
+        data["goal"] = [{"kind": "literal", "literal_type": "boolean", "literal_value": "true"},
+                        {"kind": "literal", "literal_type": "boolean", "literal_value": "false"}]
+    elif case == "ambiguous_token":
+        data["goal"][0]["literal_type"] = "string"
     elif case == "bad_literal":
-        literal = next(node for node in data["nodes"] if node["kind"] == "literal")
-        literal["literal_type"] = "boolean"
-        literal["literal_value"] = "maybe"
+        data["goal"] = [{"kind": "literal", "literal_type": "boolean", "literal_value": "maybe"}]
     elif case == "duplicate_authority":
         data["authority"].append(deepcopy(data["authority"][0]))
-    else:
+    elif case == "legacy_string_transport":
         data = {"contract_json": "{}", "confidence": .99}
+    elif case == "legacy_graph_transport":
+        data = {"nodes": [], "goal_root": "mode", "confidence": .99}
+    else:
+        data["goal_at"] = {"kind": "operator", "operator": "eq"}
 
     with pytest.raises(ValueError):
         normalize_wire(data, ctx)
 
 
-def test_flat_wire_round_trip_is_exact_representation_normalization(tmp_path):
+def test_postfix_wire_round_trip_is_exact_representation_normalization(tmp_path):
     engine, provider, clock, state = setup_engine(tmp_path)
     spec, confidence = normalize_wire(contract_wire(state["contract"]), context(engine, provider, clock))
     assert spec == state["contract"]
