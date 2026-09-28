@@ -20,8 +20,9 @@ def intent_tool(context):
 
     Each recursive expression is encoded as an independent postfix token list.
     There are no generated IDs or cross-references for the model to resolve.
-    The trusted normalizer parses postfix deterministically and the unchanged
-    canonical validator remains authoritative about the resulting contract.
+    Wire-role names deliberately distinguish the requested outcome from the
+    independent lifetime stop condition; the trusted normalizer maps those
+    names to the unchanged canonical contract and validator.
     """
     facts = sorted(set(context["world"]) | {"$now"})
     token = {
@@ -72,8 +73,18 @@ def intent_tool(context):
         "required": ["name", "permission"],
     }
     properties = {
-        "goal": {**expression, "description": "Boolean desired outcome as one complete postfix expression."},
-        "goal_at": {**atom, "description": "Fact or integer literal giving the goal timestamp. For mutable timing, use the timing fact."},
+        "desired_outcome": {
+            **expression,
+            "description": "REQUIRED requested world-state/result predicate. For 'set CONTROL to TARGET', express CONTROL == TARGET. This is not the lifetime completion/stop condition.",
+        },
+        "lifetime_completion": {
+            **expression,
+            "description": "REQUIRED independent BOOLEAN condition for when continuous promise monitoring may stop. This must not replace the requested desired outcome.",
+        },
+        "goal_time": {
+            **atom,
+            "description": "REQUIRED fact or integer literal giving when the desired outcome is due. For mutable timing, use the timing fact.",
+        },
         "invariants": {"type": "array", "minItems": 1, "maxItems": 16, "items": predicate_row,
                        "description": "Boolean requirements that must remain true, including temporal restrictions."},
         "assumptions": {"type": "array", "maxItems": 16, "items": predicate_row,
@@ -83,7 +94,6 @@ def intent_tool(context):
         "expiry_when": {**expression, "description": "Optional independent BOOLEAN expiry condition. Omit when only expiry_at was specified."},
         "evidence_source": {"type": "string", "enum": [context["source"]]},
         "evidence_max_age_seconds": {"type": "integer", "minimum": 1, "maximum": 86400},
-        "completion": {**expression, "description": "Independent BOOLEAN lifetime completion condition in postfix order."},
         "meaning": {"type": "string", "minLength": 1, "maxLength": 8000},
         "questions": {"type": "array", "maxItems": 16, "items": {"type": "string", "maxLength": 1000}},
         "confidence": {"type": "number", "minimum": 0, "maximum": 1},
@@ -102,8 +112,14 @@ Do not execute, approve, confirm meaning, or claim that a promise was preserved.
 Return exactly one draft_intent_contract tool call using the POSTFIX/RPN wire format. Never JSON-encode the whole contract into a string.
 Separate human invariants (must remain true) from assumptions (current facts that may change and trigger repair).
 Use only supplied fact names, controls and evidence source. Never infer that an absent authorized person loses access.
-If consequential meaning, expiry, completion or authority is genuinely unresolved, put the unresolved issue in questions. Never silently invent a preference.
+If consequential meaning, expiry, lifetime completion or authority is genuinely unresolved, put the unresolved issue in questions. Never silently invent a preference.
 If the human explicitly supplied all current requirements, do not ask for a future value merely because a fact may change later; changing assumptions are handled by reconciliation.
+
+ROLE SEPARATION IS MANDATORY. The tool has three different required roles and all three must be present:
+1. desired_outcome = the world state/result the human asked the system to achieve. For 'set CONTROL to TARGET', desired_outcome MUST express CONTROL == TARGET.
+2. lifetime_completion = the separate condition that says continuous monitoring may stop. For 'complete only when COMPLETE is true', lifetime_completion MUST express COMPLETE == true.
+3. goal_time = when desired_outcome is due. For a mutable timing fact TIME, goal_time is the TIME fact atom.
+Never put lifetime_completion in desired_outcome. Never omit lifetime_completion because desired_outcome exists. Before the tool call, verify these three roles are present and reflect separate clauses from the human intent unless the human explicitly made two roles identical.
 
 POSTFIX/RPN EXPRESSION FORMAT:
 Every predicate is its own tokens array. Read left to right.
@@ -117,17 +133,17 @@ Logical operands must be boolean. Ordering operands must be numeric. $now is int
 literal_value is transport text only: string is exact text; integer/number use JSON number syntax; boolean is true or false; null is null.
 
 Generic patterns below use metasyntax names only; replace them with exact supplied fact names and explicit human literals.
-Desired goal CONTROL == TARGET:
+Desired outcome CONTROL == TARGET:
   fact CONTROL, literal string TARGET, operator eq
 Mutable goal time:
-  goal_at is one fact atom for TIME, not an equality and not a tokens array.
+  goal_time is one fact atom for TIME, not an equality and not a tokens array.
 Snapshot assumption TIME == CURRENT_TIME:
   fact TIME, literal integer CURRENT_TIME, operator eq
 Temporal invariant 'never before TIME; until then keep CONTROL as CURRENT':
   fact $now, fact TIME, operator lt, fact CONTROL, literal string CURRENT, operator eq, operator implies
 Boolean protection PROTECTED == true:
   fact PROTECTED, literal boolean true, operator eq
-Completion COMPLETE == true:
+Lifetime completion COMPLETE == true:
   fact COMPLETE, literal boolean true, operator eq
 A goal time alone does not prohibit early effects. Do not hide any constraint only in meaning text.
 Do not treat the current CONTROL value as a separate assumption unless the human explicitly said that current value itself is an assumption.
@@ -233,12 +249,17 @@ def _postfix(tokens, context):
 def normalize_wire(data, context):
     """Map shallow postfix wire data to canonical structure without guessing meaning."""
     required = {
-        "goal", "goal_at", "invariants", "assumptions", "authority", "expiry_at",
-        "evidence_source", "evidence_max_age_seconds", "completion", "meaning", "questions", "confidence",
+        "desired_outcome", "lifetime_completion", "goal_time", "invariants", "assumptions",
+        "authority", "expiry_at", "evidence_source", "evidence_max_age_seconds",
+        "meaning", "questions", "confidence",
     }
     allowed = required | {"expiry_when"}
-    if not isinstance(data, dict) or not required <= set(data) <= allowed:
-        raise ValueError("Invalid model draft fields")
+    if not isinstance(data, dict):
+        raise ValueError("Model draft must be an object")
+    missing = sorted(required - set(data))
+    unexpected = sorted(set(data) - allowed)
+    if missing or unexpected:
+        raise ValueError(f"Invalid model draft fields; missing={missing}; unexpected={unexpected}")
     confidence = data["confidence"]
     if type(confidence) not in (int, float) or not math.isfinite(confidence) or not 0 <= confidence <= 1:
         raise ValueError("Invalid model draft confidence")
@@ -289,14 +310,14 @@ def normalize_wire(data, context):
         raise ValueError("Invalid clarification questions")
 
     spec = {
-        "goal": _postfix(data["goal"], context),
-        "goal_at": _atom(data["goal_at"], context),
+        "goal": _postfix(data["desired_outcome"], context),
+        "goal_at": _atom(data["goal_time"], context),
         "invariants": rows(data["invariants"], "invariant", minimum=1),
         "assumptions": rows(data["assumptions"], "assumption", minimum=0),
         "authority": authority,
         "expiry": {"at": data["expiry_at"]},
         "evidence": {"source": data["evidence_source"], "max_age_seconds": max_age},
-        "completion": _postfix(data["completion"], context),
+        "completion": _postfix(data["lifetime_completion"], context),
         "meaning": meaning,
         "questions": list(questions),
     }
