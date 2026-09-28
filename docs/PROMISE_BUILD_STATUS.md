@@ -26,6 +26,11 @@ Promise Preservation, not a new product proposal or a claim of contest readiness
   model. MCP user tokens cannot access the
   separate human confirmation/approval route. Draft clarification is supported.
 - A local human review experience is runnable after the core evidence gate.
+- AWS access and service I/O now pass live for exact implementation `8b93954`:
+  OIDC/STS, Bedrock invocation, the actual DynamoDB promise store and CloudWatch
+  terminal trace read-back. See [the separate live proof](PROMISE_AWS_LIVE_PROOF.md).
+  That test also found a real model-contract schema failure, so natural-language
+  CPP readiness remains blocked despite successful AWS access.
 
 Exact states, bindings, read-backs, receipts, projections and ledger hashes are in
 [`PROMISE_BUILD_EVIDENCE.json`](PROMISE_BUILD_EVIDENCE.json). Metrics are calculated
@@ -73,24 +78,27 @@ goal maintenance after its deadline, ledger hashes and session-independent MCP.
 
 | Gate | Concrete completion evidence |
 | --- | --- |
-| Live Bedrock intent normalization | Real model output for the hero and ambiguous/corrected intents; validated contracts and human review, no canned normalization |
-| Live AWS persistence and traces | New promise keys, CAS/restart behavior and CloudWatch events from an isolated runtime at the exact feature SHA |
+| Live Bedrock intent normalization | FAIL on live Nova 2 Lite and Nova Lite: invalid expression/authority structure; fix schema and validate at a new implementation SHA |
+| Live AWS persistence and traces | PASS in isolated GitHub Actions at `8b93954`: new promise key, stale CAS rejection, reconstruction/replay and matching final CloudWatch trace; deployed promise runtime still pending |
 | Alexa+ host experience | Account-linked real session, tool discovery, meaningful clarification, cross-session status and the separate approval handoff demonstrated on the target host |
 | Real device/provider semantics | Verified adapter capabilities and independent physical/provider read-back; otherwise explicitly submit as a digital-twin demonstration |
 | New sub-three-minute video | Actual new flow captured; distinguish live operations, twin facts and normalization fixtures on screen |
 | Final submission/evaluator audit | README/add-on/submission/video aligned to the new product; evidence for all four criteria without claiming best-in-field or a win probability |
 
 The existing AWS deploy workflows are tied to canonical `main` and contain live
-infrastructure mutations. This feature branch does not edit or run those workflows,
-alter IAM trust, migrate tables, merge itself or activate the new path in production.
+infrastructure mutations. They remain untouched. A separate evidence-only workflow
+on `main` uses the already-authorized OIDC subject while checking out the fixed
+feature SHA. It does not alter IAM trust, migrate tables, merge the application or
+activate the new path in production.
 The old polished video and AWS evidence remain baseline assets, not proof that the
 new product has passed these release gates.
 
 ## Next implementation order
 
-1. Verify this branch's full CI and review the exact delta.
-2. Run the new normalization and durability path in an isolated AWS environment;
-   resolve any real model ambiguity before collecting the hero recording.
+1. Fix the live-discovered model-contract schema failure with a controlled delta;
+   keep the strict deterministic validator and preserve the failed live evidence.
+2. Validate the corrected normalization at its new exact SHA against real Bedrock,
+   then connect it to the already-proven live durability/trace path.
 3. Verify the target Alexa host and chosen conditional provider. Preserve the
    current safe failure behavior wherever a provider lacks atomic guarantees.
 4. Capture the 2:45 demonstration below, update submission surfaces and run the
