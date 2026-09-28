@@ -51,14 +51,13 @@ jobs:
           role-to-assume: arn:aws:iam::873363353521:role/RippleGitHubOidcRole
           aws-region: eu-central-1
           role-session-name: ripple-cpp-proof-${{ github.run_id }}
-          allowed-account-ids: '873363353521'
           audience: sts.amazonaws.com
           retry-max-attempts: 2
           inline-session-policy: >-
             {"Version":"2012-10-17","Statement":[
               {"Effect":"Allow","Action":"sts:GetCallerIdentity","Resource":"*"},
               {"Effect":"Allow","Action":["dynamodb:DescribeTable","dynamodb:GetItem","dynamodb:PutItem"],"Resource":"arn:aws:dynamodb:eu-central-1:873363353521:table/ripple-live-evidence-state"},
-              {"Effect":"Allow","Action":"bedrock:InvokeModel","Resource":["arn:aws:bedrock:eu-central-1:873363353521:inference-profile/eu.amazon.nova-2-lite-v1:0","arn:aws:bedrock:eu-*::foundation-model/amazon.nova-2-lite-v1:0"]},
+              {"Effect":"Allow","Action":"bedrock:InvokeModel","Resource":["arn:aws:bedrock:eu-central-1:873363353521:inference-profile/eu.amazon.nova-lite-v1:0","arn:aws:bedrock:eu-*::foundation-model/amazon.nova-lite-v1:0"]},
               {"Effect":"Allow","Action":"logs:DescribeLogGroups","Resource":"*"},
               {"Effect":"Allow","Action":["logs:PutLogEvents","logs:GetLogEvents"],"Resource":"arn:aws:logs:eu-central-1:873363353521:log-group:/ripple/live-evidence:log-stream:github-actions"}
             ]}
@@ -164,7 +163,7 @@ jobs:
                            f"The promise is complete only when completed is true. Expire at UTC timestamp {now + 200}. "
                            "Use the supplied evidence source with a 30 second freshness limit. These are all my requirements.")
               context = {"world": facts, "catalog": catalog, "now": now, "source": "aws-proof-twin"}
-              model_id = "eu.amazon.nova-2-lite-v1:0"
+              model_id = "eu.amazon.nova-lite-v1:0"
               tracked = TrackedBedrockConverseClient(region_name=REGION, client=client("bedrock-runtime"))
               class Recorded:
                   def converse(self, **kwargs):
