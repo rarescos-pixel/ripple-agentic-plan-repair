@@ -144,7 +144,7 @@ def main():
             validate_contract(spec)
             # No fixture substitution: raw tool output must be exactly the persisted contract.
             raw = recorded.response["output"]["message"]["content"]
-            raw_contract = next(b["toolUse"]["input"]["contract"] for b in raw if "toolUse" in b)
+            raw_contract = json.loads(next(b["toolUse"]["input"]["contract_json"] for b in raw if "toolUse" in b))
             require(spec == raw_contract, "Contract changed after live inference")
             save(name + "-contract.json", spec)
             save(name + "-semantic-checks.json", semantic_oracle(spec, case))

@@ -7,7 +7,7 @@ import pytest
 
 from test_promise_acceptance import setup_engine
 from test_promise_interface import DraftModel
-from ripple.promises.interpreter import BedrockIntentInterpreter
+from ripple.promises.interpreter import BedrockIntentInterpreter, decode_contract
 from ripple.promises.model import validate_contract
 
 
@@ -23,7 +23,9 @@ def test_model_receives_canonical_typed_schema_and_real_authority_names(tmp_path
     draft = BedrockIntentInterpreter(model, "test").interpret("Keep the specified promise", context(engine, provider, clock))
     assert draft == state["contract"]  # no post-hoc contract replacement or coercion
     schema = model.request["toolConfig"]["tools"][0]["toolSpec"]["inputSchema"]["json"]
-    contract = schema["properties"]["contract"]
+    assert set(schema["properties"]) == {"contract_json", "confidence"}
+    assert schema["properties"]["contract_json"]["type"] == "string"
+    contract = json.loads(model.request["system"][0]["text"].split("\nCONTRACT_SCHEMA=")[1])
     assert set(contract["required"]) == set(draft)
     fields = contract["properties"]
     assert fields["goal_at"]["properties"]["literal"]["type"] == "integer"
@@ -43,8 +45,12 @@ def test_captured_live_bedrock_failure_is_still_rejected():
     class Captured:
         def converse(self, **kwargs): return deepcopy(evidence["bedrock_response"])
     request = evidence["bedrock_request"]
-    with pytest.raises(ValueError, match="Unsupported deterministic operator"):
+    with pytest.raises(ValueError):
         BedrockIntentInterpreter(Captured(), "test").interpret(request["utterance"], request["context"])
+    # Encoding that same malformed AST in the new transport cannot rescue it.
+    invalid = evidence["bedrock_response"]["output"]["message"]["content"][0]["toolUse"]["input"]["contract"]
+    with pytest.raises(ValueError, match="Unsupported deterministic operator"):
+        BedrockIntentInterpreter(DraftModel(invalid), "test").interpret(request["utterance"], request["context"])
 
 
 @pytest.mark.parametrize("field,value", [
@@ -76,7 +82,7 @@ def test_predicate_collections_require_boolean_meaning(tmp_path, collection):
         BedrockIntentInterpreter(DraftModel(spec), "test").interpret("x", context(engine, provider, clock))
 
 
-@pytest.mark.parametrize("stop", ["max_tokens", "guardrail_intervened", "end_turn"])
+@pytest.mark.parametrize("stop", ["max_tokens", "guardrail_intervened", "end_turn", "malformed_tool_use", None])
 def test_incomplete_or_non_tool_response_cannot_become_a_contract(tmp_path, stop):
     engine, provider, clock, state = setup_engine(tmp_path)
     class Interrupted(DraftModel):
@@ -102,3 +108,13 @@ def test_invalid_authority_evidence_and_predicates_stay_fail_closed(tmp_path, ch
     with pytest.raises(ValueError):
         BedrockIntentInterpreter(DraftModel(spec), "test").interpret("x", context(engine, provider, clock))
     assert provider.write_count() == 0
+
+
+@pytest.mark.parametrize("encoded", [
+    '{"goal":true,"goal":false}',
+    '{"nested":{"x":1,"x":2}}',
+    '{"literal":NaN}', '{"literal":Infinity}',
+    '```json\n{}\n```', '{} trailing', '', {},
+])
+def test_json_transport_does_not_repair_malformed_or_ambiguous_data(encoded):
+    with pytest.raises(ValueError): decode_contract(encoded)

@@ -4,6 +4,7 @@ from starlette.testclient import TestClient
 
 from test_promise_acceptance import setup_engine, activate, approve
 from ripple.promises.interpreter import BedrockIntentInterpreter
+from ripple.promises.model import canonical
 from ripple.promises.interface import PromiseService, human_routes, promise_tools
 from ripple.promises.worker import PromiseWorker
 from ripple.promises.provider_http import HttpWorld, provider_app
@@ -18,7 +19,7 @@ class DraftModel:
     def __init__(self, spec): self.spec = spec
     def converse(self, **kwargs):
         self.request = kwargs
-        return {"output": {"message": {"content": [{"toolUse": {"name": "draft_intent_contract", "input": {"contract": deepcopy(self.spec), "confidence": .99}}}]}}}
+        return {"stopReason": "tool_use", "output": {"message": {"content": [{"toolUse": {"name": "draft_intent_contract", "input": {"contract_json": canonical(self.spec), "confidence": .99}}}]}}}
 
 
 def test_bedrock_only_drafts_and_rejects_invented_facts_and_low_confidence(tmp_path):

@@ -20,7 +20,10 @@ to accept the response would also have admitted wrong temporal/authority semanti
 ## Minimum fix
 
 - Supply all canonical fields, required keys, bounds, predicate structure and
-  context-specific fact/control names in the tool schema.
+  context-specific fact/control names as an explicit contract schema in the system
+  instructions. Keep the tool transport shallow: a JSON contract string plus confidence.
+  Decode JSON without defaults, alias repair or coercion; reject duplicate keys,
+  non-finite numbers and extra surrounding text before canonical validation.
 - Use actual operator-key JSON examples and distinguish integer `goal_at`, boolean
   goal/completion, mutable assumptions and continuing/temporal invariants.
 - At the model boundary, reject ill-typed operands/predicates and incomplete tool
@@ -29,9 +32,23 @@ to accept the response would also have admitted wrong temporal/authority semanti
   deterministic evaluator/validator, persistence and execution code are unchanged.
 
 The regression suite first reproduced 17 failures against the previous adapter.
-After the fix, all 196 tests pass locally, including the existing adversarial
+After the fix, all 206 tests pass locally, including the existing adversarial
 classes. The captured invalid live response still fails validation. The independent
 HTTP-provider build gate also passes. These local checks are not a live Bedrock claim.
+
+## First live rerun: correctly rejected
+
+Run [36442073394](https://github.com/rarescos-pixel/ripple-agentic-plan-repair/actions/runs/36442073394)
+for `c003702ea989eb2595f3f2176a03b53623985080` returned HTTP 200 but
+`stopReason: malformed_tool_use`, empty content and zero reported token usage.
+The proof correctly failed before any contract persistence. AWS did not expose
+the malformed intermediate tool payload, so its precise internal decoding error
+is not claimed. The deeply nested generation schema was replaced with a shallow
+JSON-string transport, following Nova
+[tool schema guidance](https://docs.aws.amazon.com/nova/latest/nova2-userguide/using-tools.html).
+The full contract schema remains generation guidance, and the deterministic validator
+remains authoritative. Both the original malformed AST and invalid/truncated
+transport responses are still rejected.
 
 ## Mandatory live closure
 

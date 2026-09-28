@@ -21,7 +21,7 @@ jobs:
     timeout-minutes: 10
     env:
       AWS_REGION: eu-central-1
-      EXPECTED_SHA: 8b939542d5055f5c6c308cacdcd66667d71a0b68
+      EXPECTED_SHA: c003702ea989eb2595f3f2176a03b53623985080
       PROOF_DIR: /tmp/ripple-cpp-proof
     steps:
       - name: Checkout exact verified implementation SHA
