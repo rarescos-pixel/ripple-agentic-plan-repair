@@ -79,21 +79,30 @@ Use only supplied fact names, controls and evidence source. Never infer that an 
 If consequential meaning, expiry, completion or authority is ambiguous, add explicit questions. Never silently invent a preference.
 Return one draft_intent_contract call. contract_json is a JSON-encoded object matching CONTRACT_SCHEMA.
 The string is only the transport encoding: do not replace predicates with prose, code or saved prompts.
+contract_json must itself be valid JSON: balance every brace/bracket, separate every object property and array item with commas, and emit no text outside that one JSON object.
 Expressions have exactly one key. Put the actual operator name in that key. Valid examples:
 {"eq":[{"literal":3},{"literal":3}]}
 {"not":[{"literal":false}]}
 {"implies":[{"literal":true},{"literal":false}]}
+{"and":[{"eq":[{"literal":1},{"literal":1}]},{"ge":[{"literal":2},{"literal":1}]}]}
 A fact reference is {"fact":"$now"}; substitute only a supplied fact name for other references.
 Never emit a key named "operator". Never put an operator name in an operand array.
 Binary operators eq, ne, lt, le, gt, ge, and, or, implies take exactly two expressions; not takes one.
-Logical operands must be boolean. Ordering operands must be numeric. $now is integer UTC seconds.
+Every item inside and/or/implies is a separate complete expression object with exactly one key. Never merge two operator keys into one expression object.
+Logical operands must be boolean. Ordering operands must be numeric. $now is integer UTC seconds, so {"fact":"$now"} alone is NEVER a logical operand.
 goal_at returns an INTEGER timestamp via fact or literal, NEVER an equality or other boolean expression.
 Keep mutable timing as a fact reference in goal_at; a snapshot equality belongs in assumptions.
 Represent every "never before", "only if" and continuing protection as an invariant predicate.
+For a constraint of the generic form "never before TIME; until then keep CONTROL as CURRENT", use this semantic shape:
+{"implies":[{"lt":[{"fact":"$now"},{"fact":"TIME"}]},{"eq":[{"fact":"CONTROL"},{"literal":"CURRENT"}]}]}
+TIME, CONTROL and CURRENT in that example are metasyntax only. Never emit those words; replace them with the exact supplied fact/control names and the literal explicitly required by the human intent.
 A goal time alone does not prohibit early effects. Do not hide any constraint solely in meaning text.
 The goal describes the requested outcome; completion is the separate explicit lifetime condition.
 Authority keys must be actual supplied fact/control names, not "control_name" or "approval_required".
 Authority values are the permission strings from the schema, not booleans.
+If the human explicitly says never change a supplied fact/control, set that exact authority entry to FORBIDDEN. OBSERVE does not satisfy an explicit no-change prohibition.
+If the human explicitly says ask before every change to a controllable name, set that authority entry to APPROVAL_REQUIRED unless the same name is explicitly FORBIDDEN.
+These authority values describe only the envelope; they are never action approval and never meaning confirmation.
 Use the explicit expiry and evidence freshness requirement. Questions must identify missing requirements;
 an incomplete draft must not have empty questions. Do not treat current world values as user preferences.
 Only finite scalar values. No free-form executable code. No saved-prompt substitutes for predicates.
