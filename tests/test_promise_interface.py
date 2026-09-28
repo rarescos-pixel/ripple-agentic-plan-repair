@@ -16,59 +16,62 @@ PROVIDER_KEY = "provider-only-write-key-" + "y" * 32
 OPS = {"eq", "ne", "lt", "le", "gt", "ge", "and", "or", "implies", "not"}
 
 
+def _literal_token(value):
+    if isinstance(value, bool): literal_type, literal_value = "boolean", "true" if value else "false"
+    elif value is None: literal_type, literal_value = "null", "null"
+    elif type(value) is int: literal_type, literal_value = "integer", str(value)
+    elif type(value) is float: literal_type, literal_value = "number", json.dumps(value, allow_nan=False)
+    elif isinstance(value, str): literal_type, literal_value = "string", value
+    else: raise ValueError("Unsupported fixture literal")
+    return {"kind": "literal", "literal_type": literal_type, "literal_value": literal_value}
+
+
+def expression_tokens(expr):
+    """Encode a canonical fixture expression to deterministic postfix wire tokens."""
+    op, value = next(iter(expr.items()))
+    if op == "fact": return [{"kind": "fact", "fact": value}]
+    if op == "literal": return [_literal_token(value)]
+    if op not in OPS:
+        # Preserve malformed operator names so the production normalizer proves rejection.
+        return [{"kind": "operator", "operator": op}]
+    tokens = []
+    for child in value:
+        tokens.extend(expression_tokens(child))
+    tokens.append({"kind": "operator", "operator": op})
+    return tokens
+
+
 def contract_wire(spec, confidence=.99):
-    """Deterministically encode canonical test fixtures into the untrusted wire format."""
-    nodes = []
-    counter = 0
-
-    def add(expr):
-        nonlocal counter
-        counter += 1
-        node_id = f"n{counter}"
-        op, value = next(iter(expr.items()))
-        if op == "fact":
-            nodes.append({"id": node_id, "kind": "fact", "fact": value})
-        elif op == "literal":
-            if isinstance(value, bool): literal_type, literal_value = "boolean", "true" if value else "false"
-            elif value is None: literal_type, literal_value = "null", "null"
-            elif type(value) is int: literal_type, literal_value = "integer", str(value)
-            elif type(value) is float: literal_type, literal_value = "number", json.dumps(value, allow_nan=False)
-            elif isinstance(value, str): literal_type, literal_value = "string", value
-            else: raise ValueError("Unsupported fixture literal")
-            nodes.append({"id": node_id, "kind": "literal", "literal_type": literal_type, "literal_value": literal_value})
-        elif op in OPS:
-            children = [add(child) for child in value]
-            nodes.append({"id": node_id, "kind": "operator", "operator": op, "args": children})
-        else:
-            # Preserve the malformed operator token so the production normalizer,
-            # not the test fixture encoder, proves that it remains rejected.
-            nodes.append({"id": node_id, "kind": "operator", "operator": op, "args": []})
-        return node_id
-
+    """Deterministically encode canonical test fixtures into the untrusted postfix wire format."""
     def rows(items):
         result = []
         for item in items:
-            row = {"id": item["id"], "root": add(item["predicate"])}
+            row = {"id": item["id"], "tokens": expression_tokens(item["predicate"])}
             if "label" in item: row["label"] = item["label"]
             result.append(row)
         return result
 
+    goal_at = expression_tokens(spec["goal_at"])
+    if len(goal_at) != 1:
+        # Keep malformed canonical fixture representable so production rejects it.
+        goal_at = goal_at[0]
+    else:
+        goal_at = goal_at[0]
     data = {
-        "goal_root": add(spec["goal"]),
-        "goal_at_root": add(spec["goal_at"]),
+        "goal": expression_tokens(spec["goal"]),
+        "goal_at": goal_at,
         "invariants": rows(spec["invariants"]),
         "assumptions": rows(spec["assumptions"]),
         "authority": [{"name": name, "permission": permission} for name, permission in spec["authority"].items()],
         "expiry_at": spec["expiry"]["at"],
         "evidence_source": spec["evidence"]["source"],
         "evidence_max_age_seconds": spec["evidence"]["max_age_seconds"],
-        "completion_root": add(spec["completion"]),
+        "completion": expression_tokens(spec["completion"]),
         "meaning": spec["meaning"],
         "questions": list(spec["questions"]),
         "confidence": confidence,
     }
-    if "when" in spec["expiry"]: data["expiry_when_root"] = add(spec["expiry"]["when"])
-    data["nodes"] = nodes
+    if "when" in spec["expiry"]: data["expiry_when"] = expression_tokens(spec["expiry"]["when"])
     return data
 
 
