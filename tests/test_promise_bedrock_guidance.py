@@ -3,14 +3,15 @@
 from ripple.promises.interpreter import RULES
 
 
-def test_temporal_guidance_is_generic_flat_ast_not_hero_logic():
-    assert "FLAT AST WIRE FORMAT" in RULES
+def test_temporal_guidance_is_generic_postfix_not_hero_logic():
+    assert "POSTFIX/RPN EXPRESSION FORMAT" in RULES
     assert "Never JSON-encode the whole contract into a string" in RULES
-    assert "operator and args containing only node ids" in RULES
-    assert "Do not nest expression objects inside args" in RULES
-    assert "$now fact node alone is never a logical operand" in RULES
-    assert "lt($now,TIME), eq(CONTROL,CURRENT), then implies(lt-root,eq-root)" in RULES
-    assert "TIME, CONTROL and CURRENT above are metasyntax only" in RULES
+    assert "Do not emit IDs, roots, references, args, nested expressions or unused tokens" in RULES
+    assert "$now alone is never a logical operand" in RULES
+    assert "fact $now, fact TIME, operator lt, fact CONTROL, literal string CURRENT, operator eq, operator implies" in RULES
+    assert "goal_at is one fact atom for TIME" in RULES
+    assert "Snapshot assumption TIME == CURRENT_TIME" in RULES
+    assert "Omit expiry_when unless the human separately supplied an independent boolean expiry condition" in RULES
     for hero_term in ("Mom", "mom_left", "flight_changed", "occupant_access", "departure_at"):
         assert hero_term not in RULES
 
