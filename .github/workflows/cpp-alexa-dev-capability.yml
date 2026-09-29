@@ -1,0 +1,62 @@
+name: CPP Alexa development staging capability probe
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/cpp-alexa-dev-capability.yml']
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure existing AWS OIDC role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::873363353521:role/RippleGitHubOidcRole
+          aws-region: eu-central-1
+          role-session-name: ripple-cpp-alexa-dev-capability
+          retry-max-attempts: 2
+      - name: Prove identity and inspect only capabilities
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARN="$(aws sts get-caller-identity --query Arn --output text)"
+          case "$ARN" in arn:aws:sts::*:assumed-role/RippleGitHubOidcRole/*) ;; *) exit 1;; esac
+          echo 'OIDC=PASS'
+          ROLE_ARN='arn:aws:iam::873363353521:role/RippleGitHubOidcRole'
+          ACTIONS=(
+            ecs:DescribeExpressGatewayService ecs:CreateExpressGatewayService ecs:UpdateExpressGatewayService ecs:RegisterTaskDefinition ecs:DescribeTaskDefinition ecs:CreateCluster ecs:DescribeClusters
+            ecr:GetAuthorizationToken ecr:DescribeRepositories ecr:DescribeImages ecr:BatchCheckLayerAvailability ecr:InitiateLayerUpload ecr:UploadLayerPart ecr:CompleteLayerUpload ecr:PutImage
+            ssm:GetParameter ssm:PutParameter
+            iam:GetRole iam:PassRole
+            dynamodb:DescribeTable dynamodb:GetItem dynamodb:PutItem
+            logs:DescribeLogGroups logs:PutLogEvents
+          )
+          if aws iam simulate-principal-policy --policy-source-arn "$ROLE_ARN" --action-names "${ACTIONS[@]}" --output json >/tmp/sim.json 2>/tmp/sim.err; then
+            python - <<'PY'
+          import json
+          d=json.load(open('/tmp/sim.json'))
+          for x in sorted(d['EvaluationResults'], key=lambda x:x['EvalActionName']):
+              print(f"{x['EvalActionName']}={x['EvalDecision']}")
+          PY
+            echo 'SIMULATION=PASS'
+          else
+            echo 'SIMULATION=DENIED'
+            sed -E 's/[0-9]{12}/************/g' /tmp/sim.err | head -4
+          fi
+          for name in RippleEcsTaskExecutionRole RippleEcsInfrastructureRole RippleEcsTaskRole; do
+            if aws iam get-role --role-name "$name" >/dev/null 2>&1; then echo "$name=VISIBLE"; else echo "$name=NOT_VISIBLE"; fi
+          done
+          if aws ecs describe-express-gateway-service --service-arn arn:aws:ecs:eu-central-1:873363353521:service/default/ripple-canonical >/tmp/service.json 2>/dev/null; then
+            echo 'CANONICAL_SERVICE_READ=PASS'
+            aws ecs describe-express-gateway-service --service-arn arn:aws:ecs:eu-central-1:873363353521:service/default/ripple-canonical --query 'service.status.statusCode' --output text
+          else
+            echo 'CANONICAL_SERVICE_READ=DENIED'
+          fi
+          echo 'NO_RESOURCE_MUTATION=true'
