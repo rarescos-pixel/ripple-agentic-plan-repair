@@ -1,4 +1,4 @@
-# Ripple — WOW Video Voiceover v1
+# Ripple — WOW Video Voiceover v2
 
 **Visual lock:** 2:15 / 4050 frames / 30 fps  
 **Purpose:** concise narration with deliberate silence; visible trace-bound UI carries detailed proof.
@@ -18,7 +18,7 @@ Then Mom goes out. The assumption changes, but her access remains protected. Rip
 Only the due delta executes. Ripple reads the provider back: one verified receipt, one write.
 
 **0:59–1:02.8**  
-Then departure moves. The current plan now threatens two invariants.
+Departure moves. Now two invariants are threatened.
 
 **1:02.8–1:14.8**  
 Understanding is not permission. Meaning confirmation and exact action approval are separate human authority gates.
@@ -27,7 +27,7 @@ Understanding is not permission. Meaning confirmation and exact action approval 
 The old departure time arrives. Nothing fires. The stale schedule has no authority.
 
 **1:24.8–1:36**  
-At the new time, Ripple still waits. A timetable is not proof the family left. Evidence changes the world, invalidates the old binding, and requires new approval.
+At the new time, Ripple still waits. A timetable isn’t proof the family left. New evidence changes the world — and demands fresh approval.
 
 **1:36–1:48**  
 End the conversation. Start a new session. The same contract, state, plan and receipts return.
@@ -57,6 +57,7 @@ Final on-screen line, intentionally not narrated:
 - Pause between “End the conversation.” and “Start a new session.”
 - “Two writes remain two.” should feel like a proof, not a slogan.
 - Lower intensity for the evidence-class disclosure; increase warmth only for the final thesis.
+- Natural-cadence timing check: threat line fits in ~3.38 s inside its 3.8 s window; evidence line fits in ~9.07 s inside its 11.2 s window at approximately 165 wpm.
 
 ## Audio acceptance
 
