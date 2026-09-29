@@ -41,6 +41,7 @@ def test_model_receives_shallow_role_explicit_postfix_schema_and_real_authority_
     assert "AUTONOMOUS_REVERSIBLE" not in authority["properties"]["permission"]["enum"]
     assert fields["evidence_source"]["enum"] == ["test-world"]
     assert "meaning" not in schema["required"]
+    assert "questions" not in schema["required"]
     assert "CONTRACT_SCHEMA=" not in model.request["system"][0]["text"]
     assert provider.write_count() == 0
 
@@ -178,6 +179,50 @@ def test_model_prose_is_optional_and_cannot_diverge_from_structured_meaning(tmp_
     assert "Desired outcome:" in with_prose["meaning"]
     assert "Authority:" in with_prose["meaning"]
     assert "budget_ok: forbidden" in with_prose["meaning"]
+
+
+
+def test_high_confidence_advisory_question_cannot_override_structured_contract(tmp_path):
+    engine, provider, clock, state = setup_engine(tmp_path)
+    ctx = context(engine, provider, clock)
+    data = contract_wire(state["contract"], confidence=.99)
+    data["questions"] = ["May I act autonomously even though authority requires approval?"]
+    spec, confidence = normalize_wire(data, ctx)
+    assert confidence == .99
+    assert spec["questions"] == []
+    assert spec["authority"]["delivery_route"] == "APPROVAL_REQUIRED"
+    assert spec["authority"]["budget_ok"] == "FORBIDDEN"
+
+
+def test_missing_questions_is_valid_but_low_confidence_still_requires_clarification(tmp_path):
+    engine, provider, clock, state = setup_engine(tmp_path)
+    ctx = context(engine, provider, clock)
+    data = contract_wire(state["contract"], confidence=.99)
+    data.pop("questions", None)
+    spec, confidence = normalize_wire(deepcopy(data), ctx)
+    assert confidence == .99 and spec["questions"] == []
+
+    class LowConfidenceNoQuestions(DraftModel):
+        def converse(self, **kwargs):
+            response = super().converse(**kwargs)
+            wire = response["output"]["message"]["content"][0]["toolUse"]["input"]
+            wire.pop("questions", None)
+            wire["confidence"] = .2
+            return response
+
+    draft = BedrockIntentInterpreter(LowConfidenceNoQuestions(state["contract"]), "test").interpret(
+        "Keep the specified promise", ctx
+    )
+    assert draft["questions"]
+    assert "uncertain" in draft["questions"][-1].lower()
+
+
+def test_malformed_advisory_questions_still_fail_closed(tmp_path):
+    engine, provider, clock, state = setup_engine(tmp_path)
+    data = contract_wire(state["contract"], confidence=.99)
+    data["questions"] = [123]
+    with pytest.raises(ValueError, match="clarification questions"):
+        normalize_wire(data, context(engine, provider, clock))
 
 
 def test_postfix_wire_round_trip_is_exact_representation_normalization(tmp_path):

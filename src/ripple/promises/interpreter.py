@@ -96,10 +96,11 @@ def intent_tool(context):
         "evidence_max_age_seconds": {"type": "integer", "minimum": 1, "maximum": 86400},
         "meaning": {"type": "string", "minLength": 1, "maxLength": 8000,
                     "description": "Optional non-authoritative draft prose; ignored. Human-review meaning is rendered deterministically from structured fields."},
-        "questions": {"type": "array", "maxItems": 16, "items": {"type": "string", "maxLength": 1000}},
+        "questions": {"type": "array", "maxItems": 16, "items": {"type": "string", "maxLength": 1000},
+                      "description": "Optional advisory clarification text. It is retained only when confidence is below 0.85; it never grants or changes authority."},
         "confidence": {"type": "number", "minimum": 0, "maximum": 1},
     }
-    required = [key for key in properties if key not in {"expiry_when", "meaning"}]
+    required = [key for key in properties if key not in {"expiry_when", "meaning", "questions"}]
     return {"tools": [{"toolSpec": {
         "name": "draft_intent_contract",
         "description": "Propose meaning for human review. No confirmation, approval or execution authority is granted.",
@@ -113,7 +114,8 @@ Do not execute, approve, confirm meaning, or claim that a promise was preserved.
 Return exactly one draft_intent_contract tool call using the POSTFIX/RPN wire format. Never JSON-encode the whole contract into a string.
 Separate human invariants (must remain true) from assumptions (current facts that may change and trigger repair).
 Use only supplied fact names, controls and evidence source. Never infer that an absent authorized person loses access.
-If consequential meaning, expiry, lifetime completion or authority is genuinely unresolved, put the unresolved issue in questions. Never silently invent a preference.
+If consequential meaning, expiry, lifetime completion or authority is genuinely unresolved, set confidence below 0.85 and you may describe the unresolved issue in questions. Never silently invent a preference.
+Questions are advisory prose, not authority and not a semantic field. Ripple retains them only for low-confidence drafts; high-confidence drafts still require explicit human meaning confirmation before activation.
 If the human explicitly supplied all current requirements, do not ask for a future value merely because a fact may change later; changing assumptions are handled by reconciliation.
 
 ROLE SEPARATION IS MANDATORY. The tool has three different required roles and all three must be present:
@@ -297,9 +299,9 @@ def normalize_wire(data, context):
     required = {
         "desired_outcome", "lifetime_completion", "goal_time", "invariants", "assumptions",
         "authority", "expiry_at", "evidence_source", "evidence_max_age_seconds",
-        "questions", "confidence",
+        "confidence",
     }
-    allowed = required | {"expiry_when", "meaning"}
+    allowed = required | {"expiry_when", "meaning", "questions"}
     if not isinstance(data, dict):
         raise ValueError("Model draft must be an object")
     missing = sorted(required - set(data))
@@ -352,7 +354,7 @@ def normalize_wire(data, context):
         raise ValueError("Invalid evidence freshness")
     if "meaning" in data:
         _bounded_string(data["meaning"], "meaning", maximum=8000)  # compatibility only; never authoritative
-    questions = data["questions"]
+    questions = data.get("questions", [])
     if not isinstance(questions, list) or len(questions) > 16 or any(not isinstance(q, str) or len(q) > 1000 for q in questions):
         raise ValueError("Invalid clarification questions")
 
@@ -365,7 +367,7 @@ def normalize_wire(data, context):
         "expiry": {"at": data["expiry_at"]},
         "evidence": {"source": data["evidence_source"], "max_age_seconds": max_age},
         "completion": _postfix(data["lifetime_completion"], context),
-        "questions": list(questions),
+        "questions": list(questions) if confidence < .85 else [],
     }
     if "expiry_when" in data:
         spec["expiry"]["when"] = _postfix(data["expiry_when"], context)
