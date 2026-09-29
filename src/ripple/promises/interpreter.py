@@ -94,11 +94,12 @@ def intent_tool(context):
         "expiry_when": {**expression, "description": "Optional independent BOOLEAN expiry condition. Omit when only expiry_at was specified."},
         "evidence_source": {"type": "string", "enum": [context["source"]]},
         "evidence_max_age_seconds": {"type": "integer", "minimum": 1, "maximum": 86400},
-        "meaning": {"type": "string", "minLength": 1, "maxLength": 8000},
+        "meaning": {"type": "string", "minLength": 1, "maxLength": 8000,
+                    "description": "Optional non-authoritative draft prose; ignored. Human-review meaning is rendered deterministically from structured fields."},
         "questions": {"type": "array", "maxItems": 16, "items": {"type": "string", "maxLength": 1000}},
         "confidence": {"type": "number", "minimum": 0, "maximum": 1},
     }
-    required = [key for key in properties if key != "expiry_when"]
+    required = [key for key in properties if key not in {"expiry_when", "meaning"}]
     return {"tools": [{"toolSpec": {
         "name": "draft_intent_contract",
         "description": "Propose meaning for human review. No confirmation, approval or execution authority is granted.",
@@ -146,6 +147,7 @@ Boolean protection PROTECTED == true:
 Lifetime completion COMPLETE == true:
   fact COMPLETE, literal boolean true, operator eq
 A goal time alone does not prohibit early effects. Do not hide any constraint only in meaning text.
+The optional meaning field is non-authoritative and may be omitted; Ripple renders the human-review meaning deterministically from the structured fields. Never rely on prose to carry a constraint.
 Do not treat the current CONTROL value as a separate assumption unless the human explicitly said that current value itself is an assumption.
 
 EXPIRY:
@@ -246,14 +248,58 @@ def _postfix(tokens, context):
     return stack[0]
 
 
+def _expr_text(expr):
+    # Render canonical deterministic expressions without adding semantics.
+    op, args = next(iter(expr.items()))
+    if op == "fact":
+        return args
+    if op == "literal":
+        return json.dumps(args, ensure_ascii=False, allow_nan=False)
+    if op == "not":
+        return f"not {_expr_text(args[0])}"
+    left, right = (_expr_text(arg) for arg in args)
+    if op == "implies":
+        return f"if {left} then {right}"
+    symbol = {"eq": "=", "ne": "!=", "lt": "<", "le": "<=", "gt": ">", "ge": ">=",
+              "and": "and", "or": "or"}[op]
+    return f"({left} {symbol} {right})"
+
+
+def _render_meaning(spec):
+    # Produce human-review prose only from the canonical structured contract.
+    invariants = "; ".join(_expr_text(row["predicate"]) for row in spec["invariants"])
+    assumptions = "; ".join(_expr_text(row["predicate"]) for row in spec["assumptions"])
+    authority = "; ".join(
+        f"{name}: {permission.lower().replace('_', ' ')}" for name, permission in sorted(spec["authority"].items())
+    )
+    parts = [
+        f"Desired outcome: {_expr_text(spec['goal'])}.",
+        f"Due: {_expr_text(spec['goal_at'])}.",
+        f"Must remain true: {invariants}.",
+    ]
+    if assumptions:
+        parts.append(f"Current assumptions: {assumptions}.")
+    parts.extend([
+        f"Authority: {authority}.",
+        f"Expires at UTC second {spec['expiry']['at']}.",
+    ])
+    if "when" in spec["expiry"]:
+        parts.append(f"Also expires when: {_expr_text(spec['expiry']['when'])}.")
+    parts.extend([
+        f"Monitoring completes when: {_expr_text(spec['completion'])}.",
+        f"Evidence: {spec['evidence']['source']}, maximum age {spec['evidence']['max_age_seconds']} seconds.",
+    ])
+    return _bounded_string(" ".join(parts), "deterministic meaning", maximum=8000)
+
+
 def normalize_wire(data, context):
     """Map shallow postfix wire data to canonical structure without guessing meaning."""
     required = {
         "desired_outcome", "lifetime_completion", "goal_time", "invariants", "assumptions",
         "authority", "expiry_at", "evidence_source", "evidence_max_age_seconds",
-        "meaning", "questions", "confidence",
+        "questions", "confidence",
     }
-    allowed = required | {"expiry_when"}
+    allowed = required | {"expiry_when", "meaning"}
     if not isinstance(data, dict):
         raise ValueError("Model draft must be an object")
     missing = sorted(required - set(data))
@@ -304,7 +350,8 @@ def normalize_wire(data, context):
     max_age = data["evidence_max_age_seconds"]
     if type(max_age) is not int or not 1 <= max_age <= 86400:
         raise ValueError("Invalid evidence freshness")
-    meaning = _bounded_string(data["meaning"], "meaning", maximum=8000)
+    if "meaning" in data:
+        _bounded_string(data["meaning"], "meaning", maximum=8000)  # compatibility only; never authoritative
     questions = data["questions"]
     if not isinstance(questions, list) or len(questions) > 16 or any(not isinstance(q, str) or len(q) > 1000 for q in questions):
         raise ValueError("Invalid clarification questions")
@@ -318,11 +365,11 @@ def normalize_wire(data, context):
         "expiry": {"at": data["expiry_at"]},
         "evidence": {"source": data["evidence_source"], "max_age_seconds": max_age},
         "completion": _postfix(data["lifetime_completion"], context),
-        "meaning": meaning,
         "questions": list(questions),
     }
     if "expiry_when" in data:
         spec["expiry"]["when"] = _postfix(data["expiry_when"], context)
+    spec["meaning"] = _render_meaning(spec)
     validate_contract(spec)
     return spec, confidence
 

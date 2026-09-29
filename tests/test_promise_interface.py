@@ -62,7 +62,6 @@ def contract_wire(spec, confidence=.99):
         "expiry_at": spec["expiry"]["at"],
         "evidence_source": spec["evidence"]["source"],
         "evidence_max_age_seconds": spec["evidence"]["max_age_seconds"],
-        "meaning": spec["meaning"],
         "questions": list(spec["questions"]),
         "confidence": confidence,
     }
@@ -82,7 +81,8 @@ def test_bedrock_only_drafts_and_rejects_invented_facts_and_low_confidence(tmp_p
     model = DraftModel(s["contract"])
     interpreter = BedrockIntentInterpreter(model, "test-model")
     spec = interpreter.interpret("Keep the promise", {"world": p.read()["facts"], "catalog": e.catalog, "now": c(), "source": "test-world"})
-    assert spec == s["contract"] and p.write_count() == 0
+    assert {k: v for k, v in spec.items() if k != "meaning"} == {k: v for k, v in s["contract"].items() if k != "meaning"}
+    assert spec["meaning"].startswith("Desired outcome:") and p.write_count() == 0
     assert model.request["toolConfig"]["toolChoice"] == {"tool": {"name": "draft_intent_contract"}}
     model.spec["goal"] = {"eq": [{"fact": "invented"}, {"literal": True}]}
     with pytest.raises(ValueError, match="fact"): interpreter.interpret("x", {"world": p.read()["facts"], "catalog": e.catalog, "now": c(), "source": "test-world"})
