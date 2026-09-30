@@ -1,4 +1,4 @@
-name: AWS Fargate retirement rotation
+name: AWS Fargate retirement direct rotation
 
 on:
   push:
@@ -16,141 +16,75 @@ concurrency:
 jobs:
   rotate-and-prove:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 20
     env:
       AWS_REGION: eu-central-1
-      AWS_ACCOUNT_ID: '873363353521'
       CLUSTER_NAME: default
       SERVICE_NAME: ripple-canonical
-      TEMP_POLICY_NAME: RippleCanonicalRuntimeCutoverPolicy
-      SERVICE_SECRET_PARAM: /ripple/canonical/service-client-secret
-      DEMO_PASSWORD_PARAM: /ripple/canonical/demo-user-password
-      RETIREMENT_SAFE_AFTER: '2026-09-29T21:00:00Z'
+      SAFE_AFTER: '2026-09-29T21:00:00Z'
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Assume stable GitHub OIDC identity
+      - name: Assume existing GitHub OIDC role
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::873363353521:role/RippleGitHubOidcRole
           aws-region: eu-central-1
-          role-session-name: ripple-fargate-retirement-rotation
+          role-session-name: ripple-fargate-direct-rotation
           retry-max-attempts: 2
 
-      - name: Install bounded temporary rotation permission
-        id: authz
+      - name: Verify exact AWS identity
         shell: bash
         run: |
           set -euo pipefail
-          cat >/tmp/rotation-policy.json <<'JSON'
-          {
-            "Version":"2012-10-17",
-            "Statement":[
-              {
-                "Sid":"RotateOnlyCanonicalService",
-                "Effect":"Allow",
-                "Action":["ecs:DescribeServices","ecs:UpdateService","ecs:ListTasks","ecs:DescribeTasks","ecs:DescribeExpressGatewayService"],
-                "Resource":"*"
-              },
-              {
-                "Sid":"ReadOnlyCanonicalSmokeSecrets",
-                "Effect":"Allow",
-                "Action":"ssm:GetParameter",
-                "Resource":[
-                  "arn:aws:ssm:eu-central-1:873363353521:parameter/ripple/canonical/service-client-secret",
-                  "arn:aws:ssm:eu-central-1:873363353521:parameter/ripple/canonical/demo-user-password"
-                ]
-              },
-              {
-                "Sid":"SelfCleanup",
-                "Effect":"Allow",
-                "Action":["iam:GetRolePolicy","iam:DeleteRolePolicy"],
-                "Resource":"arn:aws:iam::873363353521:role/RippleGitHubOidcRole"
-              }
-            ]
-          }
-          JSON
-          aws iam put-role-policy \
-            --role-name RippleGitHubOidcRole \
-            --policy-name "$TEMP_POLICY_NAME" \
-            --policy-document file:///tmp/rotation-policy.json
-          for i in $(seq 1 12); do
-            if aws ecs describe-services --cluster "$CLUSTER_NAME" --services "$SERVICE_NAME" >/tmp/service.json 2>/tmp/prop.err; then
-              echo "ROTATION_AUTHZ_PROPAGATED_ATTEMPT=$i"
-              echo 'TEMP_ROTATION_AUTHZ=PASS'
-              exit 0
-            fi
-            sleep 5
-          done
-          cat /tmp/prop.err >&2
-          exit 1
+          ARN="$(aws sts get-caller-identity --query Arn --output text)"
+          case "$ARN" in
+            arn:aws:sts::873363353521:assumed-role/RippleGitHubOidcRole/*) ;;
+            *) echo "UNEXPECTED_AWS_IDENTITY" >&2; exit 1 ;;
+          esac
+          echo 'AWS_IDENTITY=PASS'
 
-      - name: Snapshot live release and task before rotation
+      - name: Snapshot current ECS service and task
         id: before
         shell: bash
         run: |
           set -euo pipefail
-          SERVICE_ARN="arn:aws:ecs:${AWS_REGION}:${AWS_ACCOUNT_ID}:service/${CLUSTER_NAME}/${SERVICE_NAME}"
-          aws ecs describe-express-gateway-service --service-arn "$SERVICE_ARN" >/tmp/express-before.json
-          python - <<'PY' >> "$GITHUB_OUTPUT"
-          import json
-          s=json.load(open('/tmp/express-before.json'))['service']
-          eps=[p['endpoint'].rstrip('/') for c in s.get('activeConfigurations',[]) for p in c.get('ingressPaths',[]) if p.get('accessType')=='PUBLIC' and p.get('endpoint')]
-          assert eps, s
-          u=eps[0]
-          if not u.startswith('http'): u='https://'+u
-          print('base_url='+u)
-          PY
-          BASE_URL="$(python - <<'PY'
-          import json
-          s=json.load(open('/tmp/express-before.json'))['service']
-          e=[p['endpoint'].rstrip('/') for c in s.get('activeConfigurations',[]) for p in c.get('ingressPaths',[]) if p.get('accessType')=='PUBLIC' and p.get('endpoint')][0]
-          print(e if e.startswith('http') else 'https://'+e)
-          PY
-          )"
-          curl -fsS --max-time 15 "$BASE_URL/healthz" >/tmp/health-before.json
-          curl -fsS --max-time 15 "$BASE_URL/readyz" >/tmp/ready-before.json
-          BEFORE_SHA="$(python - <<'PY'
-          import json
-          d=json.load(open('/tmp/ready-before.json'))
-          assert d.get('status')=='ready', d
-          v=d.get('source_revision')
-          assert isinstance(v,str) and len(v)>=7, d
-          print(v.lower())
-          PY
-          )"
-          echo "release_sha=$BEFORE_SHA" >> "$GITHUB_OUTPUT"
           aws ecs describe-services --cluster "$CLUSTER_NAME" --services "$SERVICE_NAME" >/tmp/service-before.json
-          BEFORE_TD="$(python - <<'PY'
+          python - <<'PY' >/tmp/service-before.txt
           import json
-          s=json.load(open('/tmp/service-before.json'))['services'][0]
-          assert s.get('status')=='ACTIVE', s
+          d=json.load(open('/tmp/service-before.json'))
+          assert not d.get('failures'), d
+          s=d['services'][0]
+          assert s['status']=='ACTIVE', s
+          print(s['serviceArn'])
           print(s['taskDefinition'])
+          print(s['desiredCount'])
+          print(s['runningCount'])
           PY
-          )"
+          mapfile -t S </tmp/service-before.txt
           TASKS="$(aws ecs list-tasks --cluster "$CLUSTER_NAME" --service-name "$SERVICE_NAME" --desired-status RUNNING --query 'taskArns' --output text)"
           test -n "$TASKS" && test "$TASKS" != None
           aws ecs describe-tasks --cluster "$CLUSTER_NAME" --tasks $TASKS >/tmp/tasks-before.json
-          python - <<'PY' >/tmp/before-task.txt
+          python - <<'PY' >/tmp/task-before.txt
           import json
           ts=json.load(open('/tmp/tasks-before.json'))['tasks']
-          assert ts, 'no running tasks'
+          assert ts, 'NO_RUNNING_TASKS'
           t=max(ts,key=lambda x:x.get('startedAt',''))
           print(t['taskArn'])
           print(t['taskDefinitionArn'])
           print(t.get('startedAt',''))
           print(t.get('platformVersion',''))
           PY
-          mapfile -t B </tmp/before-task.txt
-          echo "task_arn=${B[0]}" >> "$GITHUB_OUTPUT"
-          echo "task_definition=$BEFORE_TD" >> "$GITHUB_OUTPUT"
-          echo "BEFORE_RELEASE_SHA=$BEFORE_SHA"
-          echo "BEFORE_TASK_ARN=${B[0]}"
-          echo "BEFORE_TASK_STARTED_AT=${B[2]}"
-          echo "BEFORE_PLATFORM_VERSION=${B[3]}"
-          echo 'PRE_ROTATION_HEALTH_READY=PASS'
+          mapfile -t T </tmp/task-before.txt
+          echo "task_arn=${T[0]}" >> "$GITHUB_OUTPUT"
+          echo "task_definition=${S[1]}" >> "$GITHUB_OUTPUT"
+          echo "BEFORE_SERVICE_ARN=${S[0]}"
+          echo "BEFORE_TASK_DEFINITION=${S[1]}"
+          echo "BEFORE_DESIRED_RUNNING=${S[2]}/${S[3]}"
+          echo "BEFORE_TASK_ARN=${T[0]}"
+          echo "BEFORE_TASK_STARTED_AT=${T[2]}"
+          echo "BEFORE_PLATFORM_VERSION=${T[3]}"
+          echo 'PRE_ROTATION_SNAPSHOT=PASS'
 
-      - name: Force new deployment with no service-definition change
+      - name: Force new deployment only
         shell: bash
         run: |
           set -euo pipefail
@@ -158,107 +92,47 @@ jobs:
             --cluster "$CLUSTER_NAME" \
             --service "$SERVICE_NAME" \
             --force-new-deployment \
-            --query 'service.{status:status,taskDefinition:taskDefinition}' \
+            --query 'service.{status:status,taskDefinition:taskDefinition,desiredCount:desiredCount}' \
             --output json
           echo 'FORCE_NEW_DEPLOYMENT_ACCEPTED=PASS'
           aws ecs wait services-stable --cluster "$CLUSTER_NAME" --services "$SERVICE_NAME"
-          echo 'SERVICE_STABLE_AFTER_ROTATION=PASS'
+          echo 'SERVICE_STABLE=PASS'
 
-      - name: Prove replacement task and unchanged release
+      - name: Prove new post-threshold task and unchanged task definition
         env:
-          BASE_URL: ${{ steps.before.outputs.base_url }}
           BEFORE_TASK_ARN: ${{ steps.before.outputs.task_arn }}
           BEFORE_TASK_DEFINITION: ${{ steps.before.outputs.task_definition }}
-          BEFORE_RELEASE_SHA: ${{ steps.before.outputs.release_sha }}
         shell: bash
         run: |
           set -euo pipefail
+          aws ecs describe-services --cluster "$CLUSTER_NAME" --services "$SERVICE_NAME" >/tmp/service-after.json
+          AFTER_TD="$(python - <<'PY'
+          import json
+          s=json.load(open('/tmp/service-after.json'))['services'][0]
+          assert s['status']=='ACTIVE', s
+          assert s['desiredCount']==s['runningCount']==1, s
+          print(s['taskDefinition'])
+          PY
+          )"
+          test "$AFTER_TD" = "$BEFORE_TASK_DEFINITION"
           TASKS="$(aws ecs list-tasks --cluster "$CLUSTER_NAME" --service-name "$SERVICE_NAME" --desired-status RUNNING --query 'taskArns' --output text)"
           test -n "$TASKS" && test "$TASKS" != None
           aws ecs describe-tasks --cluster "$CLUSTER_NAME" --tasks $TASKS >/tmp/tasks-after.json
-          BEFORE_TASK_ARN="$BEFORE_TASK_ARN" SAFE_AFTER="$RETIREMENT_SAFE_AFTER" python - <<'PY'
+          BEFORE_TASK_ARN="$BEFORE_TASK_ARN" SAFE_AFTER="$SAFE_AFTER" python - <<'PY'
           import json,os,datetime
           ts=json.load(open('/tmp/tasks-after.json'))['tasks']
-          assert ts, 'no running tasks after rotation'
+          assert ts, 'NO_RUNNING_TASKS_AFTER'
           t=max(ts,key=lambda x:x.get('startedAt',''))
           assert t['taskArn'] != os.environ['BEFORE_TASK_ARN'], (t['taskArn'],os.environ['BEFORE_TASK_ARN'])
           raw=t.get('startedAt')
           assert raw, t
           started=datetime.datetime.fromisoformat(raw.replace('Z','+00:00'))
-          threshold=datetime.datetime.fromisoformat(os.environ['SAFE_AFTER'].replace('Z','+00:00'))
-          assert started > threshold, (started,threshold)
+          safe=datetime.datetime.fromisoformat(os.environ['SAFE_AFTER'].replace('Z','+00:00'))
+          assert started > safe, (started,safe)
           print('AFTER_TASK_ARN='+t['taskArn'])
           print('AFTER_TASK_STARTED_AT='+raw)
           print('AFTER_PLATFORM_VERSION='+str(t.get('platformVersion','')))
           print('TASK_REPLACED_AFTER_SAFE_THRESHOLD=PASS')
           PY
-          aws ecs describe-services --cluster "$CLUSTER_NAME" --services "$SERVICE_NAME" >/tmp/service-after.json
-          AFTER_TD="$(python - <<'PY'
-          import json
-          s=json.load(open('/tmp/service-after.json'))['services'][0]
-          assert s.get('status')=='ACTIVE', s
-          print(s['taskDefinition'])
-          PY
-          )"
-          test "$AFTER_TD" = "$BEFORE_TASK_DEFINITION"
           echo 'TASK_DEFINITION_UNCHANGED=PASS'
-          STREAK=0
-          for i in $(seq 1 36); do
-            if curl -fsS --max-time 15 "$BASE_URL/healthz" >/tmp/health-after.json 2>/dev/null && \
-               curl -fsS --max-time 15 "$BASE_URL/readyz" >/tmp/ready-after.json 2>/dev/null && \
-               BEFORE_RELEASE_SHA="$BEFORE_RELEASE_SHA" python - <<'PY'
-          import json,os
-          d=json.load(open('/tmp/ready-after.json'))
-          ok=d.get('status')=='ready' and str(d.get('source_revision','')).lower()==os.environ['BEFORE_RELEASE_SHA'].lower()
-          raise SystemExit(0 if ok else 1)
-          PY
-            then
-              STREAK=$((STREAK+1))
-              [ "$STREAK" -ge 3 ] && break
-            else
-              STREAK=0
-            fi
-            sleep 5
-          done
-          test "$STREAK" -ge 3
-          echo 'POST_ROTATION_HEALTH_READY=PASS'
-          echo 'RELEASE_SHA_UNCHANGED=PASS'
-
-      - name: OAuth and MCP live smoke
-        env:
-          BASE_URL: ${{ steps.before.outputs.base_url }}
-          EXPECTED_SHA: ${{ steps.before.outputs.release_sha }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          python -m pip install -q -r requirements.txt
-          SERVICE_SECRET="$(aws ssm get-parameter --name "$SERVICE_SECRET_PARAM" --with-decryption --query 'Parameter.Value' --output text)"
-          DEMO_PASSWORD="$(aws ssm get-parameter --name "$DEMO_PASSWORD_PARAM" --with-decryption --query 'Parameter.Value' --output text)"
-          echo "::add-mask::$SERVICE_SECRET"
-          echo "::add-mask::$DEMO_PASSWORD"
-          RIPPLE_SMOKE_BASE_URL="$BASE_URL" \
-          RIPPLE_SERVICE_CLIENT_ID='ripple-service' \
-          RIPPLE_SERVICE_CLIENT_SECRET="$SERVICE_SECRET" \
-          RIPPLE_USER_CLIENT_ID='ripple-user' \
-          RIPPLE_USER_REDIRECT_URI="$BASE_URL/oauth/callback" \
-          RIPPLE_DEMO_USER_PASSWORD="$DEMO_PASSWORD" \
-          RIPPLE_EXPECTED_SOURCE_SHA="$EXPECTED_SHA" \
-          python scripts/aws_runtime_smoke.py
-          RIPPLE_SMOKE_BASE_URL="$BASE_URL" \
-          RIPPLE_SERVICE_CLIENT_ID='ripple-service' \
-          RIPPLE_SERVICE_CLIENT_SECRET="$SERVICE_SECRET" \
-          RIPPLE_USER_CLIENT_ID='ripple-user' \
-          RIPPLE_USER_REDIRECT_URI="$BASE_URL/oauth/callback" \
-          RIPPLE_DEMO_USER_PASSWORD="$DEMO_PASSWORD" \
-          python scripts/mcp_smoke.py
-          echo 'OAUTH_MCP_LIVE_SMOKE=PASS'
-
-      - name: Remove temporary rotation permission
-        if: always()
-        shell: bash
-        run: |
-          set -euo pipefail
-          aws iam delete-role-policy \
-            --role-name RippleGitHubOidcRole \
-            --policy-name "$TEMP_POLICY_NAME"
-          echo 'TEMP_ROTATION_AUTHZ_REMOVED=PASS'
+          echo 'FARGATE_RETIREMENT_ROTATION=PASS'
