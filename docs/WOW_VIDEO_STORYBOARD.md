@@ -1,108 +1,113 @@
 # Ripple — Canonical WOW Film Storyboard
 
-**Status:** VISUAL LOCK v4 — audio production in progress  
-**Master target:** 1920×1080, 30 fps, 16:9  
-**Runtime:** 2:15 / 4050 frames  
+**Status:** LOCKED for Gate 4 production  
+**Master:** 1920×1080, 30 fps, 16:9  
+**Target runtime:** 2:15 (4050 frames)  
 **Truth source:** `scripts/canonical_demo_trace.py` output conforming to `docs/CANONICAL_DEMO_TRACE.schema.json`  
 **Product thesis:** **The conversation is temporary. The promise is not.**
 
-This supersedes the old flight-cascade/$116→$42→$74 film. The canonical story is Continuous Promise Preservation.
+This replaces the old flight-cascade/$116→$42→$74 video as the canonical Continuous Promise Preservation film. The old video material is historical only.
 
 ## Production rules
 
-1. Product-state numbers, versions, write counts and receipt counts come from `canonical_demo_trace`; they are not typed manually into production motion code.
-2. `meaning confirmation` and `exact action approval` are separate visible authority gates.
-3. Never imply a real Alexa+ production-client session. The hackathon experience is a simulated Alexa+ host exercising real Ripple MCP behavior.
-4. The household provider is a deterministic digital twin. Never imply physical smart-home writes.
-5. No generative model creates UI text, contract content, approval content, versions, receipts or technical proof claims.
-6. The protected invariant rail remains spatially stable. Red is used only for explicit invariant violations reported by the trace.
-7. Semantic color grammar: amber = changed world/assumption or stale plan; red = explicit invariant threat; violet = Ripple contract/repair/authority; green = independently verified effect.
-8. Motion follows state changes, not decorative beats.
-9. Live AWS evidence, current exact-SHA CI evidence and digital-twin hero evidence remain visibly distinct evidence classes.
-10. Final release claims require a final claim-vs-evidence audit; any live-service claim that depends on release SHA must be rerun on the frozen candidate SHA.
+1. Product-state claims come from `canonical_demo_trace`; do not type state/version/write/receipt numbers by hand into animation code.
+2. `meaning confirmation` and `exact action approval` are visibly separate authority gates.
+3. Never imply a real Alexa+ production-client session. Label the experience **Simulated Alexa+ host · real Ripple MCP behavior** where needed.
+4. Household world/provider is a deterministic digital twin. Never imply physical smart-home writes.
+5. No generative model may create UI text, contract content, approval content, version numbers, receipts, or proof claims.
+6. No terminal scrolling as primary visual evidence.
+7. No more than three simultaneous concepts on screen. The film must read on a laptop at normal YouTube size.
+8. The invariant rail is spatially stable: repairs may reproject the plan, while protected invariants remain fixed. Never visually imply an invariant violation that the canonical trace does not report.
+9. Motion is semantic, not decorative: amber = changed assumption/world fact or a plan that no longer satisfies the confirmed promise; red = explicit invariant threat reported by the trace; blue/violet = Ripple computation/repair; green = independently verified effect.
+10. Final master must stay under 2:25 even after captions; nominal cut is 2:15.
 
-## Frame-locked visual lock v4
+## Canonical visual objects
 
-| Frames | Time | Beat | Visual / motion | Canonical truth binding |
-|---:|---:|---|---|---|
-| 0000–0449 | 0:00–0:15 | Promise → reality → human intent | `PROMISE` resolves; reality shears the plan; simulated Alexa+ shell reveals the exact hero utterance and condenses it into a Promise Contract. | Brand-only opening, then `draft` / `meaning_confirmed`; hero utterance from `src/ripple/promises/examples.py`. |
-| 0450–0989 | 0:15–0:33 | Contract anatomy + first plan | GOAL / INVARIANTS / ASSUMPTIONS / AUTHORITY become visible. Four fixture invariants lock in. World v1 and Plan v1 dock below. | `meaning_confirmed` + `initial_plan`; show trace-derived contract/world/plan versions, `REQUEST_APPROVAL`, `writes=0`, and first bound action. |
-| 0990–1439 | 0:33–0:48 | WOW #1 — Mom leaves / minimal repair | `guest_present` and `guest_stays` flip false in amber. `guest_access=true` remains fixed. The stale single departure plan is reprojected into the trace-derived two-action plan. | `mom_leaves` + `repair_after_mom_leaves`; this beat is a goal/plan mismatch, not an access-invariant violation. No action writes `guest_access`. |
-| 1440–1769 | 0:48–0:59 | First bounded effect | Exact approval binds contract v1/world v2/plan v2. Only the due `guest_heat→eco` delta executes. Independent read-back returns verified. | `repair_after_mom_leaves_approved` + `due_repair_executed`; world v2→v3, plan v2→v3, receipts 0→1, writes 0→1. |
-| 1770–1883 | 0:59–1:02.8 | WOW #2 — explicit invariant threat | Departure moves. Two rails fracture red: `departure_timing` and `occupied_security`. Access remains unthreatened. | `departure_delayed`; world v4 / plan v4 / same contract v1; violation IDs come directly from trace. |
-| 1884–2243 | 1:02.8–1:14.8 | Meaning ≠ permission | Two physically separate authority gates: MEANING CONFIRMED and ACTION APPROVAL. Provider-write counter remains unchanged while permission is absent. | Human meaning confirmation and action approval are distinct events and channels. |
-| 2244–2543 | 1:14.8–1:24.8 | Stale deadline safety | The clock reaches the old departure time after the world changed. Nothing fires. | `old_departure_no_effect`; old time derives from `initial_plan`, new time from `departure_delayed`; writes remain 1→1, common mode HOME, alarm STAY. |
-| 2544–2879 | 1:24.8–1:36 | Evidence gate → verified execution | Exact binding is shown. At the new departure, Ripple waits because `family_departed=false`. Independent evidence changes the world, invalidates the old binding, requires fresh exact approval, then execution and read-back complete. | `exact_approval` → `wait_for_departure_evidence` → `family_departed_evidence` → `final_exact_approval` → `verified_execution`; final shown values world v6 / plan v5 / receipts 2 / writes 2. |
-| 2880–3239 | 1:36–1:48 | WOW #3 — session death / reconstruction | Conversation shell dies while Promise Contract remains. A new shell forms around the same persisted promise. | `session_reconstructed`; contract v1 / world v6 / plan v5 / receipts 2 / writes 2; `session_generation=2`. |
-| 3240–3389 | 1:48–1:53 | Replay safety | A fresh replay reaches the durable receipt boundary and dissolves. | `replay_deduplicated`; writes 2→2, zero duplicate effects. |
-| 3390–4049 | 1:53–2:15 | Completion → proof classes → memory anchor | Independent completion closes the promise as SATISFIED. Then four compact proof nodes distinguish Bedrock, DynamoDB, CloudWatch and MCP evidence. Film collapses to the thesis. | `completion_verified`: contract v1 / world v7 / plan v5 / receipts 2 / writes 2. Hero household = digital twin; Alexa+ host = simulated; AWS service evidence = live gate; MCP = current exact-SHA CI conformance. |
+- **Promise Contract** — the confirmed human meaning, represented as a clean card with goal, invariant rail, assumptions and authority.
+- **Invariant Rail** — fixed horizontal/vertical spine; protected truth that must remain true.
+- **World State** — compact live-fact card, versioned.
+- **Plan Path** — the current bounded action path.
+- **Plan Mismatch** — amber discontinuity where a changed assumption/world state means the current plan no longer satisfies the confirmed promise, without claiming an invariant violation.
+- **Threat Fracture** — red discontinuity used only when the trace contains explicit invariant violations.
+- **Minimal Repair** — only the necessary plan segment(s) morph; unchanged geometry retains position.
+- **Authority Gates** — two physically separate gates: `MEANING CONFIRMED` and `ACTION APPROVED`.
+- **Receipt** — verified effect card with read-back check.
+- **Session Shell** — transient Alexa/MCP conversation container around a durable promise core.
 
-## Locked on-screen memory anchors
+## Frame-locked storyboard
 
-- **PROMISE — what must remain true**
-- **Meaning confirmed ≠ Action approved**
-- **STALE DEADLINE → 0 NEW EFFECTS**
-- **WAIT FOR EVIDENCE**
-- **EXECUTE → READ BACK → VERIFIED**
-- **REPLAY → 0 DUPLICATE EFFECTS**
-- **The session is temporary. The promise isn’t.**
-- **Tell Ripple what must remain true. Ripple keeps the promise as the world changes.**
+| Frames | Time | Beat | Visual / motion | Voiceover / on-screen copy | Trace binding / acceptance |
+|---:|---:|---|---|---|---|
+| 0000–0149 | 0:00–0:05 | Cold open | Near-black ivory field. A thin luminous line appears. One word resolves: **PROMISE**. | VO: “You gave an agent a promise.” | No product-state claim. Brand-only. |
+| 0150–0299 | 0:05–0:10 | Reality changes | A second line labeled **REALITY** crosses the first and shifts laterally. The plan path begins to shear. | VO: “Then reality changed.” | No state numbers yet. |
+| 0300–0539 | 0:10–0:18 | Human intent | Simulated Alexa+ shell appears around the real hero utterance. Text condenses into a Promise Contract. | Screen: “Make sure the house is ready — but Mom is staying here tonight.” Small label: **Simulated Alexa+ host**. VO: “Ripple does not preserve a chat turn. It preserves what the human meant.” | `draft` → `meaning_confirmed`; contract version must come from trace. |
+| 0540–0839 | 0:18–0:28 | Contract anatomy | Camera pushes into four contract layers: GOAL / INVARIANTS / ASSUMPTIONS / AUTHORITY. Invariant rail locks into place. | VO: “Meaning becomes a versioned contract: what may change, and what must remain true.” | Contract data derives from hero fixture. No invented fields. |
+| 0840–1139 | 0:28–0:38 | Initial safe plan | World v1 card docks left. Plan path forms around fixed invariant rail. A tiny approval gate is visible but not yet the focus. | Screen: **SAFE PLAN · bounded · versioned**. | `initial_plan`; show actual `world_version`, `plan_version`, decision. |
+| 1140–1439 | 0:38–0:48 | WOW #1 — world event | `guest_present: true → false` flips in amber. The assumption `guest_stays` flips false. The old plan's goal path becomes amber/incomplete; the protected-access rail remains visually unchanged. | VO: “Mom goes out. The old assumption is false — but her access is still protected.” | `mom_leaves`; trace must show `guest_stays=false`, `guest_access=true`, `world_version=2`, `plan_version=2`, and no claimed invariant violation. |
+| 1440–1769 | 0:48–0:59 | Projection mismatch | Freeze on the old-vs-needed plan difference. Amber copy: **THE OLD PLAN NO LONGER SATISFIES THE PROMISE**. Do not show red invariant collision. | VO: “Ripple projects forward and sees that the plan no longer matches the confirmed promise.” | `mom_leaves` / `repair_after_mom_leaves`; trace reports `goal=false` with no explicit violation IDs at this beat. |
+| 1770–2189 | 0:59–1:13 | WOW #2 — minimal repair | Everything desaturates except invariant rail and affected plan segment(s). Ripple computation pulses once. The old single departure action is reprojected into the trace-derived safe plan, including the newly required guest-area/security changes. Unchanged contract/invariant geometry remains pixel-stable. | Screen sequentially: **WORLD CHANGED** → **MINIMAL REPAIR** → **PROTECTED ACCESS UNCHANGED**. VO: “It repairs only what the new world requires. The protected invariant never moves.” | `repair_after_mom_leaves`; actions/binding come from trace. No action may write `guest_access`. |
+| 2190–2459 | 1:13–1:22 | Second world change — explicit threat | Departure time slides from the old target to the new one. Now the trace reports explicit invariant threats: `departure_timing` and `occupied_security`. Their rails fracture red; the independent access rail remains fixed and unthreatened. | Screen: **DEPARTURE TIMING THREATENED** / **OCCUPIED SECURITY THREATENED**. VO: “Then the departure moves. This time the old plan would violate two explicit invariants — so Ripple repairs again without rewriting the promise.” | `departure_delayed`; same `contract_version=1`; violation labels must exactly match the trace. |
+| 2460–2729 | 1:22–1:31 | Two authority gates | Contract passes through **MEANING CONFIRMED** gate. Camera pans to a distinct **ACTION APPROVAL** gate that remains closed. Provider-write counter stays at current trace value. | Screen: **Meaning confirmed ≠ Action approved**. VO: “Understanding the promise is not permission to act.” | Meaning confirmation and action approval must be distinct trace events. |
+| 2730–2969 | 1:31–1:39 | Exact approval | Binding card expands: contract/world/plan versions + exact action delta. Human approval closes only over that binding. | VO: “Approval is bound to this exact version of the world and this exact repair.” | `exact_approval`; values from binding in trace. |
+| 2970–3239 | 1:39–1:48 | Evidence before action | At the scheduled time, path reaches an evidence gate and stops. `family_departed=false` remains visible. No new green receipt appears. | Screen: **WAIT FOR EVIDENCE**. VO: “A timetable is not proof that the family actually left.” | `wait_for_departure_evidence`; `decision=WAIT_FOR_EVIDENCE`; write count must remain unchanged from `old_departure_no_effect`. |
+| 3240–3449 | 1:48–1:55 | Execute + verify | Trusted world event flips `family_departed=true`. Gate opens, exact delta executes. Receipt travels out, then a separate read-back returns green. | Screen: **EXECUTE → READ BACK → VERIFIED**. | `verified_execution`; trace-derived verified-receipt and write counts only. |
+| 3450–3719 | 1:55–2:04 | WOW #3 — session death | Entire Alexa/MCP Session Shell shatters/fades to black while the Promise Contract core remains. Big copy: **SESSION ENDED**. After a short silence: **NEW SESSION**. New shell forms around the same promise core. | VO: “The conversation ends.” Beat. “The promise doesn’t.” | `session_reconstructed`; same contract id/version, `world_version=6`, `plan_version=5`, persisted verified receipts, `session_generation=2` from trace. |
+| 3720–3869 | 2:04–2:09 | Replay safety | Execute pulse is sent again. It reaches the durable receipt boundary and dissolves. The trace-derived write counter remains unchanged. | Screen: **REPLAY → 0 DUPLICATE EFFECTS** / **WRITES 2 → 2**. | `replay_deduplicated`; write count before = after = trace value. |
+| 3870–3989 | 2:09–2:13 | Real stack proof | Four clean proof nodes appear, not logos-first: **Bedrock normalization · DynamoDB durability · CloudWatch evidence · MCP 2025-11-25**. Small footnote separates live AWS proof from simulated household provider. | VO: “The model interprets. Deterministic policy protects. Durable state and receipts prove what happened.” | Claims must remain supported by exact-SHA live evidence docs; household execution remains labelled digital twin. |
+| 3990–4049 | 2:13–2:15 | Memory anchor | Everything collapses to Ripple mark and one line. | **Tell Ripple what must remain true.** / **Ripple keeps the promise as the world changes.** | Brand statement; no new factual claim. |
 
-## Audio map for the 2:15 lock
+## Audio map
 
-- 0:05 reality change: restrained low transient.
-- 0:33 Mom leaves: dry amber tick; no alarm cue.
-- 0:48 first exact approval: heavier mechanical click.
-- 0:55 read-back: distinct verification chime.
-- 0:59 explicit threat: low sub pulse + restrained fracture texture.
-- 1:02.8 meaning gate: soft confirmation tick.
-- 1:07 action approval: separate heavier click.
-- 1:18 stale deadline: deliberately suppressed dry cue — no success sound.
-- 1:25 evidence gate: score thins.
-- ~1:32 execution/read-back: paired execution + verification cue.
-- 1:36 session ended: near-silence before reconstruction swell.
-- 1:49 replay: dry suppressed click.
-- 1:53 SATISFIED: restrained green harmonic cue.
-- ~1:59–2:03 proof nodes: four small ticks.
-- 2:08 onward: original Ripple outro bloom.
+- 0:05 world-change: low transient, no cinematic boom.
+- 0:38 assumption flip: dry amber tick + low sub pulse.
+- 0:48 projection mismatch: restrained tonal tension, not an alarm.
+- 0:59 repair: one clean rising mechanical gesture; no “AI sparkle.”
+- 1:13 explicit invariant threat: restrained red fracture cue, distinct from the earlier amber mismatch.
+- 1:22 meaning gate: soft confirmation tick.
+- 1:31 action approval: distinct heavier click.
+- 1:39 wait-for-evidence: music thins; no success sound.
+- 1:48 verified read-back: two-stage sound — execution then verification.
+- 1:55 session-ended: near-silence for ~0.4 s.
+- 2:04 replay dedupe: dry suppressed click.
+- 2:13 outro: short original Ripple sting.
 
-## Current voiceover strategy
+## Camera / motion language
 
-Narration is deliberately shorter than the full 135 seconds. Semantic pauses are part of the design. The voice must never narrate every visible field; it explains the idea while trace-bound UI supplies proof.
+- 80% orthographic/product-motion feel; no gratuitous parallax.
+- Use perspective only for Promise Contract depth and Session Shell transition.
+- Easing: predominantly custom cubic / critically damped; no bounce except tiny physical confirmation feedback.
+- Cuts should follow semantic state changes, not music beats.
+- No shot > 12 s without a meaningful state transition.
 
-## Claim boundaries
+## Claim boundary labels
 
-The film may state now:
+The final video may say:
 
-- real AWS Bedrock inference was live-proven;
-- live DynamoDB durability/CAS/replay evidence was proven;
-- live CloudWatch engine evidence/read-back was proven;
-- MCP 2025-11-25 conformance is tested on the current quality gate;
-- the hackathon-permitted simulated Alexa+ host exercises real Ripple MCP behavior;
-- the household hero provider is a deterministic digital twin;
-- meaning confirmation and exact action approval are separate authority events;
-- promise state survives conversational session replacement;
-- replay produces zero duplicate effects in the canonical hero trace.
+- real Bedrock normalization was live-proven on exact SHA evidence;
+- durable DynamoDB state/receipts/replay were live-proven;
+- CloudWatch read-back evidence was live-proven;
+- MCP 2025-11-25 compatibility is tested;
+- simulated Alexa+ host exercises real Ripple MCP behavior;
+- household provider shown in the hero film is a digital twin;
+- meaning confirmation and action approval are separate authority events;
+- session replacement does not define promise persistence.
 
-The final film must not say or imply:
+The final video must not say or imply:
 
 - a production Alexa+ client session was exercised;
 - physical smart-home devices were controlled;
 - Amazon endorsed Ripple;
-- digital-twin receipts are physical-device receipts;
-- a release-SHA live claim was rerun unless that exact proof has actually completed.
+- the digital-twin household receipts are physical-provider receipts.
 
 ## Gate 4 acceptance
 
-Gate 4 becomes PASS only when all are true:
+Gate 4 is PASS only when all are true:
 
-- final encoded master is <= 2:15 nominal narrative and < 2:25 absolute limit;
-- every product-state number/copy is trace-generated or separately evidenced;
-- no hard-coded trace number remains in production motion code;
-- all three WOW moments survive muted playback;
-- required text remains legible at 50% display scale;
+- master duration < 2:25 and nominal narrative <= 2:15;
+- every product-state number/copy is generated from the canonical trace or separately cited live evidence;
+- all three WOW moments survive muted playback and are understandable without narration;
+- at 50% display scale, all required text remains legible;
 - meaning confirmation and action approval cannot be mistaken for the same event;
-- session-reconstruction uses the same persisted promise state;
-- audio mix has no clipping and leaves VO headroom;
-- final frozen-SHA claim audit is complete;
+- session-reconstruction shot uses the same persisted promise identity and verified state;
+- no claim exceeds its evidence class;
 - final anti-hallucination/drift audit reports no stale old-product storyline.
