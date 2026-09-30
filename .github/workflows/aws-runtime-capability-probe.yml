@@ -1,3 +1,4 @@
+# fargate-retirement preflight 2026-09-30
 name: AWS canonical runtime capability probe
 
 on:
