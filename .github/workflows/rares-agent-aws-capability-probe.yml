@@ -1,0 +1,68 @@
+name: RaresAgent AWS capability probe
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/rares-agent-aws-capability-probe.yml'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Configure AWS credentials from existing GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::873363353521:role/RippleGitHubOidcRole
+          aws-region: eu-central-1
+          role-session-name: rares-agent-capability-probe
+          retry-max-attempts: 2
+
+      - name: Verify identity and inspect effective inline policies
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARN="$(aws sts get-caller-identity --query Arn --output text)"
+          echo "AWS_IDENTITY=$ARN"
+          ROLE=RippleGitHubOidcRole
+          POLICIES="$(aws iam list-role-policies --role-name "$ROLE" --query 'PolicyNames' --output text)"
+          python - <<'PY'
+          import json, subprocess
+          role='RippleGitHubOidcRole'
+          policies=subprocess.check_output(['aws','iam','list-role-policies','--role-name',role,'--query','PolicyNames','--output','json'],text=True)
+          names=json.loads(policies)
+          actions=set()
+          resources=[]
+          for name in names:
+              raw=subprocess.check_output(['aws','iam','get-role-policy','--role-name',role,'--policy-name',name,'--query','PolicyDocument','--output','json'],text=True)
+              doc=json.loads(raw)
+              for s in doc.get('Statement',[]):
+                  if s.get('Effect')!='Allow':
+                      continue
+                  a=s.get('Action',[])
+                  if isinstance(a,str): a=[a]
+                  actions.update(a)
+                  r=s.get('Resource',[])
+                  if isinstance(r,str): r=[r]
+                  resources.extend(r)
+          checks=[
+            'iam:CreateRole','iam:PutRolePolicy','iam:PassRole','iam:GetRolePolicy',
+            'dynamodb:CreateTable','dynamodb:PutItem','dynamodb:GetItem',
+            'logs:CreateLogGroup','logs:CreateLogStream','logs:PutLogEvents',
+            'lambda:CreateFunction','lambda:UpdateFunctionCode','lambda:AddPermission',
+            'apigateway:POST','bedrock:InvokeModel','bedrock:Converse'
+          ]
+          def allowed(w):
+              svc=w.split(':',1)[0]
+              return w in actions or '*' in actions or f'{svc}:*' in actions
+          for w in checks:
+              print(f'ALLOW_{w}=' + ('YES' if allowed(w) else 'NO'))
+          print('INLINE_POLICY_COUNT='+str(len(names)))
+          print('RESOURCE_SCOPE_COUNT='+str(len(set(resources))))
+          PY
