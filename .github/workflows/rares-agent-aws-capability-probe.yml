@@ -24,45 +24,51 @@ jobs:
           role-session-name: rares-agent-capability-probe
           retry-max-attempts: 2
 
-      - name: Verify identity and inspect known inline policies
+      - name: Probe actual service capabilities read-only
         shell: bash
         run: |
-          set -euo pipefail
+          set -uo pipefail
           ARN="$(aws sts get-caller-identity --query Arn --output text)"
           echo "AWS_IDENTITY=$ARN"
-          python - <<'PY'
-          import json, subprocess
-          role='RippleGitHubOidcRole'
-          names=['RippleGitHubDeployPolicy','RippleCanonicalRuntimeCutoverPolicy']
-          actions=set(); resources=[]; found=[]
-          for name in names:
-              p=subprocess.run(['aws','iam','get-role-policy','--role-name',role,'--policy-name',name,'--query','PolicyDocument','--output','json'],text=True,capture_output=True)
-              if p.returncode != 0:
-                  print(f'POLICY_{name}=UNAVAILABLE')
-                  continue
-              found.append(name)
-              doc=json.loads(p.stdout)
-              for s in doc.get('Statement',[]):
-                  if s.get('Effect')!='Allow':
-                      continue
-                  a=s.get('Action',[])
-                  if isinstance(a,str): a=[a]
-                  actions.update(a)
-                  r=s.get('Resource',[])
-                  if isinstance(r,str): r=[r]
-                  resources.extend(r)
-          checks=[
-            'iam:CreateRole','iam:PutRolePolicy','iam:PassRole','iam:GetRolePolicy',
-            'dynamodb:CreateTable','dynamodb:PutItem','dynamodb:GetItem',
-            'logs:CreateLogGroup','logs:CreateLogStream','logs:PutLogEvents',
-            'lambda:CreateFunction','lambda:UpdateFunctionCode','lambda:AddPermission',
-            'apigateway:POST','bedrock:InvokeModel','bedrock:Converse'
-          ]
-          def allowed(w):
-              svc=w.split(':',1)[0]
-              return w in actions or '*' in actions or f'{svc}:*' in actions
-          print('KNOWN_POLICIES_FOUND='+','.join(found))
-          for w in checks:
-              print(f'ALLOW_{w}=' + ('YES' if allowed(w) else 'NO'))
-          print('RESOURCE_SCOPE_COUNT='+str(len(set(resources))))
-          PY
+
+          echo '--- DynamoDB ---'
+          if aws dynamodb list-tables --max-items 5 --output json >/tmp/ddb.json 2>/tmp/ddb.err; then
+            echo 'DYNAMODB_LIST=PASS'
+          else
+            echo 'DYNAMODB_LIST=DENIED'
+            sed -E 's/[0-9]{12}/************/g' /tmp/ddb.err | head -3
+          fi
+
+          echo '--- CloudWatch Logs ---'
+          if aws logs describe-log-groups --limit 5 --output json >/tmp/logs.json 2>/tmp/logs.err; then
+            echo 'CLOUDWATCH_LOGS_LIST=PASS'
+          else
+            echo 'CLOUDWATCH_LOGS_LIST=DENIED'
+            sed -E 's/[0-9]{12}/************/g' /tmp/logs.err | head -3
+          fi
+
+          echo '--- Bedrock ---'
+          if aws bedrock list-foundation-models --region eu-central-1 --by-output-modality TEXT --output json >/tmp/bedrock.json 2>/tmp/bedrock.err; then
+            echo 'BEDROCK_LIST_MODELS=PASS'
+          else
+            echo 'BEDROCK_LIST_MODELS=DENIED'
+            sed -E 's/[0-9]{12}/************/g' /tmp/bedrock.err | head -3
+          fi
+
+          echo '--- Lambda ---'
+          if aws lambda list-functions --max-items 5 --output json >/tmp/lambda.json 2>/tmp/lambda.err; then
+            echo 'LAMBDA_LIST=PASS'
+          else
+            echo 'LAMBDA_LIST=DENIED'
+            sed -E 's/[0-9]{12}/************/g' /tmp/lambda.err | head -3
+          fi
+
+          echo '--- API Gateway ---'
+          if aws apigateway get-rest-apis --limit 5 --output json >/tmp/apigw.json 2>/tmp/apigw.err; then
+            echo 'APIGW_LIST=PASS'
+          else
+            echo 'APIGW_LIST=DENIED'
+            sed -E 's/[0-9]{12}/************/g' /tmp/apigw.err | head -3
+          fi
+
+          echo 'AWS_SERVICE_CAPABILITY_PROBE=COMPLETE'
