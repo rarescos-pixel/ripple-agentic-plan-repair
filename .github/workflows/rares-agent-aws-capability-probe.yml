@@ -24,24 +24,24 @@ jobs:
           role-session-name: rares-agent-capability-probe
           retry-max-attempts: 2
 
-      - name: Verify identity and inspect effective inline policies
+      - name: Verify identity and inspect known inline policies
         shell: bash
         run: |
           set -euo pipefail
           ARN="$(aws sts get-caller-identity --query Arn --output text)"
           echo "AWS_IDENTITY=$ARN"
-          ROLE=RippleGitHubOidcRole
-          POLICIES="$(aws iam list-role-policies --role-name "$ROLE" --query 'PolicyNames' --output text)"
           python - <<'PY'
           import json, subprocess
           role='RippleGitHubOidcRole'
-          policies=subprocess.check_output(['aws','iam','list-role-policies','--role-name',role,'--query','PolicyNames','--output','json'],text=True)
-          names=json.loads(policies)
-          actions=set()
-          resources=[]
+          names=['RippleGitHubDeployPolicy','RippleCanonicalRuntimeCutoverPolicy']
+          actions=set(); resources=[]; found=[]
           for name in names:
-              raw=subprocess.check_output(['aws','iam','get-role-policy','--role-name',role,'--policy-name',name,'--query','PolicyDocument','--output','json'],text=True)
-              doc=json.loads(raw)
+              p=subprocess.run(['aws','iam','get-role-policy','--role-name',role,'--policy-name',name,'--query','PolicyDocument','--output','json'],text=True,capture_output=True)
+              if p.returncode != 0:
+                  print(f'POLICY_{name}=UNAVAILABLE')
+                  continue
+              found.append(name)
+              doc=json.loads(p.stdout)
               for s in doc.get('Statement',[]):
                   if s.get('Effect')!='Allow':
                       continue
@@ -61,8 +61,8 @@ jobs:
           def allowed(w):
               svc=w.split(':',1)[0]
               return w in actions or '*' in actions or f'{svc}:*' in actions
+          print('KNOWN_POLICIES_FOUND='+','.join(found))
           for w in checks:
               print(f'ALLOW_{w}=' + ('YES' if allowed(w) else 'NO'))
-          print('INLINE_POLICY_COUNT='+str(len(names)))
           print('RESOURCE_SCOPE_COUNT='+str(len(set(resources))))
           PY
