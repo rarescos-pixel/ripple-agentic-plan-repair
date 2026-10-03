@@ -4,7 +4,34 @@
 
 **Amazon Developer Hackathon 2026:** Alexa+ primary · AWS Builder mini challenge · Open Source mini challenge
 
-## Tell Alexa one thing that changed. Ripple fixes what breaks downstream.
+## Tell Ripple what must remain true. Ripple keeps that promise as the world changes.
+
+The canonical product direction is **Continuous Promise Preservation for Alexa+**.
+Ripple turns human intent into a confirmed, versioned contract, predicts when a
+changing world will invalidate the current plan, and proposes the smallest safe
+repair. Exact approval, independent verification and a durable Promise Ledger
+keep the human's authority attached to the result.
+
+**New implementation status:** the first build gate passes against an independent
+HTTP digital-twin provider. This is not yet a claim of physical home control,
+live Alexa interaction, or live Bedrock normalization for the new contract flow.
+The new tools are opt-in; the published baseline below remains available.
+
+- [Implementation delta and baseline](docs/PROMISE_DELTA.md)
+- [Reproduce the build gate and local human demo](docs/PROMISE_RUNBOOK.md)
+- [Acceptance evidence and remaining release gates](docs/PROMISE_BUILD_STATUS.md)
+- [Machine-readable execution evidence](docs/PROMISE_BUILD_EVIDENCE.json)
+
+```bash
+PYTHONPATH=src python scripts/promise_build_gate.py
+PYTHONPATH=src python scripts/promise_local_demo.py
+```
+
+## Stable published baseline — consequence repair
+
+The following material documents the retained baseline and its original demo.
+
+### Tell Alexa one thing that changed. Ripple fixes what breaks downstream.
 
 > **“Our flight home was cancelled. We’ll land tomorrow at six.”**
 >

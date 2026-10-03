@@ -1,0 +1,2602 @@
+{
+  "catalog": {
+    "alarm_mode": {
+      "requires": {
+        "implies": [
+          {
+            "eq": [
+              {
+                "fact": "alarm_mode"
+              },
+              {
+                "literal": "full"
+              }
+            ]
+          },
+          {
+            "eq": [
+              {
+                "fact": "family_departed"
+              },
+              {
+                "literal": true
+              }
+            ]
+          }
+        ]
+      },
+      "reversible": true,
+      "times": [
+        "now",
+        "goal"
+      ],
+      "values": [
+        "stay",
+        "full"
+      ]
+    },
+    "common_mode": {
+      "requires": {
+        "implies": [
+          {
+            "eq": [
+              {
+                "fact": "common_mode"
+              },
+              {
+                "literal": "away"
+              }
+            ]
+          },
+          {
+            "eq": [
+              {
+                "fact": "family_departed"
+              },
+              {
+                "literal": true
+              }
+            ]
+          }
+        ]
+      },
+      "reversible": true,
+      "times": [
+        "goal"
+      ],
+      "values": [
+        "home",
+        "away"
+      ]
+    },
+    "guest_heat": {
+      "reversible": true,
+      "times": [
+        "now",
+        "goal"
+      ],
+      "values": [
+        "occupied",
+        "eco"
+      ]
+    }
+  },
+  "contract": {
+    "assumptions": [
+      {
+        "id": "guest_stays",
+        "predicate": {
+          "eq": [
+            {
+              "fact": "guest_present"
+            },
+            {
+              "literal": true
+            }
+          ]
+        }
+      },
+      {
+        "id": "departure_as_planned",
+        "predicate": {
+          "eq": [
+            {
+              "fact": "departure_at"
+            },
+            {
+              "literal": 1060
+            }
+          ]
+        }
+      }
+    ],
+    "authority": {
+      "alarm_mode": "APPROVAL_REQUIRED",
+      "common_mode": "APPROVAL_REQUIRED",
+      "guest_access": "FORBIDDEN",
+      "guest_heat": "APPROVAL_REQUIRED"
+    },
+    "completion": {
+      "eq": [
+        {
+          "fact": "departure_verified"
+        },
+        {
+          "literal": true
+        }
+      ]
+    },
+    "evidence": {
+      "max_age_seconds": 30,
+      "source": "household-twin"
+    },
+    "expiry": {
+      "at": 1200
+    },
+    "goal": {
+      "and": [
+        {
+          "eq": [
+            {
+              "fact": "common_mode"
+            },
+            {
+              "literal": "away"
+            }
+          ]
+        },
+        {
+          "and": [
+            {
+              "implies": [
+                {
+                  "eq": [
+                    {
+                      "fact": "guest_present"
+                    },
+                    {
+                      "literal": true
+                    }
+                  ]
+                },
+                {
+                  "and": [
+                    {
+                      "eq": [
+                        {
+                          "fact": "guest_heat"
+                        },
+                        {
+                          "literal": "occupied"
+                        }
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "fact": "alarm_mode"
+                        },
+                        {
+                          "literal": "stay"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "implies": [
+                {
+                  "not": [
+                    {
+                      "eq": [
+                        {
+                          "fact": "guest_present"
+                        },
+                        {
+                          "literal": true
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "and": [
+                    {
+                      "eq": [
+                        {
+                          "fact": "guest_heat"
+                        },
+                        {
+                          "literal": "eco"
+                        }
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "fact": "alarm_mode"
+                        },
+                        {
+                          "literal": "full"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "goal_at": {
+      "fact": "departure_at"
+    },
+    "invariants": [
+      {
+        "id": "authorized_access",
+        "label": "Mom keeps her access, even when she goes out",
+        "predicate": {
+          "eq": [
+            {
+              "fact": "guest_access"
+            },
+            {
+              "literal": true
+            }
+          ]
+        }
+      },
+      {
+        "id": "occupied_comfort",
+        "label": "Keep occupied areas comfortable",
+        "predicate": {
+          "implies": [
+            {
+              "eq": [
+                {
+                  "fact": "guest_present"
+                },
+                {
+                  "literal": true
+                }
+              ]
+            },
+            {
+              "eq": [
+                {
+                  "fact": "guest_heat"
+                },
+                {
+                  "literal": "occupied"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "id": "occupied_security",
+        "label": "Keep stay security while Mom is home or before departure",
+        "predicate": {
+          "implies": [
+            {
+              "or": [
+                {
+                  "eq": [
+                    {
+                      "fact": "guest_present"
+                    },
+                    {
+                      "literal": true
+                    }
+                  ]
+                },
+                {
+                  "lt": [
+                    {
+                      "fact": "$now"
+                    },
+                    {
+                      "fact": "departure_at"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "eq": [
+                {
+                  "fact": "alarm_mode"
+                },
+                {
+                  "literal": "stay"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "id": "departure_timing",
+        "label": "Keep the shared home active until departure",
+        "predicate": {
+          "implies": [
+            {
+              "lt": [
+                {
+                  "fact": "$now"
+                },
+                {
+                  "fact": "departure_at"
+                }
+              ]
+            },
+            {
+              "eq": [
+                {
+                  "fact": "common_mode"
+                },
+                {
+                  "literal": "home"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "meaning": "Prepare the house at your departure time. Keep Mom's access even if she goes out. Keep occupied areas comfortable and use stay security while she is home. Propose eco heat for empty guest areas. Full security and away transition also require independently observed family departure. Ask before every consequential change; stop after verified completion or expiry.",
+    "questions": []
+  },
+  "gate": "PASS",
+  "human_intent_fixture": "Alexa, we're leaving for the airport at seven. Make sure the house is ready, but Mom is staying here tonight.",
+  "initial_world": {
+    "alarm_mode": "stay",
+    "common_mode": "home",
+    "departure_at": 1060,
+    "departure_verified": false,
+    "family_departed": false,
+    "guest_access": true,
+    "guest_heat": "occupied",
+    "guest_present": true
+  },
+  "ledger": [
+    {
+      "at": 1000,
+      "contract_version": 1,
+      "data": {
+        "contract_hash": "4e02d88cd022e15916e28ef93d20112f66dc437f6b669882311f501a22e4c4ef"
+      },
+      "event": "contract.drafted",
+      "hash": "ca519cb222f5c07aee8ea44717f33b39d4ca605bfd3967058d1fc9edcff25389",
+      "plan_version": 0,
+      "previous": null,
+      "world_version": 0
+    },
+    {
+      "at": 1000,
+      "contract_version": 1,
+      "data": {
+        "confirmation": {
+          "hash": "4e02d88cd022e15916e28ef93d20112f66dc437f6b669882311f501a22e4c4ef",
+          "owner": "fixture-human",
+          "version": 1
+        }
+      },
+      "event": "meaning.confirmed",
+      "hash": "bf0a2f1cc26acd605ce551ba80351703cc30ee2d9ac6eb0f104d1239b8b2f2c7",
+      "plan_version": 0,
+      "previous": "ca519cb222f5c07aee8ea44717f33b39d4ca605bfd3967058d1fc9edcff25389",
+      "world_version": 0
+    },
+    {
+      "at": 1000,
+      "contract_version": 1,
+      "data": {
+        "event_id": "household-twin:1",
+        "snapshot_hash": "26d83d7403c242905816496c1ce29929fa3ae879548dc72302b4018fa448376e"
+      },
+      "event": "world.observed",
+      "hash": "1aaef8eccdecd51b3c14cca5541cdfe9ea753f706a3104d4edc2f98ca3b33e34",
+      "plan_version": 0,
+      "previous": "bf0a2f1cc26acd605ce551ba80351703cc30ee2d9ac6eb0f104d1239b8b2f2c7",
+      "world_version": 1
+    },
+    {
+      "at": 1000,
+      "contract_version": 1,
+      "data": {
+        "actions": [
+          {
+            "at": 1060,
+            "writes": {
+              "common_mode": "away"
+            }
+          }
+        ],
+        "edits": 1
+      },
+      "event": "plan.repaired",
+      "hash": "a97ed4a877cb2f36d1be415d42590bc89c5423455084ec95acb4f5fc0c7acbd9",
+      "plan_version": 1,
+      "previous": "1aaef8eccdecd51b3c14cca5541cdfe9ea753f706a3104d4edc2f98ca3b33e34",
+      "world_version": 1
+    },
+    {
+      "at": 1000,
+      "contract_version": 1,
+      "data": {
+        "assumptions": {
+          "departure_as_planned": true,
+          "guest_stays": true
+        },
+        "decision": "REQUEST_APPROVAL"
+      },
+      "event": "world.reconciled",
+      "hash": "82b065b0adcec65b663cd86357cb07d5698139061a77c399ce8d2e052e4e59ef",
+      "plan_version": 1,
+      "previous": "a97ed4a877cb2f36d1be415d42590bc89c5423455084ec95acb4f5fc0c7acbd9",
+      "world_version": 1
+    },
+    {
+      "at": 1000,
+      "contract_version": 1,
+      "data": {
+        "binding": {
+          "actions": [
+            {
+              "at": 1060,
+              "writes": {
+                "common_mode": "away"
+              }
+            }
+          ],
+          "catalog_hash": "c31797e820bbba3721da3175c35388c04f9a0ba17af3cc07b5cea0d9e1134809",
+          "contract_hash": "4e02d88cd022e15916e28ef93d20112f66dc437f6b669882311f501a22e4c4ef",
+          "contract_id": "hero",
+          "contract_version": 1,
+          "execution_conditions": {
+            "alarm_mode": {
+              "implies": [
+                {
+                  "eq": [
+                    {
+                      "fact": "alarm_mode"
+                    },
+                    {
+                      "literal": "full"
+                    }
+                  ]
+                },
+                {
+                  "eq": [
+                    {
+                      "fact": "family_departed"
+                    },
+                    {
+                      "literal": true
+                    }
+                  ]
+                }
+              ]
+            },
+            "common_mode": {
+              "implies": [
+                {
+                  "eq": [
+                    {
+                      "fact": "common_mode"
+                    },
+                    {
+                      "literal": "away"
+                    }
+                  ]
+                },
+                {
+                  "eq": [
+                    {
+                      "fact": "family_departed"
+                    },
+                    {
+                      "literal": true
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          "owner": "fixture-human",
+          "plan_hash": "f12e4329e8b785591aa7fb50092b28047d7cc386538b20083e5510d0b7fab54f",
+          "plan_version": 1,
+          "world_version": 1
+        }
+      },
+      "event": "action.approved",
+      "hash": "2a184fb9ded402db6f505ce6df6fa76321975e92439d5017c59263a49d630674",
+      "plan_version": 1,
+      "previous": "82b065b0adcec65b663cd86357cb07d5698139061a77c399ce8d2e052e4e59ef",
+      "world_version": 1
+    },
+    {
+      "at": 1010,
+      "contract_version": 1,
+      "data": {
+        "event_id": "household-twin:2",
+        "snapshot_hash": "efa7460fde1a759b3a48b87213cbcbc7095566f45b268004a58476af86efbc24"
+      },
+      "event": "world.observed",
+      "hash": "1b0e8ebfea881e5fc94046333b5a20feffce4934ec0d7f35d26f3d08e1243728",
+      "plan_version": 1,
+      "previous": "2a184fb9ded402db6f505ce6df6fa76321975e92439d5017c59263a49d630674",
+      "world_version": 2
+    },
+    {
+      "at": 1010,
+      "contract_version": 1,
+      "data": {
+        "projection": {
+          "goal": false,
+          "plan_version": 1,
+          "unknown": [],
+          "violations": [],
+          "world_version": 2
+        }
+      },
+      "event": "plan.threatened",
+      "hash": "c5d9cac160250adb3ffc4a75c6a9625d4955d1c02eb7a8deb3f154c45bcd7b44",
+      "plan_version": 1,
+      "previous": "1b0e8ebfea881e5fc94046333b5a20feffce4934ec0d7f35d26f3d08e1243728",
+      "world_version": 2
+    },
+    {
+      "at": 1010,
+      "contract_version": 1,
+      "data": {
+        "actions": [
+          {
+            "at": 1010,
+            "writes": {
+              "guest_heat": "eco"
+            }
+          },
+          {
+            "at": 1060,
+            "writes": {
+              "alarm_mode": "full",
+              "common_mode": "away"
+            }
+          }
+        ],
+        "edits": 2
+      },
+      "event": "plan.repaired",
+      "hash": "e2a59c4ec106081f21b8d04713410679c223944d27914e1917ec15c26c2ead99",
+      "plan_version": 2,
+      "previous": "c5d9cac160250adb3ffc4a75c6a9625d4955d1c02eb7a8deb3f154c45bcd7b44",
+      "world_version": 2
+    },
+    {
+      "at": 1010,
+      "contract_version": 1,
+      "data": {
+        "assumptions": {
+          "departure_as_planned": true,
+          "guest_stays": false
+        },
+        "decision": "REQUEST_APPROVAL"
+      },
+      "event": "world.reconciled",
+      "hash": "a6882014a4a1565fa0ed01d27e0c7871071142866e1250aa0e6b44ffd6ec2bb3",
+      "plan_version": 2,
+      "previous": "e2a59c4ec106081f21b8d04713410679c223944d27914e1917ec15c26c2ead99",
+      "world_version": 2
+    },
+    {
+      "at": 1010,
+      "contract_version": 1,
+      "data": {
+        "binding": {
+          "actions": [
+            {
+              "at": 1010,
+              "writes": {
+                "guest_heat": "eco"
+              }
+            },
+            {
+              "at": 1060,
+              "writes": {
+                "alarm_mode": "full",
+                "common_mode": "away"
+              }
+            }
+          ],
+          "catalog_hash": "c31797e820bbba3721da3175c35388c04f9a0ba17af3cc07b5cea0d9e1134809",
+          "contract_hash": "4e02d88cd022e15916e28ef93d20112f66dc437f6b669882311f501a22e4c4ef",
+          "contract_id": "hero",
+          "contract_version": 1,
+          "execution_conditions": {
+            "alarm_mode": {
+              "implies": [
+                {
+                  "eq": [
+                    {
+                      "fact": "alarm_mode"
+                    },
+                    {
+                      "literal": "full"
+                    }
+                  ]
+                },
+                {
+                  "eq": [
+                    {
+                      "fact": "family_departed"
+                    },
+                    {
+                      "literal": true
+                    }
+                  ]
+                }
+              ]
+            },
+            "common_mode": {
+              "implies": [
+                {
+                  "eq": [
+                    {
+                      "fact": "common_mode"
+                    },
+                    {
+                      "literal": "away"
+                    }
+                  ]
+                },
+                {
+                  "eq": [
+                    {
+                      "fact": "family_departed"
+                    },
+                    {
+                      "literal": true
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          "owner": "fixture-human",
+          "plan_hash": "816fac99eaa35ead48627d39debd60221f8cebc5d02606432a5c2033ec4bfd7b",
+          "plan_version": 2,
+          "world_version": 2
+        }
+      },
+      "event": "action.approved",
+      "hash": "c96bbb52e20e5ab47a0e3a0afeede7958dd6a514263f4800be5b0df34ce18b75",
+      "plan_version": 2,
+      "previous": "a6882014a4a1565fa0ed01d27e0c7871071142866e1250aa0e6b44ffd6ec2bb3",
+      "world_version": 2
+    },
+    {
+      "at": 1010,
+      "contract_version": 1,
+      "data": {
+        "binding_hash": "e0299a357c738c7f7210f3b9642258928eb386cedce94c56cb3e6097785187b4",
+        "key": "42456c48b24e6d0f2b9983ca9bf3298a660f34a370e571e003713426adf66d04"
+      },
+      "event": "effect.reserved",
+      "hash": "108bfb4ae2c290399441d08cd6871678b7dfe6d7085917cb17f229dfabd69d97",
+      "plan_version": 2,
+      "previous": "c96bbb52e20e5ab47a0e3a0afeede7958dd6a514263f4800be5b0df34ce18b75",
+      "world_version": 2
+    },
+    {
+      "at": 1010,
+      "contract_version": 1,
+      "data": {
+        "event_id": "household-twin:3",
+        "snapshot_hash": "66f6d744f11f4785666489bf1ff669efdb13f78786eb19ab057c323e54cf0be5"
+      },
+      "event": "world.observed",
+      "hash": "e895106b6d88bdd069b805770b0ae0bbfe58ae5efec654a4d575e4e9c287baae",
+      "plan_version": 2,
+      "previous": "108bfb4ae2c290399441d08cd6871678b7dfe6d7085917cb17f229dfabd69d97",
+      "world_version": 3
+    },
+    {
+      "at": 1010,
+      "contract_version": 1,
+      "data": {
+        "key": "42456c48b24e6d0f2b9983ca9bf3298a660f34a370e571e003713426adf66d04",
+        "receipt_hash": "ed86eae7c946e3c972ad99a46be646626c189ac129ed2032eabf764d79f6df7b"
+      },
+      "event": "effect.verified",
+      "hash": "bdc0a47c2fe7f8fb836f430aac8b2abe1407ad8117395e396726bdaf6cffb4dd",
+      "plan_version": 2,
+      "previous": "e895106b6d88bdd069b805770b0ae0bbfe58ae5efec654a4d575e4e9c287baae",
+      "world_version": 3
+    },
+    {
+      "at": 1020,
+      "contract_version": 1,
+      "data": {
+        "event_id": "household-twin:4",
+        "snapshot_hash": "47b32553c8ccdc37f1d516f10ce4d4d5cbec20633455e783f57bfff95dd3d3fe"
+      },
+      "event": "world.observed",
+      "hash": "1ecbb32c77027e9440b0827622e60718ad7fc44dd77b7ea4b321f8a91119da20",
+      "plan_version": 3,
+      "previous": "bdc0a47c2fe7f8fb836f430aac8b2abe1407ad8117395e396726bdaf6cffb4dd",
+      "world_version": 4
+    },
+    {
+      "at": 1020,
+      "contract_version": 1,
+      "data": {
+        "projection": {
+          "goal": true,
+          "plan_version": 3,
+          "unknown": [],
+          "violations": [
+            "departure_timing",
+            "occupied_security"
+          ],
+          "world_version": 4
+        }
+      },
+      "event": "plan.threatened",
+      "hash": "92652112c236cb4f844edaaa6c37b06e7846520af5c79901a4e580075a3929f3",
+      "plan_version": 3,
+      "previous": "1ecbb32c77027e9440b0827622e60718ad7fc44dd77b7ea4b321f8a91119da20",
+      "world_version": 4
+    },
+    {
+      "at": 1020,
+      "contract_version": 1,
+      "data": {
+        "actions": [
+          {
+            "at": 1100,
+            "writes": {
+              "alarm_mode": "full",
+              "common_mode": "away"
+            }
+          }
+        ],
+        "edits": 4
+      },
+      "event": "plan.repaired",
+      "hash": "e51a16afd09a13414f57809794c1684dd912d10cb92bfd6759cc7c614dd23fba",
+      "plan_version": 4,
+      "previous": "92652112c236cb4f844edaaa6c37b06e7846520af5c79901a4e580075a3929f3",
+      "world_version": 4
+    },
+    {
+      "at": 1020,
+      "contract_version": 1,
+      "data": {
+        "assumptions": {
+          "departure_as_planned": false,
+          "guest_stays": false
+        },
+        "decision": "REQUEST_APPROVAL"
+      },
+      "event": "world.reconciled",
+      "hash": "67950bcd91e04fa1507cbfde9df5afb29ab39f2032c4c22ca97511d1b45be280",
+      "plan_version": 4,
+      "previous": "e51a16afd09a13414f57809794c1684dd912d10cb92bfd6759cc7c614dd23fba",
+      "world_version": 4
+    },
+    {
+      "at": 1020,
+      "contract_version": 1,
+      "data": {
+        "binding": {
+          "actions": [
+            {
+              "at": 1100,
+              "writes": {
+                "alarm_mode": "full",
+                "common_mode": "away"
+              }
+            }
+          ],
+          "catalog_hash": "c31797e820bbba3721da3175c35388c04f9a0ba17af3cc07b5cea0d9e1134809",
+          "contract_hash": "4e02d88cd022e15916e28ef93d20112f66dc437f6b669882311f501a22e4c4ef",
+          "contract_id": "hero",
+          "contract_version": 1,
+          "execution_conditions": {
+            "alarm_mode": {
+              "implies": [
+                {
+                  "eq": [
+                    {
+                      "fact": "alarm_mode"
+                    },
+                    {
+                      "literal": "full"
+                    }
+                  ]
+                },
+                {
+                  "eq": [
+                    {
+                      "fact": "family_departed"
+                    },
+                    {
+                      "literal": true
+                    }
+                  ]
+                }
+              ]
+            },
+            "common_mode": {
+              "implies": [
+                {
+                  "eq": [
+                    {
+                      "fact": "common_mode"
+                    },
+                    {
+                      "literal": "away"
+                    }
+                  ]
+                },
+                {
+                  "eq": [
+                    {
+                      "fact": "family_departed"
+                    },
+                    {
+                      "literal": true
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          "owner": "fixture-human",
+          "plan_hash": "60017933da640b54c7bb108ac09be4944deab186bac1123bc0249bbd61bb51ee",
+          "plan_version": 4,
+          "world_version": 4
+        }
+      },
+      "event": "action.approved",
+      "hash": "6ded48ac4d02659b0f19941cf9f442f44c3bcec95bcdeda69846494c2de413c8",
+      "plan_version": 4,
+      "previous": "67950bcd91e04fa1507cbfde9df5afb29ab39f2032c4c22ca97511d1b45be280",
+      "world_version": 4
+    },
+    {
+      "at": 1100,
+      "contract_version": 1,
+      "data": {
+        "event_id": "household-twin:5",
+        "snapshot_hash": "529fcd4f27727d5a0d2ad085ec198206ea32d84f21760f9feefb2993575247b2"
+      },
+      "event": "world.observed",
+      "hash": "a053932ec6b04e4d208e416b8fc2dae879376072c1c367da0417e91c89135ae6",
+      "plan_version": 4,
+      "previous": "6ded48ac4d02659b0f19941cf9f442f44c3bcec95bcdeda69846494c2de413c8",
+      "world_version": 5
+    },
+    {
+      "at": 1100,
+      "contract_version": 1,
+      "data": {
+        "assumptions": {
+          "departure_as_planned": false,
+          "guest_stays": false
+        },
+        "decision": "REQUEST_APPROVAL"
+      },
+      "event": "world.reconciled",
+      "hash": "4af7567e4848de1269d56528294845ead31e54601f8766525dd19ec4533be5da",
+      "plan_version": 4,
+      "previous": "a053932ec6b04e4d208e416b8fc2dae879376072c1c367da0417e91c89135ae6",
+      "world_version": 5
+    },
+    {
+      "at": 1100,
+      "contract_version": 1,
+      "data": {
+        "binding": {
+          "actions": [
+            {
+              "at": 1100,
+              "writes": {
+                "alarm_mode": "full",
+                "common_mode": "away"
+              }
+            }
+          ],
+          "catalog_hash": "c31797e820bbba3721da3175c35388c04f9a0ba17af3cc07b5cea0d9e1134809",
+          "contract_hash": "4e02d88cd022e15916e28ef93d20112f66dc437f6b669882311f501a22e4c4ef",
+          "contract_id": "hero",
+          "contract_version": 1,
+          "execution_conditions": {
+            "alarm_mode": {
+              "implies": [
+                {
+                  "eq": [
+                    {
+                      "fact": "alarm_mode"
+                    },
+                    {
+                      "literal": "full"
+                    }
+                  ]
+                },
+                {
+                  "eq": [
+                    {
+                      "fact": "family_departed"
+                    },
+                    {
+                      "literal": true
+                    }
+                  ]
+                }
+              ]
+            },
+            "common_mode": {
+              "implies": [
+                {
+                  "eq": [
+                    {
+                      "fact": "common_mode"
+                    },
+                    {
+                      "literal": "away"
+                    }
+                  ]
+                },
+                {
+                  "eq": [
+                    {
+                      "fact": "family_departed"
+                    },
+                    {
+                      "literal": true
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          "owner": "fixture-human",
+          "plan_hash": "60017933da640b54c7bb108ac09be4944deab186bac1123bc0249bbd61bb51ee",
+          "plan_version": 4,
+          "world_version": 5
+        }
+      },
+      "event": "action.approved",
+      "hash": "c4a6502b3f7d737dcec1ef933b08fb9c38b0e31f383e956733190c9310b4a12a",
+      "plan_version": 4,
+      "previous": "4af7567e4848de1269d56528294845ead31e54601f8766525dd19ec4533be5da",
+      "world_version": 5
+    },
+    {
+      "at": 1100,
+      "contract_version": 1,
+      "data": {
+        "binding_hash": "d1353ae515e3b7298e8449f7d942ca2f752a6a3927a446ddd084255fe420b98a",
+        "key": "02b48adc3083f029a7ab50f32dff697831a8b7a6db7f0d59aac6c81523681601"
+      },
+      "event": "effect.reserved",
+      "hash": "a724e3d6e0feea66ceaaf4d9f0e6ce86d0c153f2b6aea60fdea75143a0e1294b",
+      "plan_version": 4,
+      "previous": "c4a6502b3f7d737dcec1ef933b08fb9c38b0e31f383e956733190c9310b4a12a",
+      "world_version": 5
+    },
+    {
+      "at": 1100,
+      "contract_version": 1,
+      "data": {
+        "event_id": "household-twin:6",
+        "snapshot_hash": "eded21247fc3f5dc0e3ea0bd1f6b688e3ac727a1a7a08df4c6a4d25c80b7341b"
+      },
+      "event": "world.observed",
+      "hash": "98e66b0a1f57a4ee942d0f20cff8982b35671452bf396922feb01fdf0277392f",
+      "plan_version": 4,
+      "previous": "a724e3d6e0feea66ceaaf4d9f0e6ce86d0c153f2b6aea60fdea75143a0e1294b",
+      "world_version": 6
+    },
+    {
+      "at": 1100,
+      "contract_version": 1,
+      "data": {
+        "key": "02b48adc3083f029a7ab50f32dff697831a8b7a6db7f0d59aac6c81523681601",
+        "receipt_hash": "e40881db38a515613627f1fcf70be7f93b1abf832a214c8187e1f07c223bc10a"
+      },
+      "event": "effect.verified",
+      "hash": "01baec2c81019b069c2b8e9b808fdd3c32b56024465d6e01222907020a572650",
+      "plan_version": 4,
+      "previous": "98e66b0a1f57a4ee942d0f20cff8982b35671452bf396922feb01fdf0277392f",
+      "world_version": 6
+    },
+    {
+      "at": 1100,
+      "contract_version": 1,
+      "data": {
+        "evidence": {
+          "goal_at": 1100,
+          "snapshot_hash": "eded21247fc3f5dc0e3ea0bd1f6b688e3ac727a1a7a08df4c6a4d25c80b7341b",
+          "verified_at": 1100,
+          "world_version": 6
+        }
+      },
+      "event": "goal.observed",
+      "hash": "eed1fa89473fb6e7cdf8fdc27beffbf244edfddbe57def4bedcd99343d2a0da4",
+      "plan_version": 5,
+      "previous": "01baec2c81019b069c2b8e9b808fdd3c32b56024465d6e01222907020a572650",
+      "world_version": 6
+    },
+    {
+      "at": 1100,
+      "contract_version": 1,
+      "data": {
+        "event_id": "household-twin:7",
+        "snapshot_hash": "286bf21984d10e3f982863b39bda43b732cb2eed8b85ecf52559689bac823868"
+      },
+      "event": "world.observed",
+      "hash": "6ed1e7479da062eb38094a66bfecf7965467a64ce02935b9501a59419ff02756",
+      "plan_version": 5,
+      "previous": "eed1fa89473fb6e7cdf8fdc27beffbf244edfddbe57def4bedcd99343d2a0da4",
+      "world_version": 7
+    },
+    {
+      "at": 1100,
+      "contract_version": 1,
+      "data": {
+        "outcome": "SATISFIED",
+        "reason": "Independent completion, goal and invariant evidence"
+      },
+      "event": "contract.terminal",
+      "hash": "01e004abd3a5cee776862ff0ef08e863b4853ce34b702713700e991e3774baab",
+      "plan_version": 5,
+      "previous": "6ed1e7479da062eb38094a66bfecf7965467a64ce02935b9501a59419ff02756",
+      "world_version": 7
+    }
+  ],
+  "metrics": {
+    "confirmed_invariants": 4,
+    "contract_versions": 1,
+    "duplicate_writes_in_five_replays": 0,
+    "invariant_violations_at_verified_transitions": 0,
+    "reconciliation_events": 4,
+    "terminal_state": "SATISFIED",
+    "unauthorized_effects": 0,
+    "unverified_effects": 0,
+    "verified_external_writes": 2,
+    "verified_receipts": 2
+  },
+  "naive_plan_prediction": {
+    "checks": [
+      {
+        "at": 1000,
+        "results": {
+          "authorized_access": true,
+          "departure_timing": true,
+          "occupied_comfort": true,
+          "occupied_security": true
+        },
+        "unknown": [],
+        "violations": []
+      },
+      {
+        "at": 1000,
+        "results": {
+          "authorized_access": true,
+          "departure_timing": true,
+          "occupied_comfort": true,
+          "occupied_security": true
+        },
+        "unknown": [],
+        "violations": []
+      },
+      {
+        "at": 1059,
+        "results": {
+          "authorized_access": true,
+          "departure_timing": true,
+          "occupied_comfort": true,
+          "occupied_security": true
+        },
+        "unknown": [],
+        "violations": []
+      },
+      {
+        "at": 1060,
+        "results": {
+          "authorized_access": true,
+          "departure_timing": true,
+          "occupied_comfort": false,
+          "occupied_security": false
+        },
+        "unknown": [],
+        "violations": [
+          "occupied_comfort",
+          "occupied_security"
+        ]
+      },
+      {
+        "at": 1060,
+        "results": {
+          "authorized_access": true,
+          "departure_timing": true,
+          "occupied_comfort": false,
+          "occupied_security": false
+        },
+        "unknown": [],
+        "violations": [
+          "occupied_comfort",
+          "occupied_security"
+        ]
+      }
+    ],
+    "goal": false,
+    "projected": {
+      "alarm_mode": "full",
+      "common_mode": "away",
+      "departure_at": 1060,
+      "departure_verified": false,
+      "family_departed": false,
+      "guest_access": true,
+      "guest_heat": "eco",
+      "guest_present": true
+    },
+    "unknown": [],
+    "valid": false,
+    "violations": [
+      "occupied_comfort",
+      "occupied_security"
+    ]
+  },
+  "normalization": "Reviewed structured fixture; live Bedrock remains a separate gate",
+  "receipts": [
+    {
+      "action": {
+        "at": 1010,
+        "guard": {
+          "expiry": {
+            "at": 1200
+          },
+          "invariants": [
+            {
+              "id": "authorized_access",
+              "label": "Mom keeps her access, even when she goes out",
+              "predicate": {
+                "eq": [
+                  {
+                    "fact": "guest_access"
+                  },
+                  {
+                    "literal": true
+                  }
+                ]
+              }
+            },
+            {
+              "id": "occupied_comfort",
+              "label": "Keep occupied areas comfortable",
+              "predicate": {
+                "implies": [
+                  {
+                    "eq": [
+                      {
+                        "fact": "guest_present"
+                      },
+                      {
+                        "literal": true
+                      }
+                    ]
+                  },
+                  {
+                    "eq": [
+                      {
+                        "fact": "guest_heat"
+                      },
+                      {
+                        "literal": "occupied"
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "id": "occupied_security",
+              "label": "Keep stay security while Mom is home or before departure",
+              "predicate": {
+                "implies": [
+                  {
+                    "or": [
+                      {
+                        "eq": [
+                          {
+                            "fact": "guest_present"
+                          },
+                          {
+                            "literal": true
+                          }
+                        ]
+                      },
+                      {
+                        "lt": [
+                          {
+                            "fact": "$now"
+                          },
+                          {
+                            "fact": "departure_at"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "eq": [
+                      {
+                        "fact": "alarm_mode"
+                      },
+                      {
+                        "literal": "stay"
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "id": "departure_timing",
+              "label": "Keep the shared home active until departure",
+              "predicate": {
+                "implies": [
+                  {
+                    "lt": [
+                      {
+                        "fact": "$now"
+                      },
+                      {
+                        "fact": "departure_at"
+                      }
+                    ]
+                  },
+                  {
+                    "eq": [
+                      {
+                        "fact": "common_mode"
+                      },
+                      {
+                        "literal": "home"
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ],
+          "preconditions": []
+        },
+        "writes": {
+          "guest_heat": "eco"
+        }
+      },
+      "approval_mode": "exact",
+      "before": {
+        "event_id": "household-twin:2",
+        "facts": {
+          "alarm_mode": "stay",
+          "common_mode": "home",
+          "departure_at": 1060,
+          "departure_verified": false,
+          "family_departed": false,
+          "guest_access": true,
+          "guest_heat": "occupied",
+          "guest_present": false
+        },
+        "observed_at": 1010,
+        "revision": 2,
+        "snapshot_hash": "efa7460fde1a759b3a48b87213cbcbc7095566f45b268004a58476af86efbc24",
+        "source": "household-twin"
+      },
+      "binding": {
+        "actions": [
+          {
+            "at": 1010,
+            "writes": {
+              "guest_heat": "eco"
+            }
+          },
+          {
+            "at": 1060,
+            "writes": {
+              "alarm_mode": "full",
+              "common_mode": "away"
+            }
+          }
+        ],
+        "catalog_hash": "c31797e820bbba3721da3175c35388c04f9a0ba17af3cc07b5cea0d9e1134809",
+        "contract_hash": "4e02d88cd022e15916e28ef93d20112f66dc437f6b669882311f501a22e4c4ef",
+        "contract_id": "hero",
+        "contract_version": 1,
+        "execution_conditions": {
+          "alarm_mode": {
+            "implies": [
+              {
+                "eq": [
+                  {
+                    "fact": "alarm_mode"
+                  },
+                  {
+                    "literal": "full"
+                  }
+                ]
+              },
+              {
+                "eq": [
+                  {
+                    "fact": "family_departed"
+                  },
+                  {
+                    "literal": true
+                  }
+                ]
+              }
+            ]
+          },
+          "common_mode": {
+            "implies": [
+              {
+                "eq": [
+                  {
+                    "fact": "common_mode"
+                  },
+                  {
+                    "literal": "away"
+                  }
+                ]
+              },
+              {
+                "eq": [
+                  {
+                    "fact": "family_departed"
+                  },
+                  {
+                    "literal": true
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "owner": "fixture-human",
+        "plan_hash": "816fac99eaa35ead48627d39debd60221f8cebc5d02606432a5c2033ec4bfd7b",
+        "plan_version": 2,
+        "world_version": 2
+      },
+      "independent_readback": {
+        "event_id": "household-twin:3",
+        "facts": {
+          "alarm_mode": "stay",
+          "common_mode": "home",
+          "departure_at": 1060,
+          "departure_verified": false,
+          "family_departed": false,
+          "guest_access": true,
+          "guest_heat": "eco",
+          "guest_present": false
+        },
+        "observed_at": 1010,
+        "revision": 3,
+        "snapshot_hash": "66f6d744f11f4785666489bf1ff669efdb13f78786eb19ab057c323e54cf0be5",
+        "source": "household-twin"
+      },
+      "invariant_evaluation": {
+        "at": 1010,
+        "results": {
+          "authorized_access": true,
+          "departure_timing": true,
+          "occupied_comfort": true,
+          "occupied_security": true
+        },
+        "unknown": [],
+        "violations": []
+      },
+      "key": "42456c48b24e6d0f2b9983ca9bf3298a660f34a370e571e003713426adf66d04",
+      "provider_receipt": {
+        "after_hash": "c985e4d4aca52228f7730abc0b5ddf814b93d533784d9e0991d095a8ef79fdcf",
+        "applied_at": 1010,
+        "before_hash": "bc839320679034122dac2fd317432771d26f3edab7733e5bddb5b07486c460ff",
+        "key": "42456c48b24e6d0f2b9983ca9bf3298a660f34a370e571e003713426adf66d04",
+        "request_hash": "fa03080031825e0e9f9ca5036fbe0d4e8452b9df9e41400ea5f0fdffce931933",
+        "revision_after": 3,
+        "revision_before": 2
+      },
+      "verified": true
+    },
+    {
+      "action": {
+        "at": 1100,
+        "guard": {
+          "expiry": {
+            "at": 1200
+          },
+          "invariants": [
+            {
+              "id": "authorized_access",
+              "label": "Mom keeps her access, even when she goes out",
+              "predicate": {
+                "eq": [
+                  {
+                    "fact": "guest_access"
+                  },
+                  {
+                    "literal": true
+                  }
+                ]
+              }
+            },
+            {
+              "id": "occupied_comfort",
+              "label": "Keep occupied areas comfortable",
+              "predicate": {
+                "implies": [
+                  {
+                    "eq": [
+                      {
+                        "fact": "guest_present"
+                      },
+                      {
+                        "literal": true
+                      }
+                    ]
+                  },
+                  {
+                    "eq": [
+                      {
+                        "fact": "guest_heat"
+                      },
+                      {
+                        "literal": "occupied"
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "id": "occupied_security",
+              "label": "Keep stay security while Mom is home or before departure",
+              "predicate": {
+                "implies": [
+                  {
+                    "or": [
+                      {
+                        "eq": [
+                          {
+                            "fact": "guest_present"
+                          },
+                          {
+                            "literal": true
+                          }
+                        ]
+                      },
+                      {
+                        "lt": [
+                          {
+                            "fact": "$now"
+                          },
+                          {
+                            "fact": "departure_at"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "eq": [
+                      {
+                        "fact": "alarm_mode"
+                      },
+                      {
+                        "literal": "stay"
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "id": "departure_timing",
+              "label": "Keep the shared home active until departure",
+              "predicate": {
+                "implies": [
+                  {
+                    "lt": [
+                      {
+                        "fact": "$now"
+                      },
+                      {
+                        "fact": "departure_at"
+                      }
+                    ]
+                  },
+                  {
+                    "eq": [
+                      {
+                        "fact": "common_mode"
+                      },
+                      {
+                        "literal": "home"
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ],
+          "preconditions": [
+            {
+              "implies": [
+                {
+                  "eq": [
+                    {
+                      "fact": "alarm_mode"
+                    },
+                    {
+                      "literal": "full"
+                    }
+                  ]
+                },
+                {
+                  "eq": [
+                    {
+                      "fact": "family_departed"
+                    },
+                    {
+                      "literal": true
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "implies": [
+                {
+                  "eq": [
+                    {
+                      "fact": "common_mode"
+                    },
+                    {
+                      "literal": "away"
+                    }
+                  ]
+                },
+                {
+                  "eq": [
+                    {
+                      "fact": "family_departed"
+                    },
+                    {
+                      "literal": true
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "writes": {
+          "alarm_mode": "full",
+          "common_mode": "away"
+        }
+      },
+      "approval_mode": "exact",
+      "before": {
+        "event_id": "household-twin:5",
+        "facts": {
+          "alarm_mode": "stay",
+          "common_mode": "home",
+          "departure_at": 1100,
+          "departure_verified": false,
+          "family_departed": true,
+          "guest_access": true,
+          "guest_heat": "eco",
+          "guest_present": false
+        },
+        "observed_at": 1100,
+        "revision": 5,
+        "snapshot_hash": "529fcd4f27727d5a0d2ad085ec198206ea32d84f21760f9feefb2993575247b2",
+        "source": "household-twin"
+      },
+      "binding": {
+        "actions": [
+          {
+            "at": 1100,
+            "writes": {
+              "alarm_mode": "full",
+              "common_mode": "away"
+            }
+          }
+        ],
+        "catalog_hash": "c31797e820bbba3721da3175c35388c04f9a0ba17af3cc07b5cea0d9e1134809",
+        "contract_hash": "4e02d88cd022e15916e28ef93d20112f66dc437f6b669882311f501a22e4c4ef",
+        "contract_id": "hero",
+        "contract_version": 1,
+        "execution_conditions": {
+          "alarm_mode": {
+            "implies": [
+              {
+                "eq": [
+                  {
+                    "fact": "alarm_mode"
+                  },
+                  {
+                    "literal": "full"
+                  }
+                ]
+              },
+              {
+                "eq": [
+                  {
+                    "fact": "family_departed"
+                  },
+                  {
+                    "literal": true
+                  }
+                ]
+              }
+            ]
+          },
+          "common_mode": {
+            "implies": [
+              {
+                "eq": [
+                  {
+                    "fact": "common_mode"
+                  },
+                  {
+                    "literal": "away"
+                  }
+                ]
+              },
+              {
+                "eq": [
+                  {
+                    "fact": "family_departed"
+                  },
+                  {
+                    "literal": true
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "owner": "fixture-human",
+        "plan_hash": "60017933da640b54c7bb108ac09be4944deab186bac1123bc0249bbd61bb51ee",
+        "plan_version": 4,
+        "world_version": 5
+      },
+      "independent_readback": {
+        "event_id": "household-twin:6",
+        "facts": {
+          "alarm_mode": "full",
+          "common_mode": "away",
+          "departure_at": 1100,
+          "departure_verified": false,
+          "family_departed": true,
+          "guest_access": true,
+          "guest_heat": "eco",
+          "guest_present": false
+        },
+        "observed_at": 1100,
+        "revision": 6,
+        "snapshot_hash": "eded21247fc3f5dc0e3ea0bd1f6b688e3ac727a1a7a08df4c6a4d25c80b7341b",
+        "source": "household-twin"
+      },
+      "invariant_evaluation": {
+        "at": 1100,
+        "results": {
+          "authorized_access": true,
+          "departure_timing": true,
+          "occupied_comfort": true,
+          "occupied_security": true
+        },
+        "unknown": [],
+        "violations": []
+      },
+      "key": "02b48adc3083f029a7ab50f32dff697831a8b7a6db7f0d59aac6c81523681601",
+      "provider_receipt": {
+        "after_hash": "cade7f56b299f6330f36edc71c0d3eef6e394331f61307cba6176e7944f1f89f",
+        "applied_at": 1100,
+        "before_hash": "862136f86af67aeec6f04a426f1dded2ffe1ab97fc8a4fdcd806fdce2ab5341b",
+        "key": "02b48adc3083f029a7ab50f32dff697831a8b7a6db7f0d59aac6c81523681601",
+        "request_hash": "42153845132054724ae81099425da4ece0c16127ddd92c0bb457e32350e6a19d",
+        "revision_after": 6,
+        "revision_before": 5
+      },
+      "verified": true
+    }
+  ],
+  "schema": "ripple.promise-build-gate.v1",
+  "scope": "Separate HTTP digital-twin provider, SQLite durability, deterministic scenario clock; not physical Alexa/device or live Bedrock validation",
+  "source_digest": "353355e19516ec67a5206e5a8c362c31e3507b36e5877921865cc01dfbdb5c31",
+  "steps": [
+    {
+      "at": 1000,
+      "binding": null,
+      "contract_version": 1,
+      "decision": "REQUEST_CLARIFICATION",
+      "external_writes": 0,
+      "label": "draft_meaning",
+      "phase": "DRAFT",
+      "plan": {
+        "actions": []
+      },
+      "plan_version": 0,
+      "threat": null,
+      "world": {
+        "event_id": "household-twin:1",
+        "facts": {
+          "alarm_mode": "stay",
+          "common_mode": "home",
+          "departure_at": 1060,
+          "departure_verified": false,
+          "family_departed": false,
+          "guest_access": true,
+          "guest_heat": "occupied",
+          "guest_present": true
+        },
+        "observed_at": 1000,
+        "revision": 1,
+        "snapshot_hash": "26d83d7403c242905816496c1ce29929fa3ae879548dc72302b4018fa448376e",
+        "source": "household-twin"
+      },
+      "world_version": 0
+    },
+    {
+      "at": 1000,
+      "binding": {
+        "actions": [
+          {
+            "at": 1060,
+            "writes": {
+              "common_mode": "away"
+            }
+          }
+        ],
+        "catalog_hash": "c31797e820bbba3721da3175c35388c04f9a0ba17af3cc07b5cea0d9e1134809",
+        "contract_hash": "4e02d88cd022e15916e28ef93d20112f66dc437f6b669882311f501a22e4c4ef",
+        "contract_id": "hero",
+        "contract_version": 1,
+        "execution_conditions": {
+          "alarm_mode": {
+            "implies": [
+              {
+                "eq": [
+                  {
+                    "fact": "alarm_mode"
+                  },
+                  {
+                    "literal": "full"
+                  }
+                ]
+              },
+              {
+                "eq": [
+                  {
+                    "fact": "family_departed"
+                  },
+                  {
+                    "literal": true
+                  }
+                ]
+              }
+            ]
+          },
+          "common_mode": {
+            "implies": [
+              {
+                "eq": [
+                  {
+                    "fact": "common_mode"
+                  },
+                  {
+                    "literal": "away"
+                  }
+                ]
+              },
+              {
+                "eq": [
+                  {
+                    "fact": "family_departed"
+                  },
+                  {
+                    "literal": true
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "owner": "fixture-human",
+        "plan_hash": "f12e4329e8b785591aa7fb50092b28047d7cc386538b20083e5510d0b7fab54f",
+        "plan_version": 1,
+        "world_version": 1
+      },
+      "contract_version": 1,
+      "decision": "REQUEST_APPROVAL",
+      "external_writes": 0,
+      "label": "partial_transition_proposed",
+      "phase": "ACTIVE",
+      "plan": {
+        "actions": [
+          {
+            "at": 1060,
+            "writes": {
+              "common_mode": "away"
+            }
+          }
+        ]
+      },
+      "plan_version": 1,
+      "threat": null,
+      "world": {
+        "event_id": "household-twin:1",
+        "facts": {
+          "alarm_mode": "stay",
+          "common_mode": "home",
+          "departure_at": 1060,
+          "departure_verified": false,
+          "family_departed": false,
+          "guest_access": true,
+          "guest_heat": "occupied",
+          "guest_present": true
+        },
+        "observed_at": 1000,
+        "revision": 1,
+        "snapshot_hash": "26d83d7403c242905816496c1ce29929fa3ae879548dc72302b4018fa448376e",
+        "source": "household-twin"
+      },
+      "world_version": 1
+    },
+    {
+      "at": 1010,
+      "binding": {
+        "actions": [
+          {
+            "at": 1010,
+            "writes": {
+              "guest_heat": "eco"
+            }
+          },
+          {
+            "at": 1060,
+            "writes": {
+              "alarm_mode": "full",
+              "common_mode": "away"
+            }
+          }
+        ],
+        "catalog_hash": "c31797e820bbba3721da3175c35388c04f9a0ba17af3cc07b5cea0d9e1134809",
+        "contract_hash": "4e02d88cd022e15916e28ef93d20112f66dc437f6b669882311f501a22e4c4ef",
+        "contract_id": "hero",
+        "contract_version": 1,
+        "execution_conditions": {
+          "alarm_mode": {
+            "implies": [
+              {
+                "eq": [
+                  {
+                    "fact": "alarm_mode"
+                  },
+                  {
+                    "literal": "full"
+                  }
+                ]
+              },
+              {
+                "eq": [
+                  {
+                    "fact": "family_departed"
+                  },
+                  {
+                    "literal": true
+                  }
+                ]
+              }
+            ]
+          },
+          "common_mode": {
+            "implies": [
+              {
+                "eq": [
+                  {
+                    "fact": "common_mode"
+                  },
+                  {
+                    "literal": "away"
+                  }
+                ]
+              },
+              {
+                "eq": [
+                  {
+                    "fact": "family_departed"
+                  },
+                  {
+                    "literal": true
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "owner": "fixture-human",
+        "plan_hash": "816fac99eaa35ead48627d39debd60221f8cebc5d02606432a5c2033ec4bfd7b",
+        "plan_version": 2,
+        "world_version": 2
+      },
+      "contract_version": 1,
+      "decision": "REQUEST_APPROVAL",
+      "external_writes": 0,
+      "label": "occupancy_change_reconciled",
+      "phase": "ACTIVE",
+      "plan": {
+        "actions": [
+          {
+            "at": 1010,
+            "writes": {
+              "guest_heat": "eco"
+            }
+          },
+          {
+            "at": 1060,
+            "writes": {
+              "alarm_mode": "full",
+              "common_mode": "away"
+            }
+          }
+        ]
+      },
+      "plan_version": 2,
+      "threat": {
+        "goal": false,
+        "plan_version": 1,
+        "unknown": [],
+        "violations": [],
+        "world_version": 2
+      },
+      "world": {
+        "event_id": "household-twin:2",
+        "facts": {
+          "alarm_mode": "stay",
+          "common_mode": "home",
+          "departure_at": 1060,
+          "departure_verified": false,
+          "family_departed": false,
+          "guest_access": true,
+          "guest_heat": "occupied",
+          "guest_present": false
+        },
+        "observed_at": 1010,
+        "revision": 2,
+        "snapshot_hash": "efa7460fde1a759b3a48b87213cbcbc7095566f45b268004a58476af86efbc24",
+        "source": "household-twin"
+      },
+      "world_version": 2
+    },
+    {
+      "at": 1010,
+      "binding": {
+        "actions": [
+          {
+            "at": 1060,
+            "writes": {
+              "alarm_mode": "full",
+              "common_mode": "away"
+            }
+          }
+        ],
+        "catalog_hash": "c31797e820bbba3721da3175c35388c04f9a0ba17af3cc07b5cea0d9e1134809",
+        "contract_hash": "4e02d88cd022e15916e28ef93d20112f66dc437f6b669882311f501a22e4c4ef",
+        "contract_id": "hero",
+        "contract_version": 1,
+        "execution_conditions": {
+          "alarm_mode": {
+            "implies": [
+              {
+                "eq": [
+                  {
+                    "fact": "alarm_mode"
+                  },
+                  {
+                    "literal": "full"
+                  }
+                ]
+              },
+              {
+                "eq": [
+                  {
+                    "fact": "family_departed"
+                  },
+                  {
+                    "literal": true
+                  }
+                ]
+              }
+            ]
+          },
+          "common_mode": {
+            "implies": [
+              {
+                "eq": [
+                  {
+                    "fact": "common_mode"
+                  },
+                  {
+                    "literal": "away"
+                  }
+                ]
+              },
+              {
+                "eq": [
+                  {
+                    "fact": "family_departed"
+                  },
+                  {
+                    "literal": true
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "owner": "fixture-human",
+        "plan_hash": "eabff4883705189f56304452b476e9c106beb267b13d30e88577b3aa8dae206f",
+        "plan_version": 3,
+        "world_version": 3
+      },
+      "contract_version": 1,
+      "decision": "REQUEST_APPROVAL",
+      "external_writes": 1,
+      "label": "empty_guest_area_repaired",
+      "phase": "ACTIVE",
+      "plan": {
+        "actions": [
+          {
+            "at": 1060,
+            "writes": {
+              "alarm_mode": "full",
+              "common_mode": "away"
+            }
+          }
+        ]
+      },
+      "plan_version": 3,
+      "threat": {
+        "goal": false,
+        "plan_version": 1,
+        "unknown": [],
+        "violations": [],
+        "world_version": 2
+      },
+      "world": {
+        "event_id": "household-twin:3",
+        "facts": {
+          "alarm_mode": "stay",
+          "common_mode": "home",
+          "departure_at": 1060,
+          "departure_verified": false,
+          "family_departed": false,
+          "guest_access": true,
+          "guest_heat": "eco",
+          "guest_present": false
+        },
+        "observed_at": 1010,
+        "revision": 3,
+        "snapshot_hash": "66f6d744f11f4785666489bf1ff669efdb13f78786eb19ab057c323e54cf0be5",
+        "source": "household-twin"
+      },
+      "world_version": 3
+    },
+    {
+      "at": 1020,
+      "binding": {
+        "actions": [
+          {
+            "at": 1100,
+            "writes": {
+              "alarm_mode": "full",
+              "common_mode": "away"
+            }
+          }
+        ],
+        "catalog_hash": "c31797e820bbba3721da3175c35388c04f9a0ba17af3cc07b5cea0d9e1134809",
+        "contract_hash": "4e02d88cd022e15916e28ef93d20112f66dc437f6b669882311f501a22e4c4ef",
+        "contract_id": "hero",
+        "contract_version": 1,
+        "execution_conditions": {
+          "alarm_mode": {
+            "implies": [
+              {
+                "eq": [
+                  {
+                    "fact": "alarm_mode"
+                  },
+                  {
+                    "literal": "full"
+                  }
+                ]
+              },
+              {
+                "eq": [
+                  {
+                    "fact": "family_departed"
+                  },
+                  {
+                    "literal": true
+                  }
+                ]
+              }
+            ]
+          },
+          "common_mode": {
+            "implies": [
+              {
+                "eq": [
+                  {
+                    "fact": "common_mode"
+                  },
+                  {
+                    "literal": "away"
+                  }
+                ]
+              },
+              {
+                "eq": [
+                  {
+                    "fact": "family_departed"
+                  },
+                  {
+                    "literal": true
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "owner": "fixture-human",
+        "plan_hash": "60017933da640b54c7bb108ac09be4944deab186bac1123bc0249bbd61bb51ee",
+        "plan_version": 4,
+        "world_version": 4
+      },
+      "contract_version": 1,
+      "decision": "REQUEST_APPROVAL",
+      "external_writes": 1,
+      "label": "departure_change_detected_before_violation",
+      "phase": "ACTIVE",
+      "plan": {
+        "actions": [
+          {
+            "at": 1100,
+            "writes": {
+              "alarm_mode": "full",
+              "common_mode": "away"
+            }
+          }
+        ]
+      },
+      "plan_version": 4,
+      "threat": {
+        "goal": true,
+        "plan_version": 3,
+        "unknown": [],
+        "violations": [
+          "departure_timing",
+          "occupied_security"
+        ],
+        "world_version": 4
+      },
+      "world": {
+        "event_id": "household-twin:4",
+        "facts": {
+          "alarm_mode": "stay",
+          "common_mode": "home",
+          "departure_at": 1100,
+          "departure_verified": false,
+          "family_departed": false,
+          "guest_access": true,
+          "guest_heat": "eco",
+          "guest_present": false
+        },
+        "observed_at": 1020,
+        "revision": 4,
+        "snapshot_hash": "47b32553c8ccdc37f1d516f10ce4d4d5cbec20633455e783f57bfff95dd3d3fe",
+        "source": "household-twin"
+      },
+      "world_version": 4
+    },
+    {
+      "at": 1060,
+      "binding": {
+        "actions": [
+          {
+            "at": 1100,
+            "writes": {
+              "alarm_mode": "full",
+              "common_mode": "away"
+            }
+          }
+        ],
+        "catalog_hash": "c31797e820bbba3721da3175c35388c04f9a0ba17af3cc07b5cea0d9e1134809",
+        "contract_hash": "4e02d88cd022e15916e28ef93d20112f66dc437f6b669882311f501a22e4c4ef",
+        "contract_id": "hero",
+        "contract_version": 1,
+        "execution_conditions": {
+          "alarm_mode": {
+            "implies": [
+              {
+                "eq": [
+                  {
+                    "fact": "alarm_mode"
+                  },
+                  {
+                    "literal": "full"
+                  }
+                ]
+              },
+              {
+                "eq": [
+                  {
+                    "fact": "family_departed"
+                  },
+                  {
+                    "literal": true
+                  }
+                ]
+              }
+            ]
+          },
+          "common_mode": {
+            "implies": [
+              {
+                "eq": [
+                  {
+                    "fact": "common_mode"
+                  },
+                  {
+                    "literal": "away"
+                  }
+                ]
+              },
+              {
+                "eq": [
+                  {
+                    "fact": "family_departed"
+                  },
+                  {
+                    "literal": true
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "owner": "fixture-human",
+        "plan_hash": "60017933da640b54c7bb108ac09be4944deab186bac1123bc0249bbd61bb51ee",
+        "plan_version": 4,
+        "world_version": 4
+      },
+      "contract_version": 1,
+      "decision": "REPAIR",
+      "external_writes": 1,
+      "label": "old_departure_time_no_premature_effect",
+      "phase": "ACTIVE",
+      "plan": {
+        "actions": [
+          {
+            "at": 1100,
+            "writes": {
+              "alarm_mode": "full",
+              "common_mode": "away"
+            }
+          }
+        ]
+      },
+      "plan_version": 4,
+      "threat": {
+        "goal": true,
+        "plan_version": 3,
+        "unknown": [],
+        "violations": [
+          "departure_timing",
+          "occupied_security"
+        ],
+        "world_version": 4
+      },
+      "world": {
+        "event_id": "household-twin:4",
+        "facts": {
+          "alarm_mode": "stay",
+          "common_mode": "home",
+          "departure_at": 1100,
+          "departure_verified": false,
+          "family_departed": false,
+          "guest_access": true,
+          "guest_heat": "eco",
+          "guest_present": false
+        },
+        "observed_at": 1060,
+        "revision": 4,
+        "snapshot_hash": "47b32553c8ccdc37f1d516f10ce4d4d5cbec20633455e783f57bfff95dd3d3fe",
+        "source": "household-twin"
+      },
+      "world_version": 4
+    },
+    {
+      "at": 1100,
+      "binding": {
+        "actions": [
+          {
+            "at": 1100,
+            "writes": {
+              "alarm_mode": "full",
+              "common_mode": "away"
+            }
+          }
+        ],
+        "catalog_hash": "c31797e820bbba3721da3175c35388c04f9a0ba17af3cc07b5cea0d9e1134809",
+        "contract_hash": "4e02d88cd022e15916e28ef93d20112f66dc437f6b669882311f501a22e4c4ef",
+        "contract_id": "hero",
+        "contract_version": 1,
+        "execution_conditions": {
+          "alarm_mode": {
+            "implies": [
+              {
+                "eq": [
+                  {
+                    "fact": "alarm_mode"
+                  },
+                  {
+                    "literal": "full"
+                  }
+                ]
+              },
+              {
+                "eq": [
+                  {
+                    "fact": "family_departed"
+                  },
+                  {
+                    "literal": true
+                  }
+                ]
+              }
+            ]
+          },
+          "common_mode": {
+            "implies": [
+              {
+                "eq": [
+                  {
+                    "fact": "common_mode"
+                  },
+                  {
+                    "literal": "away"
+                  }
+                ]
+              },
+              {
+                "eq": [
+                  {
+                    "fact": "family_departed"
+                  },
+                  {
+                    "literal": true
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "owner": "fixture-human",
+        "plan_hash": "60017933da640b54c7bb108ac09be4944deab186bac1123bc0249bbd61bb51ee",
+        "plan_version": 4,
+        "world_version": 4
+      },
+      "contract_version": 1,
+      "decision": "WAIT_FOR_EVIDENCE",
+      "external_writes": 1,
+      "label": "wait_for_actual_family_departure",
+      "phase": "ACTIVE",
+      "plan": {
+        "actions": [
+          {
+            "at": 1100,
+            "writes": {
+              "alarm_mode": "full",
+              "common_mode": "away"
+            }
+          }
+        ]
+      },
+      "plan_version": 4,
+      "threat": {
+        "goal": true,
+        "plan_version": 3,
+        "unknown": [],
+        "violations": [
+          "departure_timing",
+          "occupied_security"
+        ],
+        "world_version": 4
+      },
+      "world": {
+        "event_id": "household-twin:4",
+        "facts": {
+          "alarm_mode": "stay",
+          "common_mode": "home",
+          "departure_at": 1100,
+          "departure_verified": false,
+          "family_departed": false,
+          "guest_access": true,
+          "guest_heat": "eco",
+          "guest_present": false
+        },
+        "observed_at": 1100,
+        "revision": 4,
+        "snapshot_hash": "47b32553c8ccdc37f1d516f10ce4d4d5cbec20633455e783f57bfff95dd3d3fe",
+        "source": "household-twin"
+      },
+      "world_version": 4
+    },
+    {
+      "at": 1100,
+      "binding": {
+        "actions": [],
+        "catalog_hash": "c31797e820bbba3721da3175c35388c04f9a0ba17af3cc07b5cea0d9e1134809",
+        "contract_hash": "4e02d88cd022e15916e28ef93d20112f66dc437f6b669882311f501a22e4c4ef",
+        "contract_id": "hero",
+        "contract_version": 1,
+        "execution_conditions": {
+          "alarm_mode": {
+            "implies": [
+              {
+                "eq": [
+                  {
+                    "fact": "alarm_mode"
+                  },
+                  {
+                    "literal": "full"
+                  }
+                ]
+              },
+              {
+                "eq": [
+                  {
+                    "fact": "family_departed"
+                  },
+                  {
+                    "literal": true
+                  }
+                ]
+              }
+            ]
+          },
+          "common_mode": {
+            "implies": [
+              {
+                "eq": [
+                  {
+                    "fact": "common_mode"
+                  },
+                  {
+                    "literal": "away"
+                  }
+                ]
+              },
+              {
+                "eq": [
+                  {
+                    "fact": "family_departed"
+                  },
+                  {
+                    "literal": true
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "owner": "fixture-human",
+        "plan_hash": "7d357b0ef1f85ba71c5ccebb6671b0c34f4b3950f5b21d2af7b4a3d4e9dcd570",
+        "plan_version": 5,
+        "world_version": 6
+      },
+      "contract_version": 1,
+      "decision": "WAIT",
+      "external_writes": 2,
+      "label": "verified_departure_transition",
+      "phase": "ACTIVE",
+      "plan": {
+        "actions": []
+      },
+      "plan_version": 5,
+      "threat": {
+        "goal": true,
+        "plan_version": 3,
+        "unknown": [],
+        "violations": [
+          "departure_timing",
+          "occupied_security"
+        ],
+        "world_version": 4
+      },
+      "world": {
+        "event_id": "household-twin:6",
+        "facts": {
+          "alarm_mode": "full",
+          "common_mode": "away",
+          "departure_at": 1100,
+          "departure_verified": false,
+          "family_departed": true,
+          "guest_access": true,
+          "guest_heat": "eco",
+          "guest_present": false
+        },
+        "observed_at": 1100,
+        "revision": 6,
+        "snapshot_hash": "eded21247fc3f5dc0e3ea0bd1f6b688e3ac727a1a7a08df4c6a4d25c80b7341b",
+        "source": "household-twin"
+      },
+      "world_version": 6
+    },
+    {
+      "at": 1100,
+      "binding": null,
+      "contract_version": 1,
+      "decision": "SATISFIED",
+      "external_writes": 2,
+      "label": "satisfied_after_independent_completion",
+      "phase": "SATISFIED",
+      "plan": {
+        "actions": []
+      },
+      "plan_version": 5,
+      "threat": {
+        "goal": true,
+        "plan_version": 3,
+        "unknown": [],
+        "violations": [
+          "departure_timing",
+          "occupied_security"
+        ],
+        "world_version": 4
+      },
+      "world": {
+        "event_id": "household-twin:7",
+        "facts": {
+          "alarm_mode": "full",
+          "common_mode": "away",
+          "departure_at": 1100,
+          "departure_verified": true,
+          "family_departed": true,
+          "guest_access": true,
+          "guest_heat": "eco",
+          "guest_present": false
+        },
+        "observed_at": 1100,
+        "revision": 7,
+        "snapshot_hash": "286bf21984d10e3f982863b39bda43b732cb2eed8b85ecf52559689bac823868",
+        "source": "household-twin"
+      },
+      "world_version": 7
+    }
+  ]
+}
