@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ripple.local/schemas/canonical-demo-trace-v1.json",
+  "title": "Ripple Canonical Demo Trace",
+  "description": "Deterministic truth feed for the Gate 4 film. Motion code may transform presentation, but must not invent product state.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "scenario", "render", "source", "beats"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "scenario": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "contract_id", "owner", "provider_class", "host_class"],
+      "properties": {
+        "id": {"const": "household-continuous-promise-v1"},
+        "contract_id": {"type": "string", "minLength": 1, "maxLength": 100},
+        "owner": {"type": "string", "minLength": 1},
+        "provider_class": {"const": "deterministic-digital-twin"},
+        "host_class": {"const": "simulated-alexa-plus-host"}
+      }
+    },
+    "render": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["width", "height", "fps", "nominal_duration_frames"],
+      "properties": {
+        "width": {"const": 1920},
+        "height": {"const": 1080},
+        "fps": {"const": 30},
+        "nominal_duration_frames": {"const": 4050}
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["generator", "fixture", "engine_mode"],
+      "properties": {
+        "generator": {"const": "scripts/canonical_demo_trace.py"},
+        "fixture": {"const": "ripple.promises.examples.household"},
+        "engine_mode": {"const": "deterministic-local-proof"}
+      }
+    },
+    "beats": {
+      "type": "array",
+      "minItems": 12,
+      "items": {"$ref": "#/$defs/beat"}
+    }
+  },
+  "$defs": {
+    "beat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "frame", "event", "evidence_class", "state"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z0-9_]+$"},
+        "frame": {"type": "integer", "minimum": 0, "maximum": 4049},
+        "event": {"type": "string", "minLength": 1},
+        "evidence_class": {
+          "enum": ["engine", "human_authority", "world_event", "session", "brand"]
+        },
+        "state": {"$ref": "#/$defs/state"}
+      }
+    },
+    "state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract_id", "contract_version", "world_version", "plan_version",
+        "phase", "decision", "plan", "binding", "approval_present",
+        "assumptions", "threat", "world_facts", "write_count",
+        "verified_receipts", "ledger_hash", "session_generation"
+      ],
+      "properties": {
+        "contract_id": {"type": "string", "minLength": 1},
+        "contract_version": {"type": "integer", "minimum": 1},
+        "world_version": {"type": "integer", "minimum": 0},
+        "plan_version": {"type": "integer", "minimum": 0},
+        "phase": {"type": "string", "minLength": 1},
+        "decision": {"type": "string", "minLength": 1},
+        "plan": {
+          "type": "object",
+          "required": ["actions"],
+          "properties": {
+            "actions": {"type": "array"}
+          },
+          "additionalProperties": true
+        },
+        "binding": {"type": ["object", "null"]},
+        "approval_present": {"type": "boolean"},
+        "assumptions": {"type": "object"},
+        "threat": {"type": ["object", "null"]},
+        "world_facts": {"type": ["object", "null"]},
+        "write_count": {"type": "integer", "minimum": 0},
+        "verified_receipts": {"type": "integer", "minimum": 0},
+        "ledger_hash": {"type": ["string", "null"]},
+        "session_generation": {"type": "integer", "minimum": 1}
+      }
+    }
+  }
+}

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import asyncio
 import os
 import secrets
 import time
@@ -29,6 +30,10 @@ from ripple.presentation.mcp_app import (
     REPAIR_CARD_RESOURCE_URI,
     repair_card_resource_contents,
     repair_card_resource_descriptor,
+)
+from ripple.promises.interface import (
+    enabled as promises_enabled, get_service as get_promise_service,
+    human_routes, promise_lifespan, promise_tools,
 )
 
 PROTOCOL_VERSION = "2025-11-25"
@@ -456,24 +461,31 @@ async def mcp_post(request: Request) -> Response:
     if method == "ping":
         return JSONResponse(_rpc_result(req_id, {}))
     if method == "tools/list":
-        return JSONResponse(_rpc_result(req_id, {"tools": TOOLS}))
+        return JSONResponse(_rpc_result(req_id, {"tools": promise_tools() if promises_enabled() else TOOLS}))
     if method == "resources/list":
-        return JSONResponse(_rpc_result(req_id, {"resources": APP_RESOURCES}))
+        return JSONResponse(_rpc_result(req_id, {"resources": [] if promises_enabled() else APP_RESOURCES}))
     if method == "resources/read":
         params = msg.get("params") or {}
-        if params.get("uri") != REPAIR_CARD_RESOURCE_URI:
+        if promises_enabled() or params.get("uri") != REPAIR_CARD_RESOURCE_URI:
             return JSONResponse(_rpc_error(req_id, -32002, "Resource not found"))
         return JSONResponse(_rpc_result(req_id, {"contents": [repair_card_resource_contents()]}))
     if method == "tools/call":
         params = msg.get("params") or {}
         name = params.get("name")
         args = params.get("arguments") or {}
+        available = promise_tools() if promises_enabled() else TOOLS
+        if name not in {tool["name"] for tool in available}:
+            return JSONResponse(_rpc_error(req_id, -32602, f"Unknown tool: {name}"))
         try:
             if name == "record_change": payload = sess.record_change(str(args["utterance"]))
             elif name == "preview_repair_plan": payload = sess.preview()
             elif name == "approve_repair_plan": payload = sess.approve(args)
             elif name == "execute_repair_plan": payload = sess.execute(args)
             elif name == "get_repair_status": payload = sess.status()
+            elif promises_enabled() and name in {t["name"] for t in promise_tools()}:
+                service = get_promise_service(request)
+                payload = await asyncio.to_thread(service.call, name, args, principal.subject)
+                payload = service.present(payload)
             else: return JSONResponse(_rpc_error(req_id, -32602, f"Unknown tool: {name}"))
             return JSONResponse(_rpc_result(
                 req_id,
@@ -559,7 +571,7 @@ async def root(request: Request) -> Response:
     return JSONResponse({"service": SERVER_INFO, "mcp_endpoint": "/mcp", "health": "/healthz"})
 
 
-app = Starlette(routes=[
+app = Starlette(lifespan=promise_lifespan, routes=[
     Route("/", root, methods=["GET"]),
     Route("/healthz", healthz, methods=["GET"]),
     Route("/readyz", readyz, methods=["GET"]),
@@ -570,7 +582,7 @@ app = Starlette(routes=[
     Route("/mcp", mcp_post, methods=["POST"]),
     Route("/mcp", mcp_get, methods=["GET"]),
     Route("/mcp", mcp_delete, methods=["DELETE"]),
-])
+] + human_routes())
 
 
 def serve(host: str | None = None, port: int | None = None) -> None:

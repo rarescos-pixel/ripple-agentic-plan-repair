@@ -17,6 +17,29 @@ jobs:
         run: python -m pip install -e . pytest cfn-lint
       - name: Run full test suite
         run: PYTHONPATH=src python -m pytest -q
+      - name: Generate canonical Gate 4 demo trace
+        run: PYTHONPATH=src python scripts/canonical_demo_trace.py --output /tmp/canonical_demo_trace.json
+      - name: Save canonical Gate 4 demo trace
+        uses: actions/upload-artifact@v4
+        with:
+          name: canonical-demo-trace
+          path: /tmp/canonical_demo_trace.json
+          if-no-files-found: error
+      - name: Prove continuous promises across an independent HTTP provider
+        run: |
+          PYTHONPATH=src python scripts/promise_build_gate.py
+          git diff --exit-code -- docs/PROMISE_BUILD_EVIDENCE.json
+      - name: Install browser driver for the human review gate
+        run: python -m pip install playwright
+      - name: Exercise human meaning confirmation and exact action approval in Chrome
+        run: PYTHONPATH=src python scripts/promise_ui_smoke.py --screenshot /tmp/ripple-promise-review.png
+      - name: Save human review evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ripple-promise-review
+          path: /tmp/ripple-promise-review.png
+          if-no-files-found: ignore
       - name: Verify deterministic matrix isolation under AWS production profile
         env:
           RIPPLE_ENV: production
@@ -48,7 +71,7 @@ jobs:
         run: |
           bash -n scripts/aws_live_bootstrap.sh
           bash -n scripts/aws_teardown.sh
-          python -m py_compile scripts/aws_live_verify.py scripts/bedrock_benchmark.py scripts/aws_runtime_smoke.py scripts/public_runtime_probe.py scripts/mcp_latency_probe.py scripts/mcp_app_static_gate.py scripts/alexa_addon_gate.py scripts/alexa_store_media_smoke.py scripts/mcp_smoke.py scripts/alexa_local_inspector_probe.py scripts/submission_surface_gate.py scripts/judge_demo_remote_smoke.py
+          python -m py_compile scripts/aws_live_verify.py scripts/bedrock_benchmark.py scripts/aws_runtime_smoke.py scripts/public_runtime_probe.py scripts/mcp_latency_probe.py scripts/mcp_app_static_gate.py scripts/alexa_addon_gate.py scripts/alexa_store_media_smoke.py scripts/mcp_smoke.py scripts/alexa_local_inspector_probe.py scripts/submission_surface_gate.py scripts/judge_demo_remote_smoke.py scripts/promise_aws_live_proof.py
       - name: Regenerate executable evidence
         run: |
           PYTHONPATH=src python -m ripple.evaluation.matrix
